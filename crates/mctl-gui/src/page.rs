@@ -57,6 +57,7 @@ pub struct Layout {
     pub globe: Option<CellRect>,
     pub ground: Option<CellRect>,
     pub eclipse: Option<CellRect>,
+    pub adi: Option<CellRect>,
 }
 
 /// A caution or warning line derived from source health (a stand-in for the M3 C&W engine).
@@ -627,6 +628,7 @@ mod tests {
             t: Utc(1.0e9),
             clock: mctl_core::world::ClockView::LIVE,
             log: vec![],
+            telemetry: None,
             seq: 1,
             eop,
             vehicles: vec![],

@@ -163,6 +163,38 @@ pub struct LogEntry {
     pub text: String,
 }
 
+/// One telemetry item's latest value (DESIGN.md FR-3, FR-6).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TelemetryItem {
+    pub id: String,
+    pub group: String,
+    /// Documentation text from the item list; not verified against the vehicle.
+    pub description: String,
+    pub units: String,
+    /// The numeric value, when the feed's text parses as one.
+    pub value: Option<f64>,
+    pub text: Option<String>,
+    /// Receive time at this client.
+    pub rx: Utc,
+    /// Seconds between receive time and the receive wall clock now; computed by the engine.
+    pub age_s: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TelemetryView {
+    pub health: Health,
+    /// Items in configuration order; an item that has not been received yet is absent.
+    pub items: Vec<TelemetryItem>,
+    /// Total items the feed is subscribed to.
+    pub subscribed: usize,
+}
+
+impl TelemetryView {
+    pub fn get(&self, id: &str) -> Option<&TelemetryItem> {
+        self.items.iter().find(|i| i.id == id)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct World {
     pub t: Utc,
@@ -172,6 +204,8 @@ pub struct World {
     /// Increments every published snapshot.
     pub seq: u64,
     pub eop: EopView,
+    /// ISSLIVE telemetry, present only when a configured vehicle uses it.
+    pub telemetry: Option<TelemetryView>,
     pub vehicles: Vec<VehicleView>,
 }
 
@@ -186,6 +220,7 @@ impl World {
             eop: EopView::Assumed {
                 reason: "starting".into(),
             },
+            telemetry: None,
             vehicles: Vec::new(),
         }
     }

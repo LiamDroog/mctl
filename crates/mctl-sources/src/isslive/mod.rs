@@ -5,6 +5,7 @@
 //! prints updates so the feed can be inspected.
 
 pub mod config;
+pub mod feed;
 pub mod session;
 pub mod stats;
 pub mod tlcp;

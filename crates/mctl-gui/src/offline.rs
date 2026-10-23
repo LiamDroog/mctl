@@ -224,7 +224,36 @@ pub struct ShotOptions {
     pub out_dir: PathBuf,
     pub effects_off: bool,
     pub warmup_frames: u64,
+    /// `page`, `page:sub` or `all`.
+    pub pages: Vec<String>,
     pub low_power: bool,
+}
+
+/// Expand `--pages` into (page, sub-page index) pairs.
+fn expand_pages(specs: &[String]) -> Result<Vec<(crate::pages::Page, usize)>> {
+    use crate::pages::{ALL_PAGES, Page};
+    let mut out = Vec::new();
+    for s in specs {
+        if s == "all" {
+            for p in ALL_PAGES {
+                out.extend((0..p.subpages().len()).map(|i| (p, i)));
+            }
+            continue;
+        }
+        let (name, sub) = s
+            .split_once(':')
+            .map_or((s.as_str(), None), |(a, b)| (a, Some(b)));
+        let page = Page::from_name(name).with_context(|| format!("unknown page {name:?}"))?;
+        match sub {
+            None => out.push((page, 0)),
+            Some(x) => out.push((
+                page,
+                page.resolve_sub(x)
+                    .with_context(|| format!("{name} has no sub-page {x:?}"))?,
+            )),
+        }
+    }
+    Ok(out)
 }
 
 pub fn shots(live: &Live, themes: Vec<Theme>, opts: &ShotOptions) -> Result<Vec<PathBuf>> {
@@ -242,27 +271,34 @@ pub fn shots(live: &Live, themes: Vec<Theme>, opts: &ShotOptions) -> Result<Vec<
                 .with_context(|| format!("unknown theme {name:?}"))?,
         ],
     };
+    let pages = expand_pages(&opts.pages)?;
     let mut written = Vec::new();
     for idx in which {
         off.select_theme(idx);
         if opts.effects_off {
             off.console.toggles = EffectToggles::all(false);
         }
-        for n in 0..opts.warmup_frames {
-            off.frame(n, 16.7)?;
+        for (page, sub) in &pages {
+            off.console.page = *page;
+            off.console.sub = *sub;
+            for n in 0..opts.warmup_frames {
+                off.frame(n, 16.7)?;
+            }
+            let img = off.capture()?;
+            let name = off.console.theme().name.to_lowercase();
+            let path = opts.out_dir.join(format!(
+                "{name}-{}-{}-{}x{}{}.png",
+                page.key(),
+                sub + 1,
+                opts.size[0],
+                opts.size[1],
+                if opts.effects_off { "-fx-off" } else { "" }
+            ));
+            img.save(&path)
+                .with_context(|| format!("writing {}", path.display()))?;
+            tracing::info!(path = %path.display(), "screenshot written");
+            written.push(path);
         }
-        let img = off.capture()?;
-        let name = off.console.theme().name.to_lowercase();
-        let path = opts.out_dir.join(format!(
-            "{name}-{}x{}{}.png",
-            opts.size[0],
-            opts.size[1],
-            if opts.effects_off { "-fx-off" } else { "" }
-        ));
-        img.save(&path)
-            .with_context(|| format!("writing {}", path.display()))?;
-        tracing::info!(path = %path.display(), "screenshot written");
-        written.push(path);
     }
     Ok(written)
 }

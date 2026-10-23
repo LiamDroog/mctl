@@ -21,10 +21,10 @@ use mctl_core::config::{Config, VehicleDef};
 use mctl_core::state::{Elements, Geodetic, Quality, SourceKind, State};
 use mctl_core::time::{EopTable, Utc};
 use mctl_core::world::{
-    ClockView, EopView, Health, LogEntry, Residual, Solution, SourceStatus, SourceView, Track,
-    TrackPoint, VehicleView, World,
+    ClockView, EopView, Health, LogEntry, Residual, Solution, SourceStatus, SourceView,
+    TelemetryItem, TelemetryView, Track, TrackPoint, VehicleView, World,
 };
-use mctl_sources::tasks::{DataInfo, Event, Payload, SourceKey, SourceSet};
+use mctl_sources::tasks::{DataInfo, Event, Payload, SourceKey, SourceSet, TelemetryMeta};
 
 use crate::clock::Clock;
 
@@ -58,6 +58,9 @@ pub struct Model {
     track_revision: u64,
     seq: u64,
     log: VecDeque<LogEntry>,
+    telemetry_meta: Vec<TelemetryMeta>,
+    telemetry: HashMap<String, (Option<String>, Utc)>,
+    telemetry_health: Option<Health>,
     prev: HashMap<String, Observed>,
     prev_eop_loaded: Option<bool>,
 }
@@ -110,6 +113,9 @@ impl Model {
             track_revision: 0,
             seq: 0,
             log: VecDeque::new(),
+            telemetry_meta: Vec::new(),
+            telemetry: HashMap::new(),
+            telemetry_health: None,
             prev: HashMap::new(),
             prev_eop_loaded: None,
         }
@@ -196,8 +202,20 @@ impl Model {
         }
     }
 
+    /// Tell the model which telemetry items exist (their order is the display order).
+    pub fn set_telemetry(&mut self, meta: Vec<TelemetryMeta>) {
+        if !meta.is_empty() && self.telemetry_health.is_none() {
+            self.telemetry_health = Some(Health::Starting);
+        }
+        self.telemetry_meta = meta;
+    }
+
     pub fn apply(&mut self, event: Event) {
         match event {
+            Event::Telemetry { id, text, rx } => {
+                self.telemetry.insert(id, (text, rx));
+            }
+            Event::TelemetryHealth(h) => self.telemetry_health = Some(h),
             Event::Data {
                 key,
                 payload,
@@ -327,7 +345,29 @@ impl Model {
         self.track_revision = revision;
         self.seq += 1;
         self.observe(&vehicles, &eop_view, wall);
+        let telemetry = self.telemetry_health.clone().map(|health| TelemetryView {
+            health,
+            subscribed: self.telemetry_meta.len(),
+            items: self
+                .telemetry_meta
+                .iter()
+                .filter_map(|m| {
+                    let (text, rx) = self.telemetry.get(&m.id)?;
+                    Some(TelemetryItem {
+                        id: m.id.clone(),
+                        group: m.group.clone(),
+                        description: m.description.clone(),
+                        units: m.units.clone(),
+                        value: text.as_deref().and_then(|t| t.trim().parse().ok()),
+                        text: text.clone(),
+                        rx: *rx,
+                        age_s: wall.minus(*rx),
+                    })
+                })
+                .collect(),
+        });
         World {
+            telemetry,
             t,
             clock,
             log: self.log.iter().cloned().collect(),
@@ -673,7 +713,11 @@ pub fn start(cfg: Config, sources: SourceSet) -> Engine {
     let thread = std::thread::Builder::new()
         .name("engine".into())
         .spawn(move || {
+            // Capture the whole set: closures capture disjoint fields, and dropping the set's stop
+            // channels would tell every source thread to exit.
+            let sources = sources;
             let mut model = Model::new(cfg);
+            model.set_telemetry(sources.telemetry.clone());
             let mut clock = Clock::live(Instant::now());
             let mut next = Instant::now();
             loop {

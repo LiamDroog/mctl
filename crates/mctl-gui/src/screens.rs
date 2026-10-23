@@ -461,6 +461,7 @@ fn master(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
         globe: Some(globe),
         ground: Some(ground),
         eclipse: Some(eclipse),
+        ..Layout::default()
     }
 }
 
@@ -513,6 +514,139 @@ fn traj_elements(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             "WHEN PRESENT: WINDOW 6 H .. 90 D, ELEMENT-SET EPOCHS MARKED SO REBOOSTS SHOW AS STEPS (DESIGN.md 9.6).",
         ],
     );
+    Layout::default()
+}
+
+/// Telemetry older than this is shown STALE. Labelled constant: the feed updates items every few
+/// seconds at most, so this is generous (DESIGN.md FR-6 defines the STALE quality).
+const TELEMETRY_STALE_S: f64 = 30.0;
+
+fn telemetry_banner(l: &mut Lines<'_>, inp: &PageInput<'_>) {
+    match inp.world.telemetry.as_ref().map(|t| &t.health) {
+        None => l.line("NO TELEMETRY FEED", Style::limit(Limit::Caution)),
+        Some(mctl_core::world::Health::Ok) => {}
+        Some(h) => l.line(
+            &format!("FEED {h:?}").to_uppercase(),
+            Style::limit(Limit::Caution),
+        ),
+    }
+    if !inp.world.clock.is_live() {
+        l.line(
+            "NOT LIVE: TELEMETRY IS CURRENT, NOT AT SIM TIME",
+            Style::limit(Limit::Caution),
+        );
+    }
+}
+
+/// One table row per received item of the group, with value, units and age.
+fn telemetry_rows(l: &mut Lines<'_>, inp: &PageInput<'_>, group: &str) {
+    let Some(t) = inp.world.telemetry.as_ref() else {
+        return;
+    };
+    for i in t.items.iter().filter(|i| i.group == group) {
+        let stale = i.age_s > TELEMETRY_STALE_S;
+        let val = i.value.map_or_else(
+            || i.text.clone().unwrap_or_else(|| "--".into()),
+            |v| format!("{v:>12.4}"),
+        );
+        let style = if stale {
+            Style::limit(Limit::Stale)
+        } else {
+            Style::new(Role::Fg)
+        };
+        let desc: String = i
+            .description
+            .chars()
+            .take(l.rect.cols.saturating_sub(44))
+            .collect();
+        l.line(
+            &format!(
+                "{:<12} {val:>13} {:<6} {:>6}{} {desc}",
+                i.id,
+                i.units,
+                fmt_dur(i.age_s.max(0.0)),
+                if stale { "!" } else { " " }
+            ),
+            style,
+        );
+    }
+}
+
+fn gnc_adi(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
+    let (cols, rows) = (grid.cols, grid.rows);
+    let (top, h) = body(rows);
+    let lw = cols * 45 / 100;
+    let ball = CellRect::new(0, top, lw, h);
+    boxed(grid, ball, "ADI  LVLH");
+    let att = crate::adi::attitude(inp.world.telemetry.as_ref());
+    let inner = ball.inner();
+    let mut l = Lines::new(grid, ball);
+    l.row = inner.rows.saturating_sub(3);
+    match &att {
+        Ok(a) => {
+            l.line(
+                &format!(
+                    "ROLL {:+7.2}  PITCH {:+7.2}  YAW {:+7.2} DEG",
+                    a.roll_deg, a.pitch_deg, a.yaw_deg
+                ),
+                Style::new(Role::Fg),
+            );
+            l.line(
+                "QUATERNION ORDER/AXES UNVERIFIED (R4): SCALAR-FIRST 3-2-1 ASSUMED",
+                Style::limit(Limit::Caution),
+            );
+        }
+        Err(why) => l.line(
+            &format!("OFF: {}", why.to_uppercase()),
+            Style::limit(Limit::Caution),
+        ),
+    }
+    let right = CellRect::new(lw, top, cols - lw, h);
+    boxed(grid, right, "ATTITUDE ERRORS AND RATES");
+    let mut l = Lines::new(grid, right);
+    telemetry_banner(&mut l, inp);
+    l.line(
+        "ITEM         VALUE          UNITS  AGE",
+        Style::new(Role::Dim),
+    );
+    telemetry_rows(&mut l, inp, "attitude");
+    Layout {
+        adi: Some(inner),
+        ..Layout::default()
+    }
+}
+
+fn gnc_rates(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
+    let (top, h) = body(grid.rows);
+    let rect = CellRect::new(0, top, grid.cols, h);
+    boxed(
+        grid,
+        rect,
+        "GNC  ATTITUDE ITEMS (LABELS FROM ISS MIMIC SPREADSHEET, UNVERIFIED)",
+    );
+    let mut l = Lines::new(grid, rect);
+    telemetry_banner(&mut l, inp);
+    l.line(
+        "ITEM         VALUE          UNITS  AGE",
+        Style::new(Role::Dim),
+    );
+    telemetry_rows(&mut l, inp, "attitude");
+    l.row += 1;
+    l.line("NOTE: ERROR ITEMS SAY (deg) IN THE DESCRIPTION BUT RAD IN UNITS; THE VALUES (~0.1) FIT DEGREES.", Style::new(Role::Dim));
+    Layout::default()
+}
+
+fn eps_arrays(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
+    let (top, h) = body(grid.rows);
+    let rect = CellRect::new(0, top, grid.cols, h);
+    boxed(grid, rect, "EPS  SARJ AND BETA GIMBAL ANGLES");
+    let mut l = Lines::new(grid, rect);
+    telemetry_banner(&mut l, inp);
+    l.line(
+        "ITEM         VALUE          UNITS  AGE",
+        Style::new(Role::Dim),
+    );
+    telemetry_rows(&mut l, inp, "joint");
     Layout::default()
 }
 
@@ -828,6 +962,9 @@ pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             (Page::Traj, 0) => traj_orbit(grid, inp),
             (Page::Traj, 1) => traj_ground(grid, inp),
             (Page::Traj, _) => traj_elements(grid, inp),
+            (Page::Gnc, 0) => gnc_adi(grid, inp),
+            (Page::Gnc, 1) => gnc_rates(grid, inp),
+            (Page::Eps, 0) => eps_arrays(grid, inp),
             (Page::Sys, 0) => sys_events(grid, inp),
             (Page::Sys, 1) => sys_sources(grid, inp),
             (Page::Sys, _) => sys_settings(grid, inp),

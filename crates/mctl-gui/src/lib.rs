@@ -3,6 +3,7 @@
 //! The GUI is a pure consumer of the engine's published `World` snapshot (DESIGN.md §6.2): it never
 //! calls into sources or propagators.
 
+mod adi;
 mod app;
 mod assets;
 mod coast;

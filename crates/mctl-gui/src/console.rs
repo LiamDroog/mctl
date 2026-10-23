@@ -477,6 +477,8 @@ impl Console {
         let globe_px = layout.globe.map_or([0; 4], |r| cell_rect_px(&theme, r));
         let ground_px = layout.ground.map(|r| cell_rect_px(&theme, r));
         let eclipse_px = layout.eclipse.map(|r| cell_rect_px(&theme, r));
+        let adi_px = layout.adi.map(|r| cell_rect_px(&theme, r));
+        let attitude = adi_px.map(|_| crate::adi::attitude(world.telemetry.as_ref()));
         let has_area = globe_px[2] > 0 && globe_px[3] > 0;
         let aspect = globe_px[2] as f32 / globe_px[3].max(1) as f32;
         let sol = vehicle.and_then(|v| v.solution.as_ref());
@@ -502,6 +504,9 @@ impl Console {
         let now = world.t;
         let mut out = self.ctx.run_ui(raw, |ui| {
             let painter = ui.ctx().layer_painter(LayerId::background());
+            if let (Some(px), Some(att)) = (adi_px, attitude.clone()) {
+                crate::adi::paint(&painter, &theme, px, att);
+            }
             if let Some(v) = vehicle {
                 if let Some(px) = ground_px {
                     page::paint_ground_track(&painter, &theme, px, coast, v);

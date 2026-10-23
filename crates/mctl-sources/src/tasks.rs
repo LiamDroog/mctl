@@ -45,7 +45,23 @@ pub struct DataInfo {
     pub fetched_at: Utc,
 }
 
+/// Static description of a subscribed telemetry item.
+#[derive(Debug, Clone)]
+pub struct TelemetryMeta {
+    pub id: String,
+    pub group: String,
+    pub description: String,
+    pub units: String,
+}
+
 pub enum Event {
+    /// A telemetry item changed. `text` is the raw `Value` field.
+    Telemetry {
+        id: String,
+        text: Option<String>,
+        rx: Utc,
+    },
+    TelemetryHealth(Health),
     Data {
         key: SourceKey,
         payload: Payload,
@@ -134,6 +150,8 @@ pub fn specs(cfg: &Config) -> Vec<Spec> {
 /// Handle to the running tasks. Dropping it asks them to stop.
 pub struct SourceSet {
     pub events: Receiver<Event>,
+    /// Items the telemetry feed subscribes to (empty without a telemetry vehicle).
+    pub telemetry: Vec<TelemetryMeta>,
     _stop: Vec<SyncSender<()>>,
     _threads: Vec<JoinHandle<()>>,
 }
@@ -170,8 +188,40 @@ pub fn start(
         );
         stops.push(stop_tx);
     }
+    let mut telemetry = Vec::new();
+    if cfg
+        .vehicles
+        .iter()
+        .any(|v| v.telemetry.as_deref() == Some("isslive"))
+    {
+        let icfg = crate::isslive::config::Config::parse(
+            "embedded default",
+            crate::isslive::config::DEFAULT_CONFIG,
+        )
+        .expect("embedded ISSLIVE config is valid (checked by tests)");
+        telemetry = icfg
+            .items
+            .iter()
+            .map(|i| TelemetryMeta {
+                id: i.id.clone(),
+                group: i.group.clone(),
+                description: i.description.clone(),
+                units: i.units.clone(),
+            })
+            .collect();
+        let (stop_tx, stop_rx) = sync_channel::<()>(1);
+        let (tx, fetch) = (tx.clone(), cfg.fetch.clone());
+        threads.push(
+            std::thread::Builder::new()
+                .name("src-isslive".into())
+                .spawn(move || crate::isslive::feed::run(icfg, &tx, &stop_rx, &fetch, offline))
+                .expect("spawn telemetry thread"),
+        );
+        stops.push(stop_tx);
+    }
     Ok(SourceSet {
         events: rx,
+        telemetry,
         _stop: stops,
         _threads: threads,
     })
@@ -438,7 +488,8 @@ mod tests {
                 Event::Data { .. } => {
                     panic!("no data can exist with an empty cache and no network")
                 }
-                Event::Health { .. } => {}
+                Event::Health { .. } | Event::Telemetry { .. } => {}
+                Event::TelemetryHealth(h) => assert_eq!(h, Health::Offline),
             }
             if offline == specs(&cfg).len() {
                 break;

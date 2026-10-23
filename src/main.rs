@@ -81,6 +81,9 @@ enum Command {
         fx_off: bool,
         #[arg(long, default_value_t = 90)]
         warmup: u64,
+        /// Pages to capture: comma list of `page` or `page:sub` (1-based), or `all`. Default: master.
+        #[arg(long, default_value = "master", value_delimiter = ',')]
+        pages: Vec<String>,
         /// Seconds to wait for sources before rendering.
         #[arg(long, default_value_t = DEFAULT_WAIT_S)]
         wait_s: f64,
@@ -316,16 +319,36 @@ fn main() -> Result<()> {
             out_dir,
             fx_off,
             warmup,
+            pages,
             wait_s,
         }) => {
             let (live, _engine) = start_live(&cfg, cli.vehicle.as_deref(), cli.offline)?;
             wait_for_data(&live.bus, &live.vehicle_id, wait_s);
+            if !cli.offline
+                && cfg
+                    .vehicles
+                    .iter()
+                    .any(|v| v.id == live.vehicle_id && v.telemetry.is_some())
+            {
+                let t0 = Instant::now();
+                while t0.elapsed().as_secs_f64() < wait_s
+                    && live
+                        .bus
+                        .latest()
+                        .telemetry
+                        .as_ref()
+                        .is_none_or(|t| t.items.len() < t.subscribed)
+                {
+                    std::thread::sleep(Duration::from_millis(200));
+                }
+            }
             let opts = mctl_gui::ShotOptions {
                 size: mctl_gui::parse_size(&size)?,
                 theme,
                 out_dir,
                 effects_off: fx_off,
                 warmup_frames: warmup,
+                pages,
                 low_power: cli.low_power,
             };
             mctl_gui::shots(&live, load_themes(&cli.themes_dir)?, &opts).map(|_| ())
