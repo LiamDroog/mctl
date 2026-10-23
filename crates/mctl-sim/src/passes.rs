@@ -54,7 +54,11 @@ pub struct Done {
     pub id: u64,
     pub vehicle: String,
     pub sets: Vec<PassSet>,
+    pub beta: Vec<(Utc, f64)>,
 }
+
+/// Days either side of the prediction time covered by the beta-angle series.
+pub const BETA_DAYS: i32 = 30;
 
 pub fn compute(job: &Job) -> Done {
     let t1 = job.t0.plus(job.days * 86_400.0);
@@ -111,7 +115,20 @@ pub fn compute(job: &Job) -> Done {
         id: job.id,
         vehicle: job.vehicle.clone(),
         sets,
+        beta: beta_series(job),
     }
+}
+
+/// Beta angle once a day around `t0`; days where no state or Sun position exists are skipped.
+fn beta_series(job: &Job) -> Vec<(Utc, f64)> {
+    (-BETA_DAYS..=BETA_DAYS)
+        .filter_map(|d| {
+            let t = job.t0.plus(f64::from(d) * 86_400.0);
+            let state = job.traj.state_gcrf(t).ok()?;
+            let sun = sun_gcrf(t, job.orientation.dut1_s).ok()?;
+            Some((t, mctl_astro::kepler::beta_deg(&state, &sun)?))
+        })
+        .collect()
 }
 
 fn visible_at(job: &Job, site: &Site, t: Utc) -> Option<bool> {

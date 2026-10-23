@@ -387,6 +387,55 @@ pub fn paint_ground_track(
     }
 }
 
+/// Beta angle over +-30 days as a line, with zero and the present marked.
+fn paint_beta_sparkline(
+    painter: &Painter,
+    theme: &Theme,
+    rect: [f32; 4],
+    series: &[(Utc, f64)],
+    now: Utc,
+) {
+    let [x, y, w, h] = rect;
+    if series.len() < 3 || w < 30.0 || h < 30.0 {
+        return;
+    }
+    let max = series
+        .iter()
+        .map(|(_, b)| b.abs())
+        .fold(10.0_f64, f64::max)
+        .ceil();
+    let (t0, t1) = (series[0].0.0, series[series.len() - 1].0.0);
+    let to = |t: f64, b: f64| {
+        Pos2::new(
+            x + w * ((t - t0) / (t1 - t0)) as f32,
+            y + h * (0.5 - (b / (2.0 * max)) as f32),
+        )
+    };
+    let p = &theme.palette;
+    painter.line_segment(
+        [to(t0, 0.0), to(t1, 0.0)],
+        Stroke::new(1.0, p.border.to_egui()),
+    );
+    let pts: Vec<Pos2> = series.iter().map(|(t, b)| to(t.0, *b)).collect();
+    painter.add(egui::Shape::line(
+        pts,
+        Stroke::new(2.0, p.foreground.to_egui()),
+    ));
+    let nx = to(now.0.clamp(t0, t1), 0.0).x;
+    painter.line_segment(
+        [Pos2::new(nx, y), Pos2::new(nx, y + h)],
+        Stroke::new(1.0, p.bright.to_egui()),
+    );
+    let font = crate::fonts::font_id(theme);
+    painter.text(
+        Pos2::new(x, y - 2.0),
+        egui::Align2::LEFT_BOTTOM,
+        format!("BETA +-30D  +-{max:.0}"),
+        font,
+        p.dim.to_egui(),
+    );
+}
+
 /// One revolution as a ring starting at the top (now), coloured by illumination.
 pub fn paint_eclipse_ring(
     painter: &Painter,
@@ -404,11 +453,22 @@ pub fn paint_eclipse_ring(
     }
     // Lower part of the panel, below the two text rows.
     let ring_top = y as f32 + 52.0;
-    let (cx, cy) = (
-        x as f32 + w as f32 / 2.0,
-        ring_top + (h as f32 - 52.0) / 2.0,
+    // The ring takes the left part of the panel; the beta sparkline the right.
+    let ring_w = w as f32 * 0.55;
+    let (cx, cy) = (x as f32 + ring_w / 2.0, ring_top + (h as f32 - 52.0) / 2.0);
+    let radius = (ring_w.min(h as f32 - 52.0) / 2.0 - 8.0).max(10.0);
+    paint_beta_sparkline(
+        painter,
+        theme,
+        [
+            x as f32 + ring_w,
+            ring_top,
+            w as f32 - ring_w - 6.0,
+            h as f32 - 60.0,
+        ],
+        &v.beta_series,
+        now,
     );
-    let radius = ((w as f32).min(h as f32 - 52.0) / 2.0 - 8.0).max(10.0);
     let period = sol.elements.period_s;
     if !(period.is_finite() && period > 600.0) {
         return;
@@ -520,6 +580,7 @@ mod tests {
             solution: Some(sol(SourceKind::Oem)),
             track: None,
             passes: vec![],
+            beta_series: Default::default(),
         }
     }
 

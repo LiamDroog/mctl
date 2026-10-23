@@ -116,6 +116,9 @@ pub struct VehicleView {
     pub track: Option<Arc<Track>>,
     /// One set per observer site; empty until the first prediction completes.
     pub passes: Vec<PassSet>,
+    /// Beta angle at daily samples from 30 days before to 30 days after the prediction time, degrees.
+    /// Beyond the OEM span this is GP/SGP4 extrapolation.
+    pub beta_series: Arc<Vec<(Utc, f64)>>,
 }
 
 /// Where an observer site came from (DESIGN.md §8).

@@ -90,6 +90,7 @@ struct PassEntry {
     from: Utc,
     to: Utc,
     sets: Vec<PassSet>,
+    beta: Arc<Vec<(Utc, f64)>>,
     pending: Option<(u64, String)>,
 }
 
@@ -440,6 +441,7 @@ impl Model {
                 e.from = d.sets.first().map_or(t, |s| s.from);
                 e.to = d.sets.first().map_or(t, |s| s.to);
                 e.sets = d.sets;
+                e.beta = Arc::new(d.beta);
             }
         }
         let o = self.cfg.observer.clone();
@@ -482,6 +484,7 @@ impl Model {
                     from: t,
                     to: t,
                     sets: vec![],
+                    beta: Arc::new(vec![]),
                     pending: None,
                 });
             let in_window = t.0 >= entry.from.0 && t.0 <= entry.to.0 - 86_400.0;
@@ -511,6 +514,7 @@ impl Model {
                         entry.from = t;
                         entry.to = t.plus(o.pass_days * 86_400.0);
                         entry.sets = d.sets;
+                        entry.beta = Arc::new(d.beta);
                     }
                 }
             }
@@ -528,6 +532,7 @@ impl Model {
                 }
             }
             view.passes = sets;
+            view.beta_series = entry.beta.clone();
         }
     }
 
@@ -1068,6 +1073,7 @@ fn vehicle_view(
         solution,
         track,
         passes: vec![],
+        beta_series: Arc::new(vec![]),
     }
 }
 

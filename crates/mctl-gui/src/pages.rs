@@ -182,6 +182,7 @@ mod tests {
             solution: None,
             track: None,
             passes: vec![],
+            beta_series: Default::default(),
         }
     }
 

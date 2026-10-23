@@ -1,8 +1,8 @@
 # mctl
 
 Mission control display for the ISS (and Hubble), styled after a flight control console. Design and
-requirements: [`DESIGN.md`](DESIGN.md). Decisions: [`docs/adr/`](docs/adr/). Status: M0-M3 done (core and sources, MASTER/TRAJ, live telemetry, C&W, recording); next is M4
-(passes); see "What is real" below.
+requirements: [`DESIGN.md`](DESIGN.md). Decisions: [`docs/adr/`](docs/adr/). Status: M0-M3 done (core and sources, MASTER/TRAJ, live telemetry, C&W, recording); M4 mostly done
+(sites, passes, sky plot, beta series); see "What is real" below.
 
 ## Running
 
@@ -51,7 +51,9 @@ Every number on the MASTER page comes from a source: CelesTrak GP (SGP4) and the
 arbiter, IERS EOP for UT1/polar motion, and an analytic Sun. A quantity with no source reads `NO DATA`.
 ISS telemetry (137 ISSLIVE items) feeds GNC/EPS/TCS/COMM; units the live values disprove are corrected
 and documented in `docs/step3/attitude-verification.md`. Panels for later milestones say which milestone
-supplies them. Not yet: passes and sky plot (M4), planner and replay (M5), other vehicles (M6).
+supplies them. Passes are predicted for each observer site (OEM then GP/SGP4) and have not been compared against an
+external pass predictor. Not yet: GeoClue/IP site lookup and `:site save`, site circles on the ground
+track, COMM AOS/LOS (M4 leftovers), planner and replay (M5), other vehicles (M6).
 
 ## Layout
 

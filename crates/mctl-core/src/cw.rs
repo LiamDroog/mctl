@@ -719,6 +719,7 @@ mod tests {
             solution: Some(solution()),
             track: None,
             passes: vec![],
+            beta_series: Default::default(),
         }
     }
 
