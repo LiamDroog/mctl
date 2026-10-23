@@ -494,7 +494,11 @@ impl Model {
         Ok(())
     }
 
-    fn observer_view(&self, sun: Option<(&[f64; 3], &[[f64; 3]; 3])>) -> ObserverView {
+    fn observer_view(
+        &self,
+        sun: Option<(&[f64; 3], &[[f64; 3]; 3])>,
+        moon: Option<[f64; 3]>,
+    ) -> ObserverView {
         let sites = self
             .sites
             .iter()
@@ -508,6 +512,13 @@ impl Model {
                         enu.z.asin().to_degrees(),
                     )
                 });
+                // The Moon is near enough that parallax (up to a degree) matters: use the topocentric vector.
+                let moon_look = moon.zip(sun.map(|(_, m)| m)).map(|(r, m)| {
+                    let ecef = nalgebra::Matrix3::from_fn(|i, j| m[i][j])
+                        * nalgebra::Vector3::new(r[0], r[1], r[2]);
+                    let l = s.look(&ecef);
+                    (l.az_deg, l.el_deg)
+                });
                 SiteView {
                     name: s.name.clone(),
                     lat_deg: s.lat_deg,
@@ -516,6 +527,8 @@ impl Model {
                     origin: origin.clone(),
                     sun_az_deg: sun_look.map(|x| x.0),
                     sun_el_deg: sun_look.map(|x| x.1),
+                    moon_az_deg: moon_look.map(|x| x.0),
+                    moon_el_deg: moon_look.map(|x| x.1),
                 }
             })
             .collect();
@@ -988,7 +1001,8 @@ impl Model {
             .iter()
             .find_map(|v| v.solution.as_ref())
             .map(|s| (s.sun_gcrf_km, s.ecef_from_gcrf));
-        let observer = self.observer_view(sun.as_ref().map(|(a, b)| (a, b)));
+        let moon = mctl_astro::moon::moon_gcrf(t).ok().map(|m| [m.x, m.y, m.z]);
+        let observer = self.observer_view(sun.as_ref().map(|(a, b)| (a, b)), moon);
         let cw = self.cw_step(&vehicles, &eop_view, telemetry.as_ref(), wall);
         World {
             telemetry,

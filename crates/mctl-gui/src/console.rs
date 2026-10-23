@@ -602,6 +602,7 @@ impl Console {
                         now,
                         look_now: set.and_then(|s| s.look_now),
                         sun_az_el: site.and_then(|s| s.sun_az_deg.zip(s.sun_el_deg)),
+                        moon_az_el: site.and_then(|s| s.moon_az_deg.zip(s.moon_el_deg)),
                     },
                 );
             }

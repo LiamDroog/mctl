@@ -16,6 +16,7 @@ pub struct SkyInput<'a> {
     pub now: Utc,
     pub look_now: Option<LookView>,
     pub sun_az_el: Option<(f64, f64)>,
+    pub moon_az_el: Option<(f64, f64)>,
 }
 
 /// Screen position of an azimuth/elevation on a plot of radius `r` centred at `c`. Elevation may be
@@ -105,6 +106,22 @@ pub fn paint(painter: &Painter, theme: &Theme, rect_px: [u32; 4], inp: &SkyInput
         );
     }
 
+    if let Some((az, el)) = inp.moon_az_el.filter(|(_, el)| *el > -5.0) {
+        let pos = project(c, radius, az as f32, (el as f32).max(0.0));
+        let colour = if el > 0.0 { bright } else { dim };
+        painter.circle_filled(pos, 5.0, colour);
+        painter.text(
+            pos + egui::vec2(8.0, 0.0),
+            Align2::LEFT_CENTER,
+            if el > 0.0 {
+                "MOON"
+            } else {
+                "MOON (BELOW HORIZON)"
+            },
+            crate::fonts::font_id(theme),
+            colour,
+        );
+    }
     if let Some(pass) = inp.pass {
         // Path samples are evenly spaced from AOS to LOS; split into flown (solid) and predicted (dashed).
         let n = pass.path.len();

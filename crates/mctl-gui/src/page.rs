@@ -913,6 +913,8 @@ mod tests {
                     origin: "CONFIGURED".into(),
                     sun_az_deg: Some(180.0),
                     sun_el_deg: Some(-30.0),
+                    moon_az_deg: Some(100.0),
+                    moon_el_deg: Some(20.0),
                 },
                 SiteView {
                     name: "NASA HQ".into(),
@@ -922,6 +924,8 @@ mod tests {
                     origin: "DEFAULT".into(),
                     sun_az_deg: None,
                     sun_el_deg: None,
+                    moon_az_deg: None,
+                    moon_el_deg: None,
                 },
             ],
             active: 0,

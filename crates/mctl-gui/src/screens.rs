@@ -978,7 +978,16 @@ fn pass_sky(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
         } else {
             "TWILIGHT"
         };
-        l.line(&format!("SUN EL {el:+.1}  {sky}"), Style::new(Role::Dim));
+        let moon = inp
+            .world
+            .observer
+            .active_site()
+            .and_then(|s| s.moon_el_deg)
+            .map_or(String::new(), |m| format!("   MOON EL {m:+.1}"));
+        l.line(
+            &format!("SUN EL {el:+.1}  {sky}{moon}"),
+            Style::new(Role::Dim),
+        );
     }
     l.line(
         &format!(

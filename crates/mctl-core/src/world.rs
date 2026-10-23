@@ -160,6 +160,8 @@ pub struct SiteView {
     pub origin: String,
     pub sun_az_deg: Option<f64>,
     pub sun_el_deg: Option<f64>,
+    pub moon_az_deg: Option<f64>,
+    pub moon_el_deg: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
