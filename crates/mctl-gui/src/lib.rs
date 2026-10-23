@@ -6,6 +6,7 @@
 mod app;
 mod assets;
 mod coast;
+mod commands;
 mod console;
 mod fonts;
 mod globe;
@@ -13,7 +14,9 @@ mod gpu;
 mod grid;
 mod offline;
 mod page;
+mod pages;
 mod render;
+mod screens;
 mod theme;
 
 pub use app::{Options, Present, run};

@@ -42,9 +42,14 @@ id = "iss"
 name = "ISS"
 norad = 25544
 sources = ["oem", "gp"]
+telemetry = "isslive"
+# MET epoch: launch of Zarya, 1998-11-20 06:40 UTC (assumption; verify before relying on MET).
+met_epoch = "1998-11-20T06:40:00"
 
 [[vehicle]]
 id = "hubble"
 name = "HUBBLE"
 norad = 20580
 sources = ["gp"]
+# STS-31 liftoff, 1990-04-24 12:33:51 UTC (assumption; verify).
+met_epoch = "1990-04-24T12:33:51"

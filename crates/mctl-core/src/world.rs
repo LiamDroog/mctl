@@ -107,6 +107,9 @@ pub struct VehicleView {
     pub id: String,
     pub name: String,
     pub norad: u32,
+    /// Telemetry source this vehicle has, if any (pages that need one are greyed without it).
+    pub telemetry: Option<String>,
+    pub met_epoch: Option<Utc>,
     pub sources: Vec<SourceView>,
     /// `None` until some source can produce a state.
     pub solution: Option<Solution>,
@@ -126,9 +129,46 @@ pub enum EopView {
     },
 }
 
+/// Simulation clock mode (DESIGN.md FR-20). REPLAY joins with the recording store.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClockMode {
+    Live,
+    Sim,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ClockView {
+    pub mode: ClockMode,
+    pub rate: f64,
+    pub paused: bool,
+}
+
+impl ClockView {
+    pub const LIVE: Self = Self {
+        mode: ClockMode::Live,
+        rate: 1.0,
+        paused: false,
+    };
+
+    pub fn is_live(&self) -> bool {
+        self.mode == ClockMode::Live
+    }
+}
+
+/// One line of the event log (DESIGN.md FR-42 foreshadows the full C&W log; this records system events).
+#[derive(Debug, Clone, PartialEq)]
+pub struct LogEntry {
+    /// Wall-clock time of the event.
+    pub at: Utc,
+    pub text: String,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct World {
     pub t: Utc,
+    pub clock: ClockView,
+    /// Most recent events, oldest first.
+    pub log: Vec<LogEntry>,
     /// Increments every published snapshot.
     pub seq: u64,
     pub eop: EopView,
@@ -140,6 +180,8 @@ impl World {
     pub fn empty(t: Utc) -> Self {
         Self {
             t,
+            clock: ClockView::LIVE,
+            log: Vec::new(),
             seq: 0,
             eop: EopView::Assumed {
                 reason: "starting".into(),

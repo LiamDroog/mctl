@@ -101,6 +101,12 @@ pub struct VehicleDef {
     pub norad: u32,
     /// Trajectory sources in priority order (DESIGN.md §3.2).
     pub sources: Vec<SourceKind>,
+    /// Telemetry source for the GNC/EPS/TCS/COMM pages, if the vehicle has one (`"isslive"`).
+    #[serde(default)]
+    pub telemetry: Option<String>,
+    /// Epoch for mission elapsed time in the header, UTC `YYYY-MM-DDThh:mm:ss`.
+    #[serde(default)]
+    pub met_epoch: Option<String>,
 }
 
 /// Merge `over` into `base`: tables merge key by key, anything else replaces.
@@ -213,6 +219,22 @@ impl Config {
             }
             if v.sources.is_empty() {
                 return bad(format!("vehicle {:?} has no sources", v.id));
+            }
+            if let Some(m) = v
+                .met_epoch
+                .as_ref()
+                .filter(|m| crate::time::Utc::parse(m).is_err())
+            {
+                return bad(format!(
+                    "vehicle {:?}: met_epoch {m:?} is not YYYY-MM-DDThh:mm:ss",
+                    v.id
+                ));
+            }
+            if v.telemetry.as_deref().is_some_and(|t| t != "isslive") {
+                return bad(format!(
+                    "vehicle {:?}: unknown telemetry source {:?} (known: isslive)",
+                    v.id, v.telemetry
+                ));
             }
             if v.sources
                 .iter()

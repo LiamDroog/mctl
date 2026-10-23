@@ -39,16 +39,30 @@ pub enum Limit {
 pub struct Style {
     pub role: Role,
     pub limit: Option<Limit>,
+    /// Paint the theme background behind these cells (overlays that must hide what is underneath).
+    pub solid: bool,
 }
 
 impl Style {
     pub const fn new(role: Role) -> Self {
-        Self { role, limit: None }
+        Self {
+            role,
+            limit: None,
+            solid: false,
+        }
+    }
+
+    pub const fn solid(self) -> Self {
+        Self {
+            solid: true,
+            ..self
+        }
     }
     pub const fn limit(limit: Limit) -> Self {
         Self {
             role: Role::Fg,
             limit: Some(limit),
+            solid: false,
         }
     }
 }
@@ -122,6 +136,15 @@ impl Grid {
         }
     }
 
+    /// Fill a rectangle with spaces of a style (used to blank a region for an overlay).
+    pub fn fill(&mut self, rect: CellRect, style: Style) {
+        for r in rect.row..(rect.row + rect.rows).min(self.rows) {
+            for c in rect.col..(rect.col + rect.cols).min(self.cols) {
+                self.cells[r * self.cols + c] = Cell { ch: ' ', style };
+            }
+        }
+    }
+
     /// Draw a titled box border. Rectangles smaller than 2×2 are ignored.
     pub fn draw_box(&mut self, rect: CellRect, title: &str, border: Style, title_style: Style) {
         if rect.cols < 2 || rect.rows < 2 {
@@ -170,7 +193,7 @@ impl Grid {
                     end += 1;
                 }
                 let text: String = cells[col..end].iter().map(|c| c.ch).collect();
-                if !text.trim().is_empty() || style.limit.is_some() {
+                if !text.trim().is_empty() || style.limit.is_some() || style.solid {
                     let top_left = origin + Vec2::new(col as f32 * cw, row as f32 * ch);
                     paint_run(
                         painter,
@@ -245,6 +268,9 @@ fn paint_run(
         }
     }
     let rect = Rect::from_min_size(top_left, size);
+    if style.solid {
+        painter.rect_filled(rect, 0.0, theme.palette.background.to_egui());
+    }
     let text_colour: Color32 = if inverse {
         painter.rect_filled(rect, 0.0, fg.to_egui());
         theme.palette.background.to_egui()

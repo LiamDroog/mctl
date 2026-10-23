@@ -21,8 +21,6 @@ pub const MIN_ROWS: usize = 45;
 pub struct PageInput<'a> {
     pub world: &'a World,
     pub vehicle: Option<&'a VehicleView>,
-    pub vehicle_idx: usize,
-    pub vehicle_count: usize,
     pub theme: &'a Theme,
     pub toggles: EffectToggles,
     pub camera: &'a Camera,
@@ -32,13 +30,33 @@ pub struct PageInput<'a> {
     pub gpu_ms: Option<f32>,
     pub adapter: &'a str,
     pub size_px: [u32; 2],
+    pub page: crate::pages::Page,
+    pub sub: usize,
+    /// The command line, when open.
+    pub command: Option<&'a CommandView>,
+    /// Last command result or error, shown briefly in the footer.
+    pub status: Option<&'a StatusMsg>,
+    pub help: bool,
+    /// Static key/value rows for the SETTINGS page (configuration echoes).
+    pub settings: &'a [(String, String)],
 }
 
-/// Panels that need pixel-level drawing.
+pub struct CommandView {
+    pub text: String,
+    pub candidates: Vec<String>,
+}
+
+pub struct StatusMsg {
+    pub text: String,
+    pub error: bool,
+}
+
+/// Panels that need pixel-level drawing, when the current page has them.
+#[derive(Default)]
 pub struct Layout {
-    pub orbit: CellRect,
-    pub ground: CellRect,
-    pub eclipse: CellRect,
+    pub globe: Option<CellRect>,
+    pub ground: Option<CellRect>,
+    pub eclipse: Option<CellRect>,
 }
 
 /// A caution or warning line derived from source health (a stand-in for the M3 C&W engine).
@@ -62,7 +80,7 @@ pub fn fmt_dur(secs: f64) -> String {
     }
 }
 
-fn quality_text(sol: &mctl_core::world::Solution) -> String {
+pub(crate) fn quality_text(sol: &mctl_core::world::Solution) -> String {
     format!("{} ({})", sol.quality.label(), sol.source.label())
 }
 
@@ -225,14 +243,14 @@ pub fn terminator_lat_deg(lon_deg: f64, subsolar_lon_deg: f64, dec_deg: f64) -> 
         .to_degrees()
 }
 
-struct Lines<'a> {
-    grid: &'a mut Grid,
-    rect: CellRect,
-    row: usize,
+pub(crate) struct Lines<'a> {
+    pub(crate) grid: &'a mut Grid,
+    pub(crate) rect: CellRect,
+    pub(crate) row: usize,
 }
 
 impl<'a> Lines<'a> {
-    fn new(grid: &'a mut Grid, panel: CellRect) -> Self {
+    pub(crate) fn new(grid: &'a mut Grid, panel: CellRect) -> Self {
         Self {
             grid,
             rect: panel.inner(),
@@ -240,7 +258,7 @@ impl<'a> Lines<'a> {
         }
     }
 
-    fn put(&mut self, col: usize, text: &str, style: Style) {
+    pub(crate) fn put(&mut self, col: usize, text: &str, style: Style) {
         if self.row < self.rect.rows && col < self.rect.cols {
             let room = self.rect.cols - col;
             let t: String = text.chars().take(room).collect();
@@ -249,12 +267,12 @@ impl<'a> Lines<'a> {
         }
     }
 
-    fn line(&mut self, text: &str, style: Style) {
+    pub(crate) fn line(&mut self, text: &str, style: Style) {
         self.put(1, text, style);
         self.row += 1;
     }
 
-    fn pair(&mut self, label: &str, value: &str, unit: &str, value_style: Style) {
+    pub(crate) fn pair(&mut self, label: &str, value: &str, unit: &str, value_style: Style) {
         let dim = Style::new(Role::Dim);
         self.put(1, label, dim);
         self.put(8, value, value_style);
@@ -262,50 +280,13 @@ impl<'a> Lines<'a> {
         self.row += 1;
     }
 
-    fn no_data(&mut self, why: &str) {
+    pub(crate) fn no_data(&mut self, why: &str) {
         self.line("NO DATA", Style::new(Role::Dim));
         self.line(why, Style::new(Role::Dim));
     }
 }
 
-fn layout(cols: usize, rows: usize) -> [CellRect; 9] {
-    let body_h = rows.saturating_sub(3);
-    let (lw, mw) = (cols * 50 / 100, cols * 25 / 100);
-    let rw = cols.saturating_sub(lw + mw);
-    let (c1, c2) = (lw, lw + mw);
-    let pct = |p: usize| body_h * p / 100;
-    let (orbit_h, ground_h) = (pct(48), pct(33));
-    let (state_h, elem_h) = (pct(34), pct(31));
-    let (cw_h, src_h) = (pct(28), pct(38));
-    [
-        CellRect::new(0, 1, lw, orbit_h),
-        CellRect::new(0, 1 + orbit_h, lw, ground_h),
-        CellRect::new(
-            0,
-            1 + orbit_h + ground_h,
-            lw,
-            body_h.saturating_sub(orbit_h + ground_h),
-        ),
-        CellRect::new(c1, 1, mw, state_h),
-        CellRect::new(c1, 1 + state_h, mw, elem_h),
-        CellRect::new(
-            c1,
-            1 + state_h + elem_h,
-            mw,
-            body_h.saturating_sub(state_h + elem_h),
-        ),
-        CellRect::new(c2, 1, rw, cw_h),
-        CellRect::new(c2, 1 + cw_h, rw, src_h),
-        CellRect::new(
-            c2,
-            1 + cw_h + src_h,
-            rw,
-            body_h.saturating_sub(cw_h + src_h),
-        ),
-    ]
-}
-
-fn source_row(l: &mut Lines<'_>, s: &SourceView, caution_km: f64) {
+pub(crate) fn source_row(l: &mut Lines<'_>, s: &SourceView, caution_km: f64) {
     let (status, style) = match &s.status {
         SourceStatus::Active => ("ACTIVE", Style::new(Role::Bright)),
         SourceStatus::Standby => ("STANDBY", Style::new(Role::Fg)),
@@ -365,314 +346,6 @@ fn source_row(l: &mut Lines<'_>, s: &SourceView, caution_km: f64) {
             st,
         );
         l.row += 1;
-    }
-}
-
-/// Fill the grid with the MASTER page and return the pixel-drawn panels' rectangles.
-pub fn build_master(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
-    let (cols, rows) = (grid.cols, grid.rows);
-    let (fg, dim, bright, border) = (
-        Style::new(Role::Fg),
-        Style::new(Role::Dim),
-        Style::new(Role::Bright),
-        Style::new(Role::Border),
-    );
-    let cw = cw_lines(inp.world, inp.vehicle, inp.limits);
-    let severity = worst(&cw);
-
-    // Header.
-    let (name, norad) = inp
-        .vehicle
-        .map_or(("--".to_owned(), 0), |v| (v.name.clone(), v.norad));
-    let src = inp
-        .vehicle
-        .and_then(|v| v.solution.as_ref())
-        .map_or("NO DATA".to_owned(), quality_text);
-    let age = inp
-        .vehicle
-        .and_then(|v| v.sources.iter().find(|s| s.status == SourceStatus::Active))
-        .and_then(|s| s.age_s)
-        .map_or(String::new(), |a| format!(" AGE {}", fmt_dur(a)));
-    let header = format!(
-        " {name} ({norad}) | MASTER | GMT {} | LIVE 1x | SRC {src}{age} | {}",
-        inp.world.t.gmt_doy(),
-        inp.theme.name.to_uppercase()
-    );
-    let annunciator = match severity {
-        Some(Limit::Warning) => " WARN ",
-        Some(Limit::Caution) => " CAUT ",
-        Some(Limit::Stale) => " STALE ",
-        None => " NOM ",
-    };
-    let header_cols = cols.saturating_sub(annunciator.len() + 1);
-    let header: String = header.chars().take(header_cols).collect();
-    grid.put(0, 0, &header, bright);
-    let ann_style = severity.map_or(Style::new(Role::Nominal), Style::limit);
-    grid.put(header_cols + 1, 0, annunciator, ann_style);
-
-    let [
-        orbit,
-        ground,
-        timeline,
-        state,
-        elements,
-        subsys,
-        cwp,
-        sources,
-        eclipse,
-    ] = layout(cols, rows);
-    let sol = inp.vehicle.and_then(|v| v.solution.as_ref());
-    let quality = sol.map_or("NO DATA".to_owned(), quality_text);
-    let cam = inp.camera;
-    let focus = if cam.focus_vehicle {
-        "VEHICLE"
-    } else {
-        "EARTH"
-    };
-    let frame = if cam.earth_fixed {
-        "EARTH-FIXED"
-    } else {
-        "INERTIAL"
-    };
-    grid.draw_box(
-        orbit,
-        &format!(
-            "ORBIT MAP  ALT x{:.0}  {frame}  FOCUS {focus}",
-            cam.exaggeration()
-        ),
-        border,
-        bright,
-    );
-    grid.draw_box(
-        ground,
-        "GROUND TRACK  PAST SOLID / PREDICTED DASHED",
-        border,
-        bright,
-    );
-    grid.draw_box(
-        timeline,
-        "EVENT TIMELINE  FROM TRACK SAMPLES",
-        border,
-        bright,
-    );
-    grid.draw_box(
-        state,
-        &format!(
-            "STATE VECTOR ({})  {quality}",
-            if inp.show_ecef { "ITRF" } else { "GCRF" }
-        ),
-        border,
-        bright,
-    );
-    grid.draw_box(elements, "ELEMENTS (OSCULATING)", border, bright);
-    grid.draw_box(subsys, "SUBSYSTEM SUMMARY", border, bright);
-    grid.draw_box(cwp, "CAUTION & WARNING  SOURCE HEALTH", border, bright);
-    grid.draw_box(
-        sources,
-        "SOURCES  HEALTH / AGE / DIFFERENCE",
-        border,
-        bright,
-    );
-    grid.draw_box(eclipse, "ECLIPSE / BETA", border, bright);
-
-    // Orbit map interior: the globe pass draws behind; with no solution say so.
-    if sol.is_none() {
-        let mut l = Lines::new(grid, orbit);
-        l.no_data("NO TRAJECTORY SOLUTION YET");
-    }
-
-    // State vector.
-    let mut l = Lines::new(grid, state);
-    match sol {
-        None => l.no_data("NO SOURCE HAS DELIVERED A STATE"),
-        Some(s) => {
-            let st = if inp.show_ecef {
-                &s.state_itrf
-            } else {
-                &s.state_gcrf
-            };
-            for (lab, v) in [("X", st.r.x), ("Y", st.r.y), ("Z", st.r.z)] {
-                l.pair(lab, &format!("{v:>13.3}"), "km", fg);
-            }
-            for (lab, v) in [("VX", st.v.x), ("VY", st.v.y), ("VZ", st.v.z)] {
-                l.pair(lab, &format!("{v:>13.6}"), "km/s", fg);
-            }
-            l.pair("|R|", &format!("{:>13.3}", st.r.norm()), "km", fg);
-            l.pair("|V|", &format!("{:>13.6}", st.v.norm()), "km/s", fg);
-            l.pair("ALT", &format!("{:>13.3}", s.geodetic.alt_km), "km", fg);
-            l.pair("LAT", &format!("{:>13.4}", s.geodetic.lat_deg), "deg", fg);
-            l.pair("LON", &format!("{:>13.4}", s.geodetic.lon_deg), "deg", fg);
-            if matches!(inp.world.eop, EopView::Assumed { .. }) {
-                l.line(
-                    "UT1-UTC ASSUMED 0 (ITRF +-30 M)",
-                    Style::limit(Limit::Caution),
-                );
-            }
-        }
-    }
-
-    // Elements.
-    let mut l = Lines::new(grid, elements);
-    match sol {
-        None => l.no_data("NEEDS A STATE VECTOR"),
-        Some(s) => {
-            let e = &s.elements;
-            for (lab, v, unit, p) in [
-                ("SMA", e.sma_km, "km", 3),
-                ("ECC", e.ecc, "", 6),
-                ("INC", e.inc_deg, "deg", 4),
-                ("RAAN", e.raan_deg, "deg", 4),
-                ("ARGP", e.argp_deg, "deg", 4),
-                ("TA", e.true_anom_deg, "deg", 3),
-                ("MA", e.mean_anom_deg, "deg", 3),
-            ] {
-                l.pair(lab, &format!("{v:>13.p$}"), unit, fg);
-            }
-            l.pair("PERIOD", &format!("{:>13}", fmt_dur(e.period_s)), "", fg);
-            l.pair("HA", &format!("{:>13.2}", e.apo_alt_km), "km", fg);
-            l.pair("HP", &format!("{:>13.2}", e.peri_alt_km), "km", fg);
-            l.pair("BETA", &format!("{:>13.2}", s.beta_deg), "deg", fg);
-        }
-    }
-
-    // Subsystem summary: not available until the ISSLIVE adapter exists.
-    let mut l = Lines::new(grid, subsys);
-    l.no_data("ISSLIVE ADAPTER ARRIVES IN M3");
-
-    // Caution & warning (source health only until the M3 rule engine).
-    let mut l = Lines::new(grid, cwp);
-    if cw.is_empty() {
-        l.line("NOM  NO SOURCE ANOMALIES", Style::new(Role::Nominal));
-    }
-    for c in &cw {
-        let (tag, style) = match c.severity {
-            Some(Limit::Warning) => ("WARN ", Style::limit(Limit::Warning)),
-            Some(Limit::Caution) => ("CAUT ", Style::limit(Limit::Caution)),
-            Some(Limit::Stale) => ("STALE", Style::limit(Limit::Stale)),
-            None => ("NOM  ", Style::new(Role::Nominal)),
-        };
-        l.line(&format!("{tag} {}", c.text), style);
-    }
-    l.row = l.rect.rows.saturating_sub(1);
-    l.line("RULE ENGINE (TLE AGE, LIMITS): M3", dim);
-
-    // Sources.
-    let mut l = Lines::new(grid, sources);
-    match inp.vehicle {
-        None => l.no_data("ENGINE NOT STARTED"),
-        Some(v) => {
-            for s in &v.sources {
-                source_row(&mut l, s, inp.limits.residual_caution_km);
-            }
-            let eop = match &inp.world.eop {
-                EopView::Loaded { covers_to, .. } => {
-                    (format!("EOP LOADED THRU {}", &covers_to.iso()[..10]), dim)
-                }
-                EopView::Assumed { .. } => {
-                    ("EOP ASSUMED 0".to_owned(), Style::limit(Limit::Caution))
-                }
-            };
-            l.put(1, &eop.0, eop.1);
-        }
-    }
-
-    // Eclipse / beta (ring is painted over the lower part of the panel).
-    let mut l = Lines::new(grid, eclipse);
-    match sol {
-        None => l.no_data("NEEDS A STATE VECTOR"),
-        Some(s) => {
-            let state = if s.illumination >= 0.999 {
-                ("SUNLIT".to_owned(), fg)
-            } else if s.illumination <= 0.001 {
-                ("UMBRA".to_owned(), Style::limit(Limit::Stale))
-            } else {
-                (
-                    format!("PENUMBRA {:.0}%", s.illumination * 100.0),
-                    Style::limit(Limit::Stale),
-                )
-            };
-            l.put(1, &state.0, state.1);
-            l.put(20, &format!("BETA {:+.1} deg", s.beta_deg), fg);
-        }
-    }
-
-    // Event timeline.
-    let mut l = Lines::new(grid, timeline);
-    match inp.vehicle.and_then(|v| v.track.as_deref()) {
-        None => l.no_data("NEEDS A TRACK"),
-        Some(tr) => {
-            for e in upcoming_events(tr, inp.world.t).iter().take(l.rect.rows) {
-                let dt = e.t.minus(inp.world.t);
-                l.line(
-                    &format!("T-{:<9} {:<16} GMT {}", fmt_dur(dt), e.label, e.t.gmt_doy()),
-                    fg,
-                );
-            }
-        }
-    }
-
-    // Footer: two rows (stats, then key legend).
-    let t = inp.toggles;
-    let on = |b: bool| if b { "ON " } else { "OFF" };
-    let veh = if inp.vehicle_count > 1 {
-        format!("V VEHICLE {}/{}  ", inp.vehicle_idx + 1, inp.vehicle_count)
-    } else {
-        String::new()
-    };
-    let legend = format!(
-        " F1 MASTER {veh}X FRAME ARROWS ORBIT +/- ZOOM Z ALT F CAM C FOCUS T THEME 1 SCAN {} 2 BLOOM {} 3 PERSIST {} 4 CRT {} E ALL Q QUIT",
-        on(t.scanlines),
-        on(t.bloom),
-        on(t.persistence),
-        on(t.curvature)
-    );
-    let legend: String = legend.chars().take(cols).collect();
-    grid.put(0, rows.saturating_sub(1), &legend, dim);
-    let gpu = inp
-        .gpu_ms
-        .map_or_else(|| "GPU n/a".to_owned(), |g| format!("GPU {g:5.2}ms"));
-    let stats = format!(
-        "{}x{} FRAME {:5.2}ms {:5.1}fps {gpu} ",
-        inp.size_px[0],
-        inp.size_px[1],
-        inp.frame_ms,
-        if inp.frame_ms > 0.0 {
-            1000.0 / inp.frame_ms
-        } else {
-            0.0
-        }
-    );
-    let stats_row = rows.saturating_sub(2);
-    grid.put(
-        cols.saturating_sub(stats.len()),
-        stats_row,
-        &stats,
-        Style::new(Role::Info),
-    );
-    let small = if cols < MIN_COLS || rows < MIN_ROWS {
-        format!("WINDOW {cols}x{rows} CELLS < MIN {MIN_COLS}x{MIN_ROWS}: PANELS CLIPPED  ")
-    } else {
-        String::new()
-    };
-    let adapter: String = format!("{small}{}", inp.adapter)
-        .chars()
-        .take(cols.saturating_sub(stats.len() + 2))
-        .collect();
-    grid.put(
-        1,
-        stats_row,
-        &adapter,
-        if small.is_empty() {
-            dim
-        } else {
-            Style::limit(Limit::Caution)
-        },
-    );
-
-    Layout {
-        orbit: orbit.inner(),
-        ground: ground.inner(),
-        eclipse: eclipse.inner(),
     }
 }
 
@@ -926,6 +599,8 @@ mod tests {
             id: "iss".into(),
             name: "ISS".into(),
             norad: 25544,
+            telemetry: None,
+            met_epoch: None,
             sources: vec![SourceView {
                 kind: SourceKind::Gp,
                 health,
@@ -950,6 +625,8 @@ mod tests {
     fn world_with(eop: EopView) -> World {
         World {
             t: Utc(1.0e9),
+            clock: mctl_core::world::ClockView::LIVE,
+            log: vec![],
             seq: 1,
             eop,
             vehicles: vec![],
@@ -1081,40 +758,5 @@ mod tests {
         assert!(terminator_lat_deg(180.0, 0.0, 23.4) > 60.0);
         // 90 degrees from the Sun the terminator crosses the equator.
         assert!(terminator_lat_deg(90.0, 0.0, 23.4).abs() < 1e-9);
-    }
-
-    #[test]
-    fn layout_panels_stay_inside_the_grid_at_reference_and_awkward_sizes() {
-        for (cols, rows) in [
-            (160, 45),
-            (200, 56),
-            (106, 30),
-            (80, 24),
-            (20, 10),
-            (3, 3),
-            (0, 0),
-        ] {
-            for r in layout(cols, rows) {
-                assert!(
-                    r.col + r.cols <= cols,
-                    "{cols}x{rows}: {r:?} overflows columns"
-                );
-                assert!(
-                    r.row + r.rows <= rows.max(1),
-                    "{cols}x{rows}: {r:?} overflows rows"
-                );
-            }
-        }
-        let [orbit, ground, timeline, ..] = layout(160, 45);
-        assert_eq!(
-            orbit.row + orbit.rows,
-            ground.row,
-            "left column panels are contiguous"
-        );
-        assert_eq!(ground.row + ground.rows, timeline.row);
-        assert!(
-            timeline.row + timeline.rows <= 45 - 2,
-            "footer rows are free"
-        );
     }
 }

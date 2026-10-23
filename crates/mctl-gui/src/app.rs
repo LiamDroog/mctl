@@ -11,13 +11,12 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Fullscreen, Window, WindowId};
 
-use crate::console::{Console, FrameStats};
+use crate::console::{Console, FrameStats, KeyInput, Outcome};
 use crate::gpu::{self, Gpu};
-use crate::render::{EffectToggles, FrameRequest, Renderer};
+use crate::render::{FrameRequest, Renderer};
 use crate::theme::Theme;
 
-/// Camera step per arrow-key press, degrees; zoom factor per key press or wheel notch; mouse drag gain.
-const ARROW_STEP_DEG: f32 = 5.0;
+/// Zoom factor per wheel notch; mouse drag gain.
 const ZOOM_STEP: f32 = 1.15;
 const DRAG_DEG_PER_PX: f32 = 0.3;
 
@@ -65,8 +64,29 @@ struct App {
     /// Per-frame (interval, surface-acquire wait, UI+record+submit) in ms.
     frame_log: Vec<[f32; 3]>,
     error: Option<anyhow::Error>,
+    /// A drag that began inside the orbit map; continues until release wherever the cursor goes.
     dragging: bool,
     last_cursor: Option<(f32, f32)>,
+    /// Orbit-map rectangle of the last frame, `[x, y, w, h]` px.
+    interactive: Option<[u32; 4]>,
+    shift: bool,
+}
+
+fn fkey(n: &NamedKey) -> Option<u8> {
+    use NamedKey::*;
+    [F1, F2, F3, F4, F5, F6, F7, F8, F9, F10]
+        .iter()
+        .position(|k| k == n)
+        .map(|i| i as u8 + 1)
+}
+
+fn inside(rect: Option<[u32; 4]>, p: Option<(f32, f32)>) -> bool {
+    match (rect, p) {
+        (Some([x, y, w, h]), Some((px, py))) => {
+            px >= x as f32 && py >= y as f32 && px < (x + w) as f32 && py < (y + h) as f32
+        }
+        _ => false,
+    }
 }
 
 fn pick_format(caps: &wgpu::SurfaceCapabilities) -> Result<wgpu::TextureFormat> {
@@ -138,6 +158,11 @@ impl App {
             self.opts.live.limits.clone(),
             self.opts.live.vehicle_id.clone(),
         )?;
+        let mut console = console;
+        console.connect(
+            Some(self.opts.live.commands.clone()),
+            self.opts.live.settings.clone(),
+        );
         let globe = crate::offline::build_globe(&gpu, console.theme())?;
         let renderer = Renderer::new(gpu.clone(), format, [config.width, config.height], globe);
         let egui_state = egui_winit::State::new(
@@ -190,6 +215,7 @@ impl App {
         };
         let world = self.opts.live.bus.latest();
         let mut prepared = r.console.prepare(raw, size, &world, &stats);
+        self.interactive = prepared.interactive_rect_px;
 
         let acquire_start = Instant::now();
         let frame = match r.surface.get_current_texture() {
@@ -232,36 +258,37 @@ impl App {
         Ok(self.opts.exit_after_frames.is_none_or(|n| self.frames < n))
     }
 
-    fn handle_key(&mut self, event_loop: &ActiveEventLoop, key: &Key) {
+    fn handle_key(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        key: &Key,
+        text: Option<&str>,
+        shift: bool,
+    ) {
         let world = self.opts.live.bus.latest();
         let Some(r) = self.running.as_mut() else {
             return;
         };
-        let c = &mut r.console;
-        match key {
-            Key::Named(NamedKey::Escape) => event_loop.exit(),
-            Key::Named(NamedKey::ArrowLeft) => c.camera.orbit_by(-ARROW_STEP_DEG, 0.0),
-            Key::Named(NamedKey::ArrowRight) => c.camera.orbit_by(ARROW_STEP_DEG, 0.0),
-            Key::Named(NamedKey::ArrowUp) => c.camera.orbit_by(0.0, ARROW_STEP_DEG),
-            Key::Named(NamedKey::ArrowDown) => c.camera.orbit_by(0.0, -ARROW_STEP_DEG),
-            Key::Character(ch) => match ch.to_lowercase().as_str() {
-                "q" => event_loop.exit(),
-                "t" => c.cycle_theme(),
-                "v" => c.next_vehicle(&world),
-                "x" => c.show_ecef = !c.show_ecef,
-                "z" => c.camera.cycle_exaggeration(),
-                "f" => c.camera.earth_fixed = !c.camera.earth_fixed,
-                "c" => c.camera.focus_vehicle = !c.camera.focus_vehicle,
-                "+" | "=" => c.camera.zoom_by(1.0 / ZOOM_STEP),
-                "-" | "_" => c.camera.zoom_by(ZOOM_STEP),
-                "1" => c.toggles.scanlines = !c.toggles.scanlines,
-                "2" => c.toggles.bloom = !c.toggles.bloom,
-                "3" => c.toggles.persistence = !c.toggles.persistence,
-                "4" => c.toggles.curvature = !c.toggles.curvature,
-                "e" => c.toggles = EffectToggles::all(!c.toggles.any()),
-                _ => {}
-            },
-            _ => {}
+        let input = match key {
+            Key::Named(NamedKey::Escape) => Some(KeyInput::Escape),
+            Key::Named(NamedKey::Enter) => Some(KeyInput::Enter),
+            Key::Named(NamedKey::Backspace) => Some(KeyInput::Backspace),
+            Key::Named(NamedKey::Tab) if shift => Some(KeyInput::BackTab),
+            Key::Named(NamedKey::Tab) => Some(KeyInput::Tab),
+            Key::Named(NamedKey::Space) => Some(KeyInput::Char(' ')),
+            Key::Named(NamedKey::ArrowLeft) => Some(KeyInput::Left),
+            Key::Named(NamedKey::ArrowRight) => Some(KeyInput::Right),
+            Key::Named(NamedKey::ArrowUp) => Some(KeyInput::Up),
+            Key::Named(NamedKey::ArrowDown) => Some(KeyInput::Down),
+            Key::Named(n) => fkey(n).map(KeyInput::F),
+            // `text` carries the shifted character (`?`, `:`) that logical_key may not.
+            Key::Character(c) => text.unwrap_or(c).chars().next().map(KeyInput::Char),
+            _ => None,
+        };
+        if let Some(k) = input
+            && r.console.handle_key(k, &world) == Outcome::Quit
+        {
+            event_loop.exit();
         }
         let style = r.console.theme().globe.clone();
         r.renderer.globe_mut().set_style(style);
@@ -335,8 +362,9 @@ impl ApplicationHandler for App {
                 button: winit::event::MouseButton::Left,
                 ..
             } => {
-                self.dragging = state == ElementState::Pressed;
-                self.last_cursor = None;
+                self.dragging =
+                    state == ElementState::Pressed && inside(self.interactive, self.last_cursor);
+                self.last_cursor = self.last_cursor.filter(|_| self.dragging);
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let now = (position.x as f32, position.y as f32);
@@ -355,14 +383,23 @@ impl ApplicationHandler for App {
                     winit::event::MouseScrollDelta::LineDelta(_, y) => y,
                     winit::event::MouseScrollDelta::PixelDelta(p) => p.y as f32 / 40.0,
                 };
-                if let Some(r) = self.running.as_mut() {
+                if let (true, Some(r)) = (
+                    inside(self.interactive, self.last_cursor),
+                    self.running.as_mut(),
+                ) {
                     r.console.camera.zoom_by(ZOOM_STEP.powf(-notches));
                 }
             }
+            WindowEvent::ModifiersChanged(m) => self.shift = m.state().shift_key(),
             WindowEvent::KeyboardInput { event, .. }
                 if event.state == ElementState::Pressed && !event.repeat =>
             {
-                self.handle_key(event_loop, &event.logical_key);
+                self.handle_key(
+                    event_loop,
+                    &event.logical_key,
+                    event.text.as_deref(),
+                    self.shift,
+                );
             }
             WindowEvent::RedrawRequested => match self.redraw() {
                 Ok(true) => {
@@ -396,6 +433,8 @@ pub fn run(themes: Vec<Theme>, opts: Options) -> Result<()> {
         error: None,
         dragging: false,
         last_cursor: None,
+        interactive: None,
+        shift: false,
     };
     event_loop.run_app(&mut app).context("event loop")?;
     app.summarise();

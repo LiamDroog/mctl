@@ -2,8 +2,9 @@
 //! immutable [`World`] snapshot (DESIGN.md §6.2, §3.2). It runs on its own thread at `engine.tick_hz`;
 //! the UI only ever reads the latest snapshot.
 
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use std::sync::mpsc::{SyncSender, TryRecvError, sync_channel};
+use std::sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError, channel, sync_channel};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -15,17 +16,22 @@ use mctl_astro::sun::{illumination, sun_gcrf};
 use mctl_astro::trajectory::{Trajectory, TrajectoryError};
 use mctl_core::arbiter::{Candidate, select};
 use mctl_core::bus::Bus;
+use mctl_core::command::Command;
 use mctl_core::config::{Config, VehicleDef};
 use mctl_core::state::{Elements, Geodetic, Quality, SourceKind, State};
 use mctl_core::time::{EopTable, Utc};
 use mctl_core::world::{
-    EopView, Health, Residual, Solution, SourceStatus, SourceView, Track, TrackPoint, VehicleView,
-    World,
+    ClockView, EopView, Health, LogEntry, Residual, Solution, SourceStatus, SourceView, Track,
+    TrackPoint, VehicleView, World,
 };
 use mctl_sources::tasks::{DataInfo, Event, Payload, SourceKey, SourceSet};
 
+use crate::clock::Clock;
+
 /// Period assumed for track sizing when elements cannot be computed (LEO), seconds.
 const FALLBACK_PERIOD_S: f64 = 5_600.0;
+/// Event-log entries kept in each snapshot.
+const LOG_CAPACITY: usize = 200;
 /// Track is rebuilt at least this often, seconds.
 const TRACK_REBUILD_S: f64 = 1.0;
 
@@ -51,6 +57,36 @@ pub struct Model {
     eop: Option<Loaded<EopTable>>,
     track_revision: u64,
     seq: u64,
+    log: VecDeque<LogEntry>,
+    prev: HashMap<String, Observed>,
+    prev_eop_loaded: Option<bool>,
+}
+
+/// What the previous snapshot said about a vehicle, for transition logging.
+#[derive(Default)]
+struct Observed {
+    active: Option<SourceKind>,
+    sources: Vec<(SourceKind, Health, SourceStatus)>,
+}
+
+fn status_label(s: &SourceStatus) -> String {
+    match s {
+        SourceStatus::Active => "ACTIVE".into(),
+        SourceStatus::Standby => "STANDBY".into(),
+        SourceStatus::Stale => "STALE".into(),
+        SourceStatus::OutOfSpan => "OUT OF SPAN".into(),
+        SourceStatus::NoData => "NO DATA".into(),
+        SourceStatus::Failed(w) => format!("FAILED ({w})"),
+    }
+}
+
+fn health_label(h: &Health) -> String {
+    match h {
+        Health::Starting => "STARTING".into(),
+        Health::Ok => "FEED OK".into(),
+        Health::Failing(w) => format!("FEED FAILING ({w})"),
+        Health::Offline => "OFFLINE".into(),
+    }
 }
 
 impl Model {
@@ -73,6 +109,90 @@ impl Model {
             eop: None,
             track_revision: 0,
             seq: 0,
+            log: VecDeque::new(),
+            prev: HashMap::new(),
+            prev_eop_loaded: None,
+        }
+    }
+
+    /// Record an event in the log (wall-clock timestamped).
+    pub fn note(&mut self, at: Utc, text: impl Into<String>) {
+        if self.log.len() == LOG_CAPACITY {
+            self.log.pop_front();
+        }
+        self.log.push_back(LogEntry {
+            at,
+            text: text.into(),
+        });
+    }
+
+    /// Log every change since the previous snapshot: active source, feed health, source status, EOP.
+    fn observe(&mut self, vehicles: &[VehicleView], eop: &EopView, wall: Utc) {
+        let loaded = matches!(eop, EopView::Loaded { .. });
+        if self.prev_eop_loaded.is_some_and(|p| p != loaded) {
+            self.note(
+                wall,
+                if loaded {
+                    "EOP loaded"
+                } else {
+                    "EOP unavailable: UT1-UTC assumed 0"
+                },
+            );
+        }
+        self.prev_eop_loaded = Some(loaded);
+        for v in vehicles {
+            let now = Observed {
+                active: v.solution.as_ref().map(|s| s.source),
+                sources: v
+                    .sources
+                    .iter()
+                    .map(|s| (s.kind, s.health.clone(), s.status.clone()))
+                    .collect(),
+            };
+            let prev = self.prev.remove(&v.id).unwrap_or_default();
+            let mut lines = Vec::new();
+            if prev.active != now.active {
+                lines.push(match (prev.active, now.active) {
+                    (None, Some(k)) => format!("{}: solution from {}", v.name, k.label()),
+                    (Some(a), Some(b)) => {
+                        format!("{}: active source {} -> {}", v.name, a.label(), b.label())
+                    }
+                    (Some(a), None) => format!("{}: lost solution (was {})", v.name, a.label()),
+                    (None, None) => unreachable!("unchanged"),
+                });
+            }
+            for (kind, health, status) in &now.sources {
+                let before = prev.sources.iter().find(|(k, _, _)| k == kind);
+                if before.is_none_or(|(_, h, _)| h != health)
+                    && !(before.is_none() && *health == Health::Starting)
+                {
+                    lines.push(format!(
+                        "{} {}: {}",
+                        v.name,
+                        kind.label(),
+                        health_label(health)
+                    ));
+                }
+                let was = before.map(|(_, _, s)| s);
+                // Active/standby flips are already reported as active-source changes.
+                let routine =
+                    |s: &SourceStatus| matches!(s, SourceStatus::Active | SourceStatus::Standby);
+                if was.is_none_or(|w| w != status)
+                    && !(was.is_none() && *status == SourceStatus::NoData)
+                    && !(was.is_some_and(routine) && routine(status))
+                {
+                    lines.push(format!(
+                        "{} {}: {}",
+                        v.name,
+                        kind.label(),
+                        status_label(status)
+                    ));
+                }
+            }
+            for l in lines {
+                self.note(wall, l);
+            }
+            self.prev.insert(v.id.clone(), now);
         }
     }
 
@@ -167,8 +287,13 @@ impl Model {
         }
     }
 
-    /// Build the snapshot for time `t`.
+    /// Snapshot for time `t` with the clock live (used by tests and the LIVE path).
     pub fn world(&mut self, t: Utc) -> World {
+        self.world_at(t, ClockView::LIVE, t)
+    }
+
+    /// Build the snapshot for clock time `t`; `wall` stamps log entries.
+    pub fn world_at(&mut self, t: Utc, clock: ClockView, wall: Utc) -> World {
         let (orientation, eop_view) = self.orientation(t);
         let stale = (
             self.cfg.sources.celestrak_gp.stale_after_s,
@@ -195,13 +320,17 @@ impl Model {
                     (past_rev, future_rev, samples),
                     eop.as_deref(),
                     &mut revision,
+                    clock.is_live(),
                 )
             })
-            .collect();
+            .collect::<Vec<_>>();
         self.track_revision = revision;
         self.seq += 1;
+        self.observe(&vehicles, &eop_view, wall);
         World {
             t,
+            clock,
+            log: self.log.iter().cloned().collect(),
             seq: self.seq,
             eop: eop_view,
             vehicles,
@@ -273,6 +402,7 @@ fn vehicle_view(
     track_cfg: (f64, f64, usize),
     eop: Option<&EopTable>,
     revision: &mut u64,
+    live: bool,
 ) -> VehicleView {
     // Samples in the vehicle's configured priority order.
     let samples: Vec<Sample> = v
@@ -285,7 +415,8 @@ fn vehicle_view(
         })
         .collect();
     let age = |s: &Sample| s.data_epoch.map(|e| t.minus(e));
-    let is_stale = |s: &Sample| age(s).is_some_and(|a| a > s.stale_after_s);
+    // Element sets degrade in both directions from their epoch, so scrubbing into the past counts too.
+    let is_stale = |s: &Sample| age(s).is_some_and(|a| a.abs() > s.stale_after_s);
     let ok = |s: &Sample| matches!(s.state, Some(Ok(_)));
     let in_span = |s: &Sample| !matches!(s.state, Some(Err(TrajectoryError::OutOfSpan)));
     // First pass: healthy and not stale. Second pass: accept stale data rather than show nothing, labelled STALE.
@@ -297,7 +428,8 @@ fn vehicle_view(
         })
         .collect();
     let (active, quality) = match select(&strict) {
-        Some(i) => (Some(i), Quality::Pred),
+        // Away from the present the state is a simulation of a prediction, not a prediction of now (FR-6).
+        Some(i) => (Some(i), if live { Quality::Pred } else { Quality::Sim }),
         None => {
             let relaxed: Vec<Candidate> = samples
                 .iter()
@@ -408,6 +540,8 @@ fn vehicle_view(
         id: v.def.id.clone(),
         name: v.def.name.clone(),
         norad: v.def.norad,
+        telemetry: v.def.telemetry.clone(),
+        met_epoch: v.def.met_epoch.as_deref().and_then(|m| Utc::parse(m).ok()),
         sources,
         solution,
         track,
@@ -511,14 +645,27 @@ fn build_track(
 /// A running engine. Dropping it stops the thread.
 pub struct Engine {
     pub bus: Arc<Bus>,
+    /// Commands for the simulation clock (the GUI never touches engine state directly).
+    pub commands: Sender<Command>,
     _stop: SyncSender<()>,
     _thread: JoinHandle<()>,
+}
+
+/// Apply every queued command to the clock, logging the outcome.
+fn drain_commands(rx: &Receiver<Command>, clock: &mut Clock, model: &mut Model, wall_utc: Utc) {
+    while let Ok(cmd) = rx.try_recv() {
+        match clock.apply(&cmd, Instant::now(), wall_utc) {
+            Ok(text) => model.note(wall_utc, text),
+            Err(why) => model.note(wall_utc, format!("command rejected: {why}")),
+        }
+    }
 }
 
 /// Start the engine thread. It owns `sources` and publishes to the returned bus.
 pub fn start(cfg: Config, sources: SourceSet) -> Engine {
     let bus = Bus::new(World::empty(Utc::now().unwrap_or(Utc(0.0))));
     let (stop_tx, stop_rx) = sync_channel::<()>(1);
+    let (cmd_tx, cmd_rx) = channel::<Command>();
     let (b, tick) = (
         bus.clone(),
         Duration::from_secs_f64(1.0 / cfg.engine.tick_hz),
@@ -527,17 +674,21 @@ pub fn start(cfg: Config, sources: SourceSet) -> Engine {
         .name("engine".into())
         .spawn(move || {
             let mut model = Model::new(cfg);
+            let mut clock = Clock::live(Instant::now());
             let mut next = Instant::now();
             loop {
-                loop {
-                    match sources.events.try_recv() {
-                        Ok(e) => model.apply(e),
-                        Err(TryRecvError::Empty) => break,
-                        Err(TryRecvError::Disconnected) => break,
-                    }
+                while let Ok(e) = sources.events.try_recv() {
+                    model.apply(e);
                 }
                 match Utc::now() {
-                    Ok(t) => b.publish(model.world(t)),
+                    Ok(wall_utc) => {
+                        drain_commands(&cmd_rx, &mut clock, &mut model, wall_utc);
+                        if let Some(msg) = clock.enforce_bounds(Instant::now(), wall_utc) {
+                            model.note(wall_utc, msg);
+                        }
+                        let t = clock.now(Instant::now(), wall_utc);
+                        b.publish(model.world_at(t, clock.view(), wall_utc));
+                    }
                     Err(e) => tracing::error!(error = %e, "cannot read the clock"),
                 }
                 next += tick;
@@ -561,6 +712,7 @@ pub fn start(cfg: Config, sources: SourceSet) -> Engine {
         .expect("spawn engine thread");
     Engine {
         bus,
+        commands: cmd_tx,
         _stop: stop_tx,
         _thread: thread,
     }
@@ -748,6 +900,136 @@ mod tests {
             (15..=30).contains(&advanced),
             "expected ~25 snapshots in 0.5 s at 50 Hz, got {advanced}"
         );
+        drop(eng);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn away_from_live_the_quality_label_is_sim_and_staleness_counts_both_directions() {
+        let mut m = model();
+        feed(&mut m, true, true);
+        let t = Utc::parse("2026-10-22T10:00:00").unwrap();
+        let sim = ClockView {
+            mode: mctl_core::world::ClockMode::Sim,
+            rate: 60.0,
+            paused: false,
+        };
+        let w = m.world_at(t, sim, t);
+        assert_eq!(
+            w.vehicles[0].solution.as_ref().unwrap().quality,
+            Quality::Sim
+        );
+        assert_eq!(w.clock, sim);
+        // Ten days before the GP epoch is as stale as ten days after (the OEM is out of span there).
+        let early = GpModel::from_omm_json(OMM)
+            .unwrap()
+            .epoch
+            .plus(-10.0 * 86_400.0);
+        let mut m2 = model();
+        feed(&mut m2, true, false);
+        assert_eq!(
+            m2.world_at(early, sim, early).vehicles[0].sources[1].status,
+            SourceStatus::Active,
+            "relaxed pass still accepts it"
+        );
+        assert_eq!(
+            m2.world_at(early, sim, early).vehicles[0]
+                .solution
+                .as_ref()
+                .unwrap()
+                .quality,
+            Quality::Stale
+        );
+    }
+
+    #[test]
+    fn the_event_log_records_transitions_once_not_every_tick() {
+        let mut m = model();
+        let t = t_in_oem();
+        m.world(t);
+        m.world(t);
+        assert!(m.world(t).log.is_empty(), "steady state logs nothing");
+        feed(&mut m, true, true);
+        let w = m.world(t);
+        let texts: Vec<&str> = w.log.iter().map(|e| e.text.as_str()).collect();
+        assert!(
+            texts.iter().any(|x| x.contains("ISS: solution from OEM")),
+            "{texts:?}"
+        );
+        let n = w.log.len();
+        assert_eq!(
+            m.world(t).log.len(),
+            n,
+            "no repeat entries while nothing changes"
+        );
+        m.apply(Event::Health {
+            key: SourceKey::Oem("iss".into()),
+            health: Health::Failing("HTTP 503".into()),
+        });
+        let w = m.world(t);
+        assert!(
+            w.log
+                .last()
+                .unwrap()
+                .text
+                .contains("OEM: FEED FAILING (HTTP 503)"),
+            "{:?}",
+            w.log.last()
+        );
+        // Scrubbing out of the OEM span flips the active source and is logged.
+        let later = Utc::parse("2026-10-25T00:00:00").unwrap();
+        let w = m.world(later);
+        assert!(
+            w.log
+                .iter()
+                .any(|e| e.text.contains("active source OEM -> GP/SGP4")),
+            "{:?}",
+            w.log
+        );
+    }
+
+    #[test]
+    fn the_log_is_bounded() {
+        let mut m = model();
+        for i in 0..(LOG_CAPACITY + 50) {
+            m.note(Utc(i as f64), format!("e{i}"));
+        }
+        let w = m.world(t_in_oem());
+        assert_eq!(w.log.len(), LOG_CAPACITY);
+        assert_eq!(w.log[0].text, "e50", "oldest entries are dropped first");
+    }
+
+    #[test]
+    fn commands_reach_the_clock_through_the_engine_thread() {
+        let cfg = Config::from_layers(mctl_core::config::DEFAULT_CONFIG, None).unwrap();
+        let dir = std::env::temp_dir().join(format!("mctl-engine-cmd-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let set = mctl_sources::tasks::start(&cfg, dir.clone(), true).unwrap();
+        let eng = start(cfg, set);
+        let target = Utc::parse("2026-10-25T00:00:00").unwrap();
+        eng.commands.send(Command::Seek(target)).unwrap();
+        eng.commands.send(Command::SetRate(1000.0)).unwrap();
+        eng.commands.send(Command::SetRate(1.0e9)).unwrap(); // rejected
+        std::thread::sleep(Duration::from_millis(300));
+        let w = eng.bus.latest();
+        assert!(
+            !w.clock.is_live() && w.clock.rate == 1000.0,
+            "{:?}",
+            w.clock
+        );
+        assert!(
+            w.t.0 > target.0 && w.t.0 < target.0 + 600.0,
+            "sim time {} should have advanced from the target",
+            w.t.iso()
+        );
+        assert!(
+            w.log.iter().any(|e| e.text.contains("command rejected")),
+            "{:?}",
+            w.log
+        );
+        eng.commands.send(Command::Live).unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(eng.bus.latest().clock.is_live());
         drop(eng);
         std::fs::remove_dir_all(dir).ok();
     }

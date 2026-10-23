@@ -175,6 +175,22 @@ fn start_live(
             bus: engine.bus.clone(),
             limits: cfg.limits.clone(),
             vehicle_id,
+            commands: engine.commands.clone(),
+            settings: vec![
+                (
+                    "CONFIG FILE".into(),
+                    config::user_config_path().map_or("--".into(), |p| p.display().to_string()),
+                ),
+                ("TICK".into(), format!("{} Hz", cfg.engine.tick_hz)),
+                (
+                    "RESIDUAL LIMITS".into(),
+                    format!(
+                        "CAUTION {} KM, WARNING {} KM",
+                        cfg.limits.residual_caution_km, cfg.limits.residual_warning_km
+                    ),
+                ),
+                ("OFFLINE".into(), offline.to_string()),
+            ],
         },
         engine,
     ))

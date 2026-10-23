@@ -60,6 +60,8 @@ pub struct Live {
     pub bus: Arc<Bus>,
     pub limits: Limits,
     pub vehicle_id: String,
+    pub commands: std::sync::mpsc::Sender<mctl_core::command::Command>,
+    pub settings: Vec<(String, String)>,
 }
 
 struct Offline {
@@ -89,6 +91,8 @@ impl Offline {
             live.limits.clone(),
             live.vehicle_id.clone(),
         )?;
+        let mut console = console;
+        console.connect(Some(live.commands.clone()), live.settings.clone());
         let globe = build_globe(&gpu, console.theme())?;
         let renderer = Renderer::new(gpu.clone(), SCENE_FORMAT, size, globe);
         let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
