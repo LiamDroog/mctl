@@ -1,0 +1,153 @@
+# Spike C configuration. Nothing here is hardcoded in the binary.
+# Server, adapter set, field names and the TIME item come from ISS Mimic's own client
+# (github.com/ISS-Mimic/Mimic, Pi/iss_telemetry.py, MIT licence). Item IDs and their meanings come
+# from Mimic's Telemetry/ISS_Public_Telemetry.xlsx. `description` is that spreadsheet's text, verbatim;
+# `units` is its UNITS column. Both are *documentation*, not verified: see docs/adr/0002.
+
+[server]
+url = "wss://push.lightstreamer.com/lightstreamer"   # Mimic: LightstreamerClient("https://push.lightstreamer.com", "ISSLIVE")
+adapter_set = "ISSLIVE"
+
+[run]
+duration_s = 120          # how long to stay connected
+connect_timeout_s = 15    # TCP + TLS + WebSocket + CONOK
+setup_timeout_s = 15      # CONOK -> every SUBOK
+stall_factor = 3.0        # fail if nothing (not even PROBE) arrives for keepalive * this
+
+[fields]
+# Mimic's main subscription uses these two fields; the TIME item adds the two status fields.
+data = ["TimeStamp", "Value"]
+time = ["TimeStamp", "Value", "Status.Class", "Status.Indicator"]
+
+[time_item]
+id = "TIME_000001"
+
+[[item]]
+id = "USLAB000018"
+group = "attitude"
+description = "US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 0"
+units = "ND"
+
+[[item]]
+id = "USLAB000019"
+group = "attitude"
+description = "US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 1"
+units = "ND"
+
+[[item]]
+id = "USLAB000020"
+group = "attitude"
+description = "US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 2"
+units = "ND"
+
+[[item]]
+id = "USLAB000021"
+group = "attitude"
+description = "US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 3"
+units = "ND"
+
+[[item]]
+id = "USLAB000022"
+group = "attitude"
+description = "US Attitude Roll Error (deg)"
+units = "RAD"
+
+[[item]]
+id = "USLAB000023"
+group = "attitude"
+description = "US Attitude Pitch Error (deg)"
+units = "RAD"
+
+[[item]]
+id = "USLAB000024"
+group = "attitude"
+description = "US Attitude Yaw Error (deg)"
+units = "RAD"
+
+[[item]]
+id = "USLAB000025"
+group = "attitude"
+description = "US Inertial Attitude Rate X (deg/s)"
+units = "RAD/S"
+
+[[item]]
+id = "USLAB000026"
+group = "attitude"
+description = "US Inertial Attitude Rate Y (deg/s)"
+units = "RAD/S"
+
+[[item]]
+id = "USLAB000027"
+group = "attitude"
+description = "US Inertial Attitude Rate Z (deg/s)"
+units = "RAD/S"
+
+[[item]]
+id = "USLAB000028"
+group = "attitude"
+description = "US Commanded Attitude Quaternion Component 0"
+units = "ND"
+
+[[item]]
+id = "USLAB000029"
+group = "attitude"
+description = "US Commanded Attitude Quaternion Component 1"
+units = "ND"
+
+[[item]]
+id = "USLAB000030"
+group = "attitude"
+description = "US Commanded Attitude Quaternion Component 2"
+units = "ND"
+
+[[item]]
+id = "USLAB000031"
+group = "attitude"
+description = "US Commanded Attitude Quaternion Component 3"
+units = "ND"
+
+[[item]]
+id = "USLAB000013"
+group = "attitude"
+description = "US Attitude Source"
+units = "N/A"
+
+[[item]]
+id = "USLAB000017"
+group = "attitude"
+description = "Attitude Control Reference Frame"
+units = "N/A"
+
+[[item]]
+id = "USLAB000081"
+group = "attitude"
+description = "Attitude Maneuver In Progress status"
+units = "N/A"
+
+[[item]]
+id = "S0000003"
+group = "joint"
+description = "Solar Alpha Rotary Joint (SARJ) Starboard Joint Angle Position (degrees)"
+units = "DEG"
+
+[[item]]
+id = "S0000004"
+group = "joint"
+description = "Solar Alpha Rotary Joint (SARJ) Port Joint Angle Position (degrees)"
+units = "DEG"
+
+[[item]]
+id = "P4000007"
+group = "joint"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 2A - Beta Gimble Assembly (BGA) Position (degrees)"
+units = "DEG"
+
+# A unit-norm sanity check on the documented quaternions: if they really are quaternions the
+# sum of squares must be ~1. This tests the documentation rather than assuming it.
+[[quaternion]]
+name = "current LVLH attitude (USLAB000018-21)"
+items = ["USLAB000018", "USLAB000019", "USLAB000020", "USLAB000021"]
+
+[[quaternion]]
+name = "commanded attitude (USLAB000028-31)"
+items = ["USLAB000028", "USLAB000029", "USLAB000030", "USLAB000031"]
