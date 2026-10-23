@@ -1,0 +1,25 @@
+[workspace]
+resolver = "3"
+members = [
+    ".",
+    "crates/*",
+    "spikes/*",
+]
+
+[workspace.package]
+edition = "2024"
+version = "0.0.0"
+publish = false
+# Licence is undecided (DESIGN.md §14 R2); deliberately unset until it is.
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[package]
+name = "mctl"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
