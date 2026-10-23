@@ -1,0 +1,400 @@
+2026-10-23T16:07:53.997690Z  INFO isslive::session: WebSocket connected, subprotocol agreed url=wss://push.lightstreamer.com/lightstreamer
+2026-10-23T16:07:54.172178Z  INFO isslive::session: session created session_id=Sc08e666edece7d86M175T0754092 keepalive_ms=5000 request_limit=50000 control_link=*
+2026-10-23T16:07:54.347687Z  INFO isslive::session: subscribed sub_id=1 items=20 fields=2
+16:07:54.347 USLAB000018  value=0.997211456298828125     [ND] ts=7120.130695000026      age=  3.85s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 0
+16:07:54.347 USLAB000019  value=0.006289306096732616424560546875 [ND] ts=7120.130695000026      age=  3.85s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 1
+16:07:54.347 USLAB000020  value=-0.066109873354434967041015625 [ND] ts=7120.130695000026      age=  3.85s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 2
+16:07:54.347 USLAB000021  value=-0.0340469293296337127685546875 [ND] ts=7120.130695000026      age=  3.85s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 3
+16:07:54.347 USLAB000022  value=0.10118932208593468813351279322887421585619449615478515625 [RAD] ts=7120.130750555529      age=  3.65s changed=["TimeStamp", "Value"] US Attitude Roll Error (deg)
+16:07:54.347 USLAB000023  value=0.241773681946657603702988126315176486968994140625 [RAD] ts=7120.130750555529      age=  3.65s changed=["TimeStamp", "Value"] US Attitude Pitch Error (deg)
+16:07:54.347 USLAB000024  value=0.035545577800716272875991563751085777767002582550048828125 [RAD] ts=7120.130750555529      age=  3.65s changed=["TimeStamp", "Value"] US Attitude Yaw Error (deg)
+16:07:54.347 USLAB000025  value=0.00471270381284994051285242022686361451633274555206298828125 [RAD/S] ts=7120.130695000026      age=  3.85s changed=["TimeStamp", "Value"] US Inertial Attitude Rate X (deg/s)
+16:07:54.347 USLAB000026  value=-0.064393405673420056611888639963581226766109466552734375 [RAD/S] ts=7120.130695000026      age=  3.85s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Y (deg/s)
+16:07:54.347 USLAB000027  value=0.0003462309755770547926856384179927772493101656436920166015625 [RAD/S] ts=7120.130695000026      age=  3.85s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Z (deg/s)
+16:07:54.347 USLAB000028  value=0.997064411640167236328125 [ND] ts=7119.841416388883      age=1045.25s changed=["TimeStamp", "Value"] US Commanded Attitude Quaternion Component 0
+16:07:54.347 USLAB000029  value=0.00545731373131275177001953125 [ND] ts=7119.841416388883      age=1045.25s changed=["TimeStamp", "Value"] US Commanded Attitude Quaternion Component 1
+16:07:54.347 USLAB000030  value=-0.068245224654674530029296875 [ND] ts=7119.841416388883      age=1045.25s changed=["TimeStamp", "Value"] US Commanded Attitude Quaternion Component 2
+16:07:54.347 USLAB000031  value=-0.0342837460339069366455078125 [ND] ts=7119.839471944438      age=1052.25s changed=["TimeStamp", "Value"] US Commanded Attitude Quaternion Component 3
+16:07:54.347 USLAB000013  value=2                        [N/A] ts=7119.842640833325      age=1040.84s changed=["TimeStamp", "Value"] US Attitude Source
+16:07:54.347 USLAB000017  value=0                        [N/A] ts=7119.841416388883      age=1045.25s changed=["TimeStamp", "Value"] Attitude Control Reference Frame
+16:07:54.347 USLAB000081  value=0                        [N/A] ts=7119.839555555582      age=1051.95s changed=["TimeStamp", "Value"] Attitude Maneuver In Progress status
+16:07:54.347 S0000003     value=58.73714447021484375     [DEG] ts=7120.130721944438      age=  3.75s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Starboard Joint Angle Position (degrees)
+16:07:54.347 S0000004     value=301.263427734375         [DEG] ts=7120.130721944438      age=  3.75s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Port Joint Angle Position (degrees)
+16:07:54.347 P4000007     value=45.1373291015625         [DEG] ts=7120.130305833287      age=  5.25s changed=["TimeStamp", "Value"] Photovolatic Control Unit (PVCU) - Solar Array - 2A - Beta Gimble Assembly (BGA) Position (degrees)
+2026-10-23T16:07:54.509564Z  INFO isslive::session: subscribed sub_id=2 items=1 fields=4
+16:07:54.509 TIME_000001  value=25632470918              [] ts=7120.130810555551      age=  3.59s changed=["TimeStamp", "Value", "Status.Class", "Status.Indicator"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:54.816 USLAB000023  value=0.241708394919801505817957831823150627315044403076171875 [RAD] ts=7120.131028333306      age=  3.11s changed=["TimeStamp", "Value"] US Attitude Pitch Error (deg)
+16:07:54.816 USLAB000022  value=0.10150461813819129652802786267784540541470050811767578125 [RAD] ts=7120.131028333306      age=  3.11s changed=["TimeStamp", "Value"] US Attitude Roll Error (deg)
+16:07:54.816 USLAB000025  value=0.0047682712402529435491427278748233220539987087249755859375 [RAD/S] ts=7120.130972777803      age=  3.31s changed=["TimeStamp", "Value"] US Inertial Attitude Rate X (deg/s)
+16:07:54.816 USLAB000027  value=0.000076919403825672811605106138355125722227967344224452972412109375 [RAD/S] ts=7120.130972777803      age=  3.31s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Z (deg/s)
+16:07:54.816 USLAB000026  value=-0.06426474594098981196754749589672428555786609649658203125 [RAD/S] ts=7120.130972777803      age=  3.31s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Y (deg/s)
+16:07:54.816 USLAB000019  value=0.006292265839874744415283203125 [ND] ts=7120.130972777803      age=  3.31s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 1
+16:07:54.816 P4000007     value=45.142822265625          [DEG] ts=7120.130861388842      age=  3.71s changed=["TimeStamp", "Value"] Photovolatic Control Unit (PVCU) - Solar Array - 2A - Beta Gimble Assembly (BGA) Position (degrees)
+16:07:54.897 USLAB000024  value=0.035476925703871529937938333887359476648271083831787109375 [RAD] ts=7120.131028333306      age=  3.19s changed=["TimeStamp", "Value"] US Attitude Yaw Error (deg)
+16:07:54.897 TIME_000001  value=25632471000              [] ts=7120.130833333334      age=  3.90s changed=["TimeStamp", "Value", "Status.Class", "Status.Indicator"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:54.942 TIME_000001  value=25632471020              [] ts=7120.130838888884      age=  3.92s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:54.987 TIME_000001  value=25632471097              [] ts=7120.130860277745      age=  3.89s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.024 S0000004     value=301.1865234375           [DEG] ts=7120.130999722216      age=  3.42s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Port Joint Angle Position (degrees)
+16:07:55.024 S0000003     value=58.80306243896484375     [DEG] ts=7120.130999722216      age=  3.42s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Starboard Joint Angle Position (degrees)
+16:07:55.024 USLAB000021  value=-0.034048981964588165283203125 [ND] ts=7120.130972777803      age=  3.52s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 3
+16:07:55.024 USLAB000020  value=-0.066109262406826019287109375 [ND] ts=7120.130972777803      age=  3.52s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 2
+16:07:55.024 TIME_000001  value=25632471117              [] ts=7120.1308658332955     age=  3.91s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.077 TIME_000001  value=25632471199              [] ts=7120.130888611078      age=  3.88s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.121 TIME_000001  value=25632471219              [] ts=7120.130894166628      age=  3.90s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.167 TIME_000001  value=25632471296              [] ts=7120.130915555556      age=  3.87s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.213 TIME_000001  value=25632471316              [] ts=7120.1309211111065     age=  3.90s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.256 TIME_000001  value=25632471398              [] ts=7120.130943888889      age=  3.86s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.301 TIME_000001  value=25632471418              [] ts=7120.1309494444395     age=  3.88s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.346 TIME_000001  value=25632471500              [] ts=7120.130972222222      age=  3.85s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.391 TIME_000001  value=25632471520              [] ts=7120.130977777772      age=  3.87s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.437 TIME_000001  value=25632471597              [] ts=7120.130999166634      age=  3.84s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.481 TIME_000001  value=25632471617              [] ts=7120.131004722185      age=  3.86s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.527 TIME_000001  value=25632471699              [] ts=7120.131027499967      age=  3.83s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.572 TIME_000001  value=25632471719              [] ts=7120.131033055517      age=  3.85s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.617 TIME_000001  value=25632471796              [] ts=7120.131054444446      age=  3.82s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.661 TIME_000001  value=25632471816              [] ts=7120.131059999996      age=  3.85s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.706 TIME_000001  value=25632471898              [] ts=7120.131082777778      age=  3.81s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.751 TIME_000001  value=25632471918              [] ts=7120.131088333329      age=  3.83s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:55.776 USLAB000027  value=0.0002443352639354998503441740442809759770170785486698150634765625 [RAD/S] ts=7120.131250555582      age=  3.27s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Z (deg/s)
+16:07:55.776 USLAB000022  value=0.10186120883524417413124041331684566102921962738037109375 [RAD] ts=7120.131306111084      age=  3.07s changed=["TimeStamp", "Value"] US Attitude Roll Error (deg)
+16:07:55.776 USLAB000018  value=0.99721181392669677734375 [ND] ts=7120.131250555582      age=  3.27s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 0
+16:07:55.776 USLAB000023  value=0.241767518765944988690108630180475302040576934814453125 [RAD] ts=7120.131306111084      age=  3.07s changed=["TimeStamp", "Value"] US Attitude Pitch Error (deg)
+16:07:55.942 USLAB000025  value=0.004721209452465700839862705606719828210771083831787109375 [RAD/S] ts=7120.131250555582      age=  3.44s changed=["TimeStamp", "Value"] US Inertial Attitude Rate X (deg/s)
+16:07:55.942 USLAB000026  value=-0.06360180380784440090646825183284818194806575775146484375 [RAD/S] ts=7120.131250555582      age=  3.44s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Y (deg/s)
+16:07:55.942 USLAB000019  value=0.0062953787855803966522216796875 [ND] ts=7120.131250555582      age=  3.44s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 1
+16:07:56.030 USLAB000024  value=0.035266086893551984449146630140603519976139068603515625 [RAD] ts=7120.131306111084      age=  3.33s changed=["TimeStamp", "Value"] US Attitude Yaw Error (deg)
+16:07:56.030 TIME_000001  value=25632472000              [] ts=7120.131111111111      age=  4.03s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.074 TIME_000001  value=25632472020              [] ts=7120.131116666661      age=  4.05s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.119 TIME_000001  value=25632472097              [] ts=7120.1311380555235     age=  4.02s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.157 S0000003     value=58.86348724365234375     [DEG] ts=7120.131277499993      age=  3.56s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Starboard Joint Angle Position (degrees)
+16:07:56.157 S0000004     value=301.12060546875          [DEG] ts=7120.131277499993      age=  3.56s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Port Joint Angle Position (degrees)
+16:07:56.157 USLAB000021  value=-0.0340502373874187469482421875 [ND] ts=7120.131250555582      age=  3.65s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 3
+16:07:56.157 USLAB000020  value=-0.0661025941371917724609375 [ND] ts=7120.131250555582      age=  3.65s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 2
+16:07:56.157 TIME_000001  value=25632472117              [] ts=7120.131143611074      age=  4.04s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.208 TIME_000001  value=25632472199              [] ts=7120.131166388856      age=  4.01s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.253 TIME_000001  value=25632472219              [] ts=7120.131171944407      age=  4.03s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.299 TIME_000001  value=25632472296              [] ts=7120.1311933333345     age=  4.00s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.344 TIME_000001  value=25632472316              [] ts=7120.131198888885      age=  4.03s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.389 TIME_000001  value=25632472398              [] ts=7120.131221666667      age=  3.99s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.433 TIME_000001  value=25632472418              [] ts=7120.131227222218      age=  4.01s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.479 TIME_000001  value=25632472500              [] ts=7120.13125             age=  3.98s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.523 TIME_000001  value=25632472520              [] ts=7120.1312555555505     age=  4.00s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.569 TIME_000001  value=25632472597              [] ts=7120.131276944412      age=  3.97s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.614 TIME_000001  value=25632472617              [] ts=7120.131282499962      age=  4.00s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.659 TIME_000001  value=25632472699              [] ts=7120.131305277745      age=  3.96s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.704 TIME_000001  value=25632472719              [] ts=7120.131310833295      age=  3.98s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.758 TIME_000001  value=25632472796              [] ts=7120.131332222223      age=  3.96s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.791 USLAB000018  value=0.997212350368499755859375 [ND] ts=7120.13152833336       age=  3.29s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 0
+16:07:56.791 USLAB000022  value=0.10225269754256587073637518869873019866645336151123046875 [RAD] ts=7120.131583888862      age=  3.09s changed=["TimeStamp", "Value"] US Attitude Roll Error (deg)
+16:07:56.791 USLAB000027  value=0.00032251623680422196981110172231410615495406091213226318359375 [RAD/S] ts=7120.13152833336       age=  3.29s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Z (deg/s)
+16:07:56.791 USLAB000023  value=0.2425214278455823657676404536687186919152736663818359375 [RAD] ts=7120.131583888862      age=  3.09s changed=["TimeStamp", "Value"] US Attitude Pitch Error (deg)
+16:07:56.791 TIME_000001  value=25632472816              [] ts=7120.131337777773      age=  3.98s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.832 USLAB000026  value=-0.06359725479350890331442514025184209458529949188232421875 [RAD/S] ts=7120.13152833336       age=  3.33s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Y (deg/s)
+16:07:56.832 USLAB000025  value=0.004769834130167145865020206230155963567085564136505126953125 [RAD/S] ts=7120.13152833336       age=  3.33s changed=["TimeStamp", "Value"] US Inertial Attitude Rate X (deg/s)
+16:07:56.832 TIME_000001  value=25632472898              [] ts=7120.131360555556      age=  3.93s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.885 TIME_000001  value=25632472918              [] ts=7120.131366111106      age=  3.97s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:56.920 USLAB000019  value=0.00629849173128604888916015625 [ND] ts=7120.13152833336       age=  3.42s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 1
+16:07:56.920 USLAB000024  value=0.03515230817429255971706680838906322605907917022705078125 [RAD] ts=7120.131583888862      age=  3.22s changed=["TimeStamp", "Value"] US Attitude Yaw Error (deg)
+16:07:57.173 TIME_000001  value=25632473000              [] ts=7120.131388888889      age=  4.17s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.174 S0000004     value=301.065673828125         [DEG] ts=7120.131555277771      age=  3.58s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Port Joint Angle Position (degrees)
+16:07:57.174 S0000003     value=58.92940521240234375     [DEG] ts=7120.131555277771      age=  3.58s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Starboard Joint Angle Position (degrees)
+16:07:57.174 USLAB000020  value=-0.066094361245632171630859375 [ND] ts=7120.13152833336       age=  3.67s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 2
+16:07:57.174 USLAB000021  value=-0.034050308167934417724609375 [ND] ts=7120.13152833336       age=  3.67s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 3
+16:07:57.174 TIME_000001  value=25632473020              [] ts=7120.131394444439      age=  4.15s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.174 TIME_000001  value=25632473097              [] ts=7120.131415833301      age=  4.08s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.174 TIME_000001  value=25632473117              [] ts=7120.131421388851      age=  4.06s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.225 TIME_000001  value=25632473199              [] ts=7120.131444166634      age=  4.03s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.269 TIME_000001  value=25632473219              [] ts=7120.131449722184      age=  4.05s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.315 TIME_000001  value=25632473296              [] ts=7120.131471111112      age=  4.02s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.360 TIME_000001  value=25632473316              [] ts=7120.131476666663      age=  4.04s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.405 TIME_000001  value=25632473398              [] ts=7120.131499444445      age=  4.01s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.449 TIME_000001  value=25632473418              [] ts=7120.131504999995      age=  4.03s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.494 TIME_000001  value=25632473500              [] ts=7120.131527777778      age=  3.99s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.540 TIME_000001  value=25632473520              [] ts=7120.131533333328      age=  4.02s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.585 TIME_000001  value=25632473597              [] ts=7120.13155472219       age=  3.99s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.630 TIME_000001  value=25632473617              [] ts=7120.13156027774       age=  4.01s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.675 TIME_000001  value=25632473699              [] ts=7120.131583055523      age=  3.98s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.721 TIME_000001  value=25632473719              [] ts=7120.131588611073      age=  4.00s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.765 TIME_000001  value=25632473796              [] ts=7120.131610000001      age=  3.97s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.779 USLAB000023  value=0.2434541492071934098984087313510826788842678070068359375 [RAD] ts=7120.131861666639      age=  3.08s changed=["TimeStamp", "Value"] US Attitude Pitch Error (deg)
+16:07:57.779 USLAB000018  value=0.99721205234527587890625 [ND] ts=7120.131806111137      age=  3.28s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 0
+16:07:57.779 USLAB000022  value=0.102640971257351332202034654983435757458209991455078125 [RAD] ts=7120.131861666639      age=  3.08s changed=["TimeStamp", "Value"] US Attitude Roll Error (deg)
+16:07:57.779 USLAB000025  value=0.00477710371520952310764318582414489355869591236114501953125 [RAD/S] ts=7120.131806111137      age=  3.28s changed=["TimeStamp", "Value"] US Inertial Attitude Rate X (deg/s)
+16:07:57.779 USLAB000026  value=-0.0645687628389336187861857752068317495286464691162109375 [RAD/S] ts=7120.131806111137      age=  3.28s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Y (deg/s)
+16:07:57.779 USLAB000027  value=0.00053622189123652785718021629435270369867794215679168701171875 [RAD/S] ts=7120.131806111137      age=  3.28s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Z (deg/s)
+16:07:57.811 TIME_000001  value=25632473816              [] ts=7120.131615555551      age=  4.00s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.855 TIME_000001  value=25632473898              [] ts=7120.131638333334      age=  3.96s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.899 TIME_000001  value=25632473918              [] ts=7120.131643888884      age=  3.98s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:57.899 USLAB000019  value=0.006301567889750003814697265625 [ND] ts=7120.131806111137      age=  3.40s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 1
+16:07:57.899 USLAB000024  value=0.035176100453082469188270664517403929494321346282958984375 [RAD] ts=7120.131861666639      age=  3.20s changed=["TimeStamp", "Value"] US Attitude Yaw Error (deg)
+16:07:58.093 TIME_000001  value=25632474000              [] ts=7120.131666666667      age=  4.09s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.093 S0000003     value=58.99532318115234375     [DEG] ts=7120.13183305555       age=  3.49s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Starboard Joint Angle Position (degrees)
+16:07:58.093 S0000004     value=301.0107421875           [DEG] ts=7120.13183305555       age=  3.49s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Port Joint Angle Position (degrees)
+16:07:58.093 TIME_000001  value=25632474020              [] ts=7120.131672222217      age=  4.07s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.122 TIME_000001  value=25632474097              [] ts=7120.131693611079      age=  4.03s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.161 USLAB000021  value=-0.0340490639209747314453125 [ND] ts=7120.131806111137      age=  3.66s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 3
+16:07:58.161 USLAB000020  value=-0.066098682582378387451171875 [ND] ts=7120.131806111137      age=  3.66s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 2
+16:07:58.161 TIME_000001  value=25632474117              [] ts=7120.131699166629      age=  4.04s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.212 TIME_000001  value=25632474199              [] ts=7120.131721944412      age=  4.01s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.257 TIME_000001  value=25632474219              [] ts=7120.131727499962      age=  4.04s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.303 TIME_000001  value=25632474296              [] ts=7120.13174888889       age=  4.01s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.346 TIME_000001  value=25632474316              [] ts=7120.13175444444       age=  4.03s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.392 TIME_000001  value=25632474398              [] ts=7120.131777222223      age=  3.99s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.436 TIME_000001  value=25632474418              [] ts=7120.131782777773      age=  4.02s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.481 TIME_000001  value=25632474500              [] ts=7120.131805555556      age=  3.98s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.527 TIME_000001  value=25632474520              [] ts=7120.131811111106      age=  4.01s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.572 TIME_000001  value=25632474597              [] ts=7120.1318324999675     age=  3.98s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.617 TIME_000001  value=25632474617              [] ts=7120.131838055518      age=  4.00s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.662 TIME_000001  value=25632474699              [] ts=7120.1318608333        age=  3.96s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.706 TIME_000001  value=25632474719              [] ts=7120.1318663888505     age=  3.99s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.751 TIME_000001  value=25632474796              [] ts=7120.1318877777785     age=  3.96s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.777 USLAB000023  value=0.2429454600146971621210667535706306807696819305419921875 [RAD] ts=7120.132139444418      age=  3.08s changed=["TimeStamp", "Value"] US Attitude Pitch Error (deg)
+16:07:58.777 USLAB000022  value=0.102965865596453653996178445595433004200458526611328125 [RAD] ts=7120.132139444418      age=  3.08s changed=["TimeStamp", "Value"] US Attitude Roll Error (deg)
+16:07:58.777 USLAB000018  value=0.997212111949920654296875 [ND] ts=7120.132083888915      age=  3.27s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 0
+16:07:58.777 USLAB000027  value=0.000494283528811865807868486388798601183225400745868682861328125 [RAD/S] ts=7120.132083888915      age=  3.27s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Z (deg/s)
+16:07:58.777 USLAB000025  value=0.004780428764544194207564142828914555138908326625823974609375 [RAD/S] ts=7120.132083888915      age=  3.27s changed=["TimeStamp", "Value"] US Inertial Attitude Rate X (deg/s)
+16:07:58.777 USLAB000026  value=-0.064207816560706121311596916712005622684955596923828125 [RAD/S] ts=7120.132083888915      age=  3.27s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Y (deg/s)
+16:07:58.798 TIME_000001  value=25632474816              [] ts=7120.131893333329      age=  3.98s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.841 TIME_000001  value=25632474898              [] ts=7120.131916111111      age=  3.94s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.886 TIME_000001  value=25632474918              [] ts=7120.131921666662      age=  3.97s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:58.904 USLAB000019  value=0.00630466639995574951171875 [ND] ts=7120.132083888915      age=  3.40s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 1
+16:07:58.904 USLAB000024  value=0.03533861098866909744575792728937813080847263336181640625 [RAD] ts=7120.132139444418      age=  3.20s changed=["TimeStamp", "Value"] US Attitude Yaw Error (deg)
+16:07:59.030 TIME_000001  value=25632475000              [] ts=7120.131944444444      age=  4.03s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.030 S0000004     value=300.9393310546875        [DEG] ts=7120.132110833327      age=  3.43s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Port Joint Angle Position (degrees)
+16:07:59.030 S0000003     value=59.05574798583984375     [DEG] ts=7120.132110833327      age=  3.43s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Starboard Joint Angle Position (degrees)
+16:07:59.060 USLAB000021  value=-0.03404839336872100830078125 [ND] ts=7120.132083888915      age=  3.56s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 3
+16:07:59.075 TIME_000001  value=25632475020              [] ts=7120.1319499999945     age=  4.05s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.120 TIME_000001  value=25632475097              [] ts=7120.131971388857      age=  4.02s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.157 USLAB000020  value=-0.066098146140575408935546875 [ND] ts=7120.132083888915      age=  3.65s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 2
+16:07:59.157 TIME_000001  value=25632475117              [] ts=7120.131976944407      age=  4.04s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.210 TIME_000001  value=25632475199              [] ts=7120.131999722189      age=  4.01s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.255 TIME_000001  value=25632475219              [] ts=7120.13200527774       age=  4.04s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.299 TIME_000001  value=25632475296              [] ts=7120.132026666668      age=  4.00s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.344 TIME_000001  value=25632475316              [] ts=7120.132032222218      age=  4.03s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.390 TIME_000001  value=25632475398              [] ts=7120.132055000001      age=  3.99s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.435 TIME_000001  value=25632475418              [] ts=7120.132060555551      age=  4.02s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.479 TIME_000001  value=25632475500              [] ts=7120.132083333333      age=  3.98s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.524 TIME_000001  value=25632475520              [] ts=7120.132088888884      age=  4.00s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.570 TIME_000001  value=25632475597              [] ts=7120.132110277746      age=  3.97s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.615 TIME_000001  value=25632475617              [] ts=7120.132115833296      age=  4.00s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.657 TIME_000001  value=25632475699              [] ts=7120.1321386110785     age=  3.96s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.704 TIME_000001  value=25632475719              [] ts=7120.132144166629      age=  3.98s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.750 TIME_000001  value=25632475796              [] ts=7120.132165555557      age=  3.95s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.776 USLAB000023  value=0.2429943118929862866384183917034533806145191192626953125 [RAD] ts=7120.132417222195      age=  3.07s changed=["TimeStamp", "Value"] US Attitude Pitch Error (deg)
+16:07:59.776 USLAB000025  value=0.004679780988607671991796888022463463130407035350799560546875 [RAD/S] ts=7120.132361666692      age=  3.27s changed=["TimeStamp", "Value"] US Inertial Attitude Rate X (deg/s)
+16:07:59.776 USLAB000026  value=-0.06408336566705256920339905946093495003879070281982421875 [RAD/S] ts=7120.132361666692      age=  3.27s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Y (deg/s)
+16:07:59.776 USLAB000018  value=0.99721240997314453125   [ND] ts=7120.132361666692      age=  3.27s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 0
+16:07:59.776 USLAB000022  value=0.10331671332966070597780827711176243610680103302001953125 [RAD] ts=7120.132417222195      age=  3.07s changed=["TimeStamp", "Value"] US Attitude Roll Error (deg)
+16:07:59.776 USLAB000027  value=0.000508938592040431123271482238834551026229746639728546142578125 [RAD/S] ts=7120.132361666692      age=  3.27s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Z (deg/s)
+16:07:59.794 TIME_000001  value=25632475816              [] ts=7120.132171111107      age=  3.98s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.840 TIME_000001  value=25632475898              [] ts=7120.13219388889       age=  3.94s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.885 TIME_000001  value=25632475918              [] ts=7120.13219944444       age=  3.97s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:07:59.903 USLAB000019  value=0.006306958384811878204345703125 [ND] ts=7120.132361666692      age=  3.40s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 1
+16:07:59.903 USLAB000024  value=0.03543990993399638578242871744805597700178623199462890625 [RAD] ts=7120.132417222195      age=  3.20s changed=["TimeStamp", "Value"] US Attitude Yaw Error (deg)
+16:08:00.123 TIME_000001  value=25632476000              [] ts=7120.1322222222225     age=  4.12s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.123 S0000004     value=300.867919921875         [DEG] ts=7120.132388611105      age=  3.52s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Port Joint Angle Position (degrees)
+16:08:00.123 S0000003     value=59.12166595458984375     [DEG] ts=7120.132388611105      age=  3.52s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Starboard Joint Angle Position (degrees)
+16:08:00.123 USLAB000021  value=-0.034048326313495635986328125 [ND] ts=7120.132361666692      age=  3.62s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 3
+16:08:00.123 USLAB000020  value=-0.066093809902667999267578125 [ND] ts=7120.132361666692      age=  3.62s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 2
+16:08:00.123 TIME_000001  value=25632476020              [] ts=7120.132227777773      age=  4.10s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.123 TIME_000001  value=25632476097              [] ts=7120.132249166634      age=  4.03s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.165 TIME_000001  value=25632476117              [] ts=7120.132254722184      age=  4.05s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.210 TIME_000001  value=25632476199              [] ts=7120.132277499967      age=  4.01s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.255 TIME_000001  value=25632476219              [] ts=7120.132283055517      age=  4.04s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.300 TIME_000001  value=25632476296              [] ts=7120.132304444445      age=  4.00s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.344 TIME_000001  value=25632476316              [] ts=7120.132309999995      age=  4.03s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.389 TIME_000001  value=25632476398              [] ts=7120.132332777778      age=  3.99s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.434 TIME_000001  value=25632476418              [] ts=7120.132338333328      age=  4.02s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.479 TIME_000001  value=25632476500              [] ts=7120.132361111111      age=  3.98s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.524 TIME_000001  value=25632476520              [] ts=7120.132366666661      age=  4.00s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.570 TIME_000001  value=25632476597              [] ts=7120.132388055523      age=  3.97s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.615 TIME_000001  value=25632476617              [] ts=7120.132393611074      age=  4.00s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.661 TIME_000001  value=25632476699              [] ts=7120.132416388856      age=  3.96s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.705 TIME_000001  value=25632476719              [] ts=7120.132421944406      age=  3.99s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.749 TIME_000001  value=25632476796              [] ts=7120.132443333335      age=  3.95s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.787 USLAB000023  value=0.243482483830209817110556969055323861539363861083984375 [RAD] ts=7120.132694999973      age=  3.08s changed=["TimeStamp", "Value"] US Attitude Pitch Error (deg)
+16:08:00.787 USLAB000022  value=0.10359491690578870315420090264524333178997039794921875 [RAD] ts=7120.132694999973      age=  3.08s changed=["TimeStamp", "Value"] US Attitude Roll Error (deg)
+16:08:00.787 USLAB000027  value=0.0004520140580078077442889583625884597495314665138721466064453125 [RAD/S] ts=7120.13263944447       age=  3.29s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Z (deg/s)
+16:08:00.787 USLAB000025  value=0.0048701905057168919099819248685889760963618755340576171875 [RAD/S] ts=7120.13263944447       age=  3.29s changed=["TimeStamp", "Value"] US Inertial Attitude Rate X (deg/s)
+16:08:00.787 USLAB000018  value=0.9972126483917236328125 [ND] ts=7120.13263944447       age=  3.29s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 0
+16:08:00.787 USLAB000026  value=-0.063620593504887079649989800600451417267322540283203125 [RAD/S] ts=7120.13263944447       age=  3.29s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Y (deg/s)
+16:08:00.787 TIME_000001  value=25632476816              [] ts=7120.132448888885      age=  3.97s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.839 TIME_000001  value=25632476898              [] ts=7120.132471666667      age=  3.94s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.886 TIME_000001  value=25632476918              [] ts=7120.132477222218      age=  3.97s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.914 USLAB000019  value=0.00631116889417171478271484375 [ND] ts=7120.13263944447       age=  3.41s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 1
+16:08:00.914 USLAB000024  value=0.03546922172798076811073286762621137313544750213623046875 [RAD] ts=7120.132694999973      age=  3.21s changed=["TimeStamp", "Value"] US Attitude Yaw Error (deg)
+16:08:00.931 TIME_000001  value=25632477000              [] ts=7120.1325              age=  3.93s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.954 TIME_000001  value=25632477020              [] ts=7120.13250555555       age=  3.93s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.975 TIME_000001  value=25632477097              [] ts=7120.132526944412      age=  3.88s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:00.997 TIME_000001  value=25632477117              [] ts=7120.1325324999625     age=  3.88s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.019 TIME_000001  value=25632477199              [] ts=7120.132555277745      age=  3.82s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.045 TIME_000001  value=25632477219              [] ts=7120.132560833295      age=  3.83s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.045 S0000004     value=300.81298828125          [DEG] ts=7120.132666388882      age=  3.45s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Port Joint Angle Position (degrees)
+16:08:01.045 USLAB000021  value=-0.0340485274791717529296875 [ND] ts=7120.13263944447       age=  3.54s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 3
+16:08:01.045 USLAB000020  value=-0.066089451313018798828125 [ND] ts=7120.13263944447       age=  3.54s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 2
+16:08:01.045 S0000003     value=59.18209075927734375     [DEG] ts=7120.132666388882      age=  3.45s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Starboard Joint Angle Position (degrees)
+16:08:01.062 TIME_000001  value=25632477296              [] ts=7120.132582222223      age=  3.77s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.084 TIME_000001  value=25632477316              [] ts=7120.132587777774      age=  3.77s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.106 TIME_000001  value=25632477398              [] ts=7120.132610555556      age=  3.71s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.129 TIME_000001  value=25632477418              [] ts=7120.1326161111065     age=  3.71s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.151 TIME_000001  value=25632477500              [] ts=7120.132638888889      age=  3.65s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.173 TIME_000001  value=25632477520              [] ts=7120.132644444439      age=  3.65s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.195 TIME_000001  value=25632477597              [] ts=7120.132665833301      age=  3.60s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.216 TIME_000001  value=25632477617              [] ts=7120.132671388851      age=  3.60s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.239 TIME_000001  value=25632477699              [] ts=7120.132694166634      age=  3.54s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.260 TIME_000001  value=25632477719              [] ts=7120.132699722184      age=  3.54s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.282 TIME_000001  value=25632477796              [] ts=7120.132721111112      age=  3.49s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.304 TIME_000001  value=25632477816              [] ts=7120.132726666662      age=  3.49s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.326 TIME_000001  value=25632477898              [] ts=7120.132749444445      age=  3.43s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.349 TIME_000001  value=25632477918              [] ts=7120.132754999995      age=  3.43s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
+16:08:01.882 USLAB000023  value=0.24396662702159954694280941112083382904529571533203125 [RAD] ts=7120.132972777751      age=  3.18s changed=["TimeStamp", "Value"] US Attitude Pitch Error (deg)
+16:08:01.882 USLAB000018  value=0.99721300601959228515625 [ND] ts=7120.132917222249      age=  3.38s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 0
+16:08:01.882 USLAB000027  value=0.00031619716834893553565610790911932781455107033252716064453125 [RAD/S] ts=7120.132917222249      age=  3.38s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Z (deg/s)
+16:08:01.882 USLAB000022  value=0.10409454809026792709847342166540329344570636749267578125 [RAD] ts=7120.132972777751      age=  3.18s changed=["TimeStamp", "Value"] US Attitude Roll Error (deg)
+16:08:01.915 USLAB000025  value=0.00460312684537639120463392572446537087671458721160888671875 [RAD/S] ts=7120.132917222249      age=  3.41s changed=["TimeStamp", "Value"] US Inertial Attitude Rate X (deg/s)
+16:08:01.915 USLAB000024  value=0.03548279206473380076314327880027121864259243011474609375 [RAD] ts=7120.132972777751      age=  3.21s changed=["TimeStamp", "Value"] US Attitude Yaw Error (deg)
+16:08:01.915 USLAB000019  value=0.00631320662796497344970703125 [ND] ts=7120.132917222249      age=  3.41s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 1
+16:08:01.915 USLAB000026  value=-0.06339546398604288535150175221133395098149776458740234375 [RAD/S] ts=7120.132917222249      age=  3.41s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Y (deg/s)
+16:08:02.042 TIME_000001  value=25632478000              [] ts=7120.132777777778      age=  4.04s changed=["TimeStamp", "Value"] 
+              TIME_000001  Status.Class=24 Status.Indicator= 
