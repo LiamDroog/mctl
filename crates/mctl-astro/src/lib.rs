@@ -1,5 +1,6 @@
 //! SGP4 wrapper, OEM interpolation, frames, Sun, shadow, elements and geodetic maths.
 
+pub mod events;
 pub mod frames;
 pub mod kepler;
 pub mod observer;

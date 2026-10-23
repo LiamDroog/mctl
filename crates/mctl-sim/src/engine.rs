@@ -39,6 +39,8 @@ const LOG_CAPACITY: usize = 200;
 /// After the first snapshot, conditions only list (they do not latch the master annunciator) for
 /// this long, so the normal start-up (sources still loading, EOP not yet read) is not an alarm.
 const CW_STARTUP_GRACE_S: f64 = 10.0;
+/// Samples per revolution of the event search (DESIGN.md §7.3: period / 200).
+const EVENT_STEPS_PER_REV: f64 = 200.0;
 /// Track is rebuilt at least this often, seconds.
 const TRACK_REBUILD_S: f64 = 1.0;
 
@@ -1305,11 +1307,18 @@ fn build_track(
         });
     }
     let now_index = points.partition_point(|p| p.t.0 < now.0);
+    // Events over the predicted part of the window, by root finding rather than track interpolation.
+    let events =
+        mctl_astro::events::find_events(traj, now, now.plus(future), period / EVENT_STEPS_PER_REV)
+            .into_iter()
+            .map(|e| (e.t, e.kind))
+            .collect();
     Track {
         revision,
         source: kind,
         points,
         now_index,
+        events,
     }
 }
 

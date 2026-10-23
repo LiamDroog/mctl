@@ -70,66 +70,24 @@ pub(crate) fn quality_text(sol: &mctl_core::world::Solution) -> String {
     format!("{} ({})", sol.quality.label(), sol.source.label())
 }
 
-/// An upcoming event read off the sampled track.
+/// An upcoming orbit event.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TrackEvent {
     pub t: Utc,
     pub label: &'static str,
 }
 
-/// Ascending/descending node crossings and eclipse entry/exit after `now`, interpolated linearly between
-/// track samples (so accurate to a few seconds). Formal event detection with root finding is M4.
+/// The track's events after `now`, in time order (found by root finding in the engine).
 pub fn upcoming_events(track: &Track, now: Utc) -> Vec<TrackEvent> {
-    let mut out = Vec::new();
-    for w in track.points.windows(2) {
-        let (a, b) = (&w[0], &w[1]);
-        let cross = |va: f64, vb: f64| {
-            (va - vb != 0.0)
-                .then(|| va / (va - vb))
-                .filter(|f| (0.0..=1.0).contains(f))
-        };
-        let at = |f: f64| Utc(a.t.0 + (b.t.0 - a.t.0) * f);
-        let (za, zb) = (a.r_gcrf_km[2], b.r_gcrf_km[2]);
-        if za < 0.0 && zb >= 0.0 {
-            if let Some(f) = cross(za, zb) {
-                out.push(TrackEvent {
-                    t: at(f),
-                    label: "ASCENDING NODE",
-                });
-            }
-        } else if za > 0.0
-            && zb <= 0.0
-            && let Some(f) = cross(za, zb)
-        {
-            out.push(TrackEvent {
-                t: at(f),
-                label: "DESCENDING NODE",
-            });
-        }
-        let (ia, ib) = (
-            f64::from(a.illumination) - 0.5,
-            f64::from(b.illumination) - 0.5,
-        );
-        if ia >= 0.0 && ib < 0.0 {
-            if let Some(f) = cross(ia, ib) {
-                out.push(TrackEvent {
-                    t: at(f),
-                    label: "ECLIPSE ENTRY",
-                });
-            }
-        } else if ia < 0.0
-            && ib >= 0.0
-            && let Some(f) = cross(ia, ib)
-        {
-            out.push(TrackEvent {
-                t: at(f),
-                label: "ECLIPSE EXIT",
-            });
-        }
-    }
-    out.retain(|e| e.t.0 > now.0);
-    out.sort_by(|x, y| x.t.0.total_cmp(&y.t.0));
-    out
+    track
+        .events
+        .iter()
+        .filter(|(t, _)| t.0 > now.0)
+        .map(|(t, k)| TrackEvent {
+            t: *t,
+            label: k.label(),
+        })
+        .collect()
 }
 
 /// Latitude (deg) of the day/night terminator at `lon_deg`, for a Sun at (`subsolar_lon_deg`, declination `dec_deg`).
@@ -597,7 +555,7 @@ pub fn paint_eclipse_ring(
 #[cfg(test)]
 mod tests {
     use mctl_core::state::{Elements, Geodetic, Quality, SourceKind, State};
-    use mctl_core::world::{Residual, Solution, TrackPoint};
+    use mctl_core::world::{Residual, Solution};
 
     use super::*;
 
@@ -668,43 +626,6 @@ mod tests {
             passes: vec![],
             beta_series: Default::default(),
         }
-    }
-
-    fn point(t: f64, z: f64, illum: f32) -> TrackPoint {
-        TrackPoint {
-            t: Utc(t),
-            r_gcrf_km: [7000.0, 0.0, z],
-            lat_deg: 0.0,
-            lon_deg: 0.0,
-            alt_km: 400.0,
-            illumination: illum,
-        }
-    }
-
-    #[test]
-    fn events_interpolate_node_and_eclipse_crossings_and_drop_the_past() {
-        let pts = vec![
-            point(0.0, -10.0, 1.0),
-            point(10.0, 10.0, 1.0),
-            point(20.0, 30.0, 0.0),
-            point(30.0, -10.0, 0.0),
-            point(40.0, -10.0, 1.0),
-        ];
-        let tr = Track {
-            revision: 1,
-            source: SourceKind::Gp,
-            points: pts,
-            now_index: 0,
-        };
-        let ev = upcoming_events(&tr, Utc(-1.0));
-        let find = |l: &str| ev.iter().find(|e| e.label == l).map(|e| e.t.0);
-        assert_eq!(find("ASCENDING NODE"), Some(5.0));
-        assert_eq!(find("ECLIPSE ENTRY"), Some(15.0));
-        assert_eq!(find("DESCENDING NODE"), Some(27.5));
-        assert_eq!(find("ECLIPSE EXIT"), Some(35.0));
-        assert!(ev.windows(2).all(|w| w[0].t.0 <= w[1].t.0), "sorted");
-        let later = upcoming_events(&tr, Utc(20.0));
-        assert!(later.iter().all(|e| e.t.0 > 20.0) && later.len() == 2);
     }
 
     #[test]
@@ -1091,5 +1012,27 @@ mod tests {
                 assert!((-180.0..=180.0).contains(&rl));
             }
         }
+    }
+
+    #[test]
+    fn upcoming_events_come_from_the_engines_list_in_time_order_without_the_past() {
+        use mctl_core::world::EventKind;
+        let track = Track {
+            revision: 1,
+            source: SourceKind::Gp,
+            points: vec![],
+            now_index: 0,
+            events: vec![
+                (Utc(90.0), EventKind::Periapsis),
+                (Utc(150.0), EventKind::EclipseEntry),
+                (Utc(300.0), EventKind::Apoapsis),
+            ],
+        };
+        let e = upcoming_events(&track, Utc(100.0));
+        assert_eq!(
+            e.iter().map(|x| x.label).collect::<Vec<_>>(),
+            vec!["ECLIPSE ENTRY", "APOAPSIS"]
+        );
+        assert_eq!(e[0].t, Utc(150.0));
     }
 }

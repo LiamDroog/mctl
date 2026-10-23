@@ -75,6 +75,30 @@ pub struct TrackPoint {
     pub illumination: f32,
 }
 
+/// Orbit events (DESIGN.md FR-14).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EventKind {
+    AscendingNode,
+    DescendingNode,
+    Periapsis,
+    Apoapsis,
+    EclipseEntry,
+    EclipseExit,
+}
+
+impl EventKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::AscendingNode => "ASCENDING NODE",
+            Self::DescendingNode => "DESCENDING NODE",
+            Self::Periapsis => "PERIAPSIS",
+            Self::Apoapsis => "APOAPSIS",
+            Self::EclipseEntry => "ECLIPSE ENTRY",
+            Self::EclipseExit => "ECLIPSE EXIT",
+        }
+    }
+}
+
 /// Past and predicted track around the snapshot time. Rebuilt about once a second.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Track {
@@ -84,6 +108,8 @@ pub struct Track {
     pub points: Vec<TrackPoint>,
     /// Index of the first point at or after the snapshot time (past points precede it).
     pub now_index: usize,
+    /// Upcoming events from root finding, sorted by time.
+    pub events: Vec<(Utc, EventKind)>,
 }
 
 /// The arbiter-selected state and everything derived from it.

@@ -720,6 +720,7 @@ mod tests {
             source: SourceKind::Gp,
             points: pts,
             now_index: 4,
+            events: vec![],
         };
         let v = orbit_vertices(&track, 1.0);
         assert!(v[..4].iter().all(|p| p[3] < 0.0));
