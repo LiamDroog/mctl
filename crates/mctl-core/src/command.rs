@@ -24,6 +24,15 @@ pub enum Command {
     Step(f64),
     /// Return to wall-clock time at 1x.
     Live,
+    /// Make the named site the active observer site.
+    SelectSite(String),
+    /// Add a site for this session.
+    AddSite {
+        name: String,
+        lat_deg: f64,
+        lon_deg: f64,
+        alt_m: f64,
+    },
     /// Acknowledge the master caution and warning latches (not a clock command).
     Ack,
 }

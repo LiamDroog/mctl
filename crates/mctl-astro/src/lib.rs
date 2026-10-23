@@ -2,6 +2,7 @@
 
 pub mod frames;
 pub mod kepler;
+pub mod observer;
 pub mod oem;
 pub mod sgp4model;
 pub mod sun;

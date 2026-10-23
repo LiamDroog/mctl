@@ -718,6 +718,7 @@ mod tests {
             }],
             solution: Some(solution()),
             track: None,
+            passes: vec![],
         }
     }
 

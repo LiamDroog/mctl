@@ -158,7 +158,10 @@ pub fn availability(page: Page, sub: usize, vehicle: Option<&VehicleView>) -> Av
             "the public ISSLIVE item list has no battery or bus items",
         ),
         Page::Comm => isslive(vehicle, sub == 0, "TDRS coverage is a v2 feature"),
-        Page::Pass => NoSource("observer site and pass finder arrive in M4".into()),
+        Page::Pass => match vehicle {
+            Some(_) => Available,
+            None => NoSource("no vehicle data yet".into()),
+        },
         Page::Prox => NoSource("no visiting vehicle is defined; prox-ops arrive in M6".into()),
         Page::View => NoSource("window view arrives in M7".into()),
     }
@@ -178,6 +181,7 @@ mod tests {
             sources: vec![],
             solution: None,
             track: None,
+            passes: vec![],
         }
     }
 
@@ -237,9 +241,7 @@ mod tests {
         assert!(
             matches!(availability(Page::Gnc, 0, Some(&hst)), Availability::NoSource(r) if r.contains("no telemetry source"))
         );
-        assert!(
-            matches!(availability(Page::Pass, 0, Some(&iss)), Availability::NoSource(r) if r.contains("M4"))
-        );
+        assert!(availability(Page::Pass, 0, Some(&iss)) == Availability::Available);
         assert!(matches!(
             availability(Page::Gnc, 0, None),
             Availability::NoSource(_)

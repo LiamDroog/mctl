@@ -18,6 +18,7 @@ mod page;
 mod pages;
 mod render;
 mod screens;
+mod sky;
 mod theme;
 
 pub use app::{Options, Present, run};

@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use mctl_astro::frames::{Orientation, Reduction};
 use mctl_astro::kepler;
+use mctl_astro::observer::Site;
 use mctl_astro::oem::Oem;
 use mctl_astro::sgp4model::GpModel;
 use mctl_astro::sun::{illumination, sun_gcrf};
@@ -22,8 +23,9 @@ use mctl_core::cw::{Condition, Latch, Metric, RuleDef, Sample as CwSample, Track
 use mctl_core::state::{Elements, Geodetic, Quality, SourceKind, State};
 use mctl_core::time::{EopTable, Utc};
 use mctl_core::world::{
-    ClockView, CwRuleView, CwView, EopView, Health, LogEntry, Residual, Solution, SourceStatus,
-    SourceView, TelemetryItem, TelemetryView, Track, TrackPoint, VehicleView, World,
+    ClockView, CwRuleView, CwView, EopView, Health, LogEntry, LookView, ObserverView, PassSet,
+    Residual, SiteView, Solution, SourceStatus, SourceView, TelemetryItem, TelemetryView, Track,
+    TrackPoint, VehicleView, World,
 };
 use mctl_sources::tasks::{DataInfo, Event, Payload, SourceKey, SourceSet, TelemetryMeta};
 use mctl_store::{Record, Recorder};
@@ -75,6 +77,20 @@ pub struct Model {
     last_state_rec_s: f64,
     prev: HashMap<String, Observed>,
     prev_eop_loaded: Option<bool>,
+    sites: Vec<(Site, &'static str)>,
+    active_site: usize,
+    pass_worker: Option<crate::passes::Worker>,
+    pass_entries: HashMap<String, PassEntry>,
+    job_counter: u64,
+}
+
+/// Latest pass prediction for a vehicle, and the job (if any) that will replace it.
+struct PassEntry {
+    key: String,
+    from: Utc,
+    to: Utc,
+    sets: Vec<PassSet>,
+    pending: Option<(u64, String)>,
 }
 
 /// What the previous snapshot said about a vehicle, for transition logging.
@@ -124,6 +140,28 @@ fn rule_sample(
             }
         },
     }
+}
+
+/// The configured sites plus, when no site is active in the configuration, the fallback.
+fn initial_sites(cfg: &Config) -> (Vec<(Site, &'static str)>, usize) {
+    let site = |d: &mctl_core::config::SiteDef| Site {
+        name: d.name.clone(),
+        lat_deg: d.lat_deg,
+        lon_deg: d.lon_deg,
+        alt_m: d.alt_m,
+    };
+    let mut sites: Vec<(Site, &'static str)> =
+        cfg.sites.iter().map(|d| (site(d), "CONFIGURED")).collect();
+    let active = if cfg.observer.active.is_empty() {
+        sites.push((site(&cfg.observer.fallback), "DEFAULT"));
+        sites.len() - 1
+    } else {
+        sites
+            .iter()
+            .position(|(s, _)| s.name.eq_ignore_ascii_case(&cfg.observer.active))
+            .expect("validated by Config")
+    };
+    (sites, active)
 }
 
 fn group_totals(meta: &[TelemetryMeta]) -> Vec<(String, usize)> {
@@ -177,6 +215,7 @@ impl Model {
             .map(|r| (r.clone(), Tracker::default()))
             .collect();
         let state_period_s = 1.0 / cfg.store.state_hz;
+        let (sites, active_site) = initial_sites(&cfg);
         Self {
             cfg,
             vehicles,
@@ -196,6 +235,11 @@ impl Model {
             last_state_rec_s: f64::NEG_INFINITY,
             prev: HashMap::new(),
             prev_eop_loaded: None,
+            sites,
+            active_site,
+            pass_worker: None,
+            pass_entries: HashMap::new(),
+            job_counter: 0,
         }
     }
 
@@ -291,6 +335,199 @@ impl Model {
                 self.note(wall, l);
             }
             self.prev.insert(v.id.clone(), now);
+        }
+    }
+
+    /// Run pass predictions on a worker thread instead of inline.
+    pub fn enable_pass_worker(&mut self) {
+        self.pass_worker = Some(crate::passes::Worker::start());
+    }
+
+    pub fn select_site(&mut self, name: &str, wall: Utc) -> Result<(), String> {
+        let i = self
+            .sites
+            .iter()
+            .position(|(s, _)| s.name.eq_ignore_ascii_case(name))
+            .ok_or_else(|| {
+                format!(
+                    "unknown site {name:?}; known: {}",
+                    self.sites
+                        .iter()
+                        .map(|(s, _)| s.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })?;
+        self.active_site = i;
+        let n = self.sites[i].0.name.clone();
+        self.note(wall, format!("observer site: {n}"));
+        Ok(())
+    }
+
+    pub fn add_site(&mut self, site: Site, wall: Utc) -> Result<(), String> {
+        mctl_core::config::SiteDef {
+            name: site.name.clone(),
+            lat_deg: site.lat_deg,
+            lon_deg: site.lon_deg,
+            alt_m: site.alt_m,
+        }
+        .validate()?;
+        if self
+            .sites
+            .iter()
+            .any(|(s, _)| s.name.eq_ignore_ascii_case(&site.name))
+        {
+            return Err(format!("site {:?} already exists", site.name));
+        }
+        self.note(
+            wall,
+            format!(
+                "site added for this session: {} ({:.4}, {:.4}, {:.0} m)",
+                site.name, site.lat_deg, site.lon_deg, site.alt_m
+            ),
+        );
+        self.sites.push((site, "ADDED"));
+        self.active_site = self.sites.len() - 1;
+        Ok(())
+    }
+
+    fn observer_view(&self, sun: Option<(&[f64; 3], &[[f64; 3]; 3])>) -> ObserverView {
+        let sites = self
+            .sites
+            .iter()
+            .map(|(s, origin)| {
+                let sun_look = sun.map(|(dir, m)| {
+                    let d = nalgebra::Vector3::new(dir[0], dir[1], dir[2]).normalize();
+                    let ecef = nalgebra::Matrix3::from_fn(|r, c| m[r][c]) * d;
+                    let enu = s.enu_from_ecef() * ecef;
+                    (
+                        enu.x.atan2(enu.y).to_degrees().rem_euclid(360.0),
+                        enu.z.asin().to_degrees(),
+                    )
+                });
+                SiteView {
+                    name: s.name.clone(),
+                    lat_deg: s.lat_deg,
+                    lon_deg: s.lon_deg,
+                    alt_m: s.alt_m,
+                    origin: (*origin).into(),
+                    sun_az_deg: sun_look.map(|x| x.0),
+                    sun_el_deg: sun_look.map(|x| x.1),
+                }
+            })
+            .collect();
+        ObserverView {
+            sites,
+            active: self.active_site,
+            mask_deg: self.cfg.observer.mask_deg,
+        }
+    }
+
+    /// Collect finished predictions, start new ones when the inputs or the clock moved out of the
+    /// window, and fill each vehicle's pass sets (with live look angles).
+    fn update_passes(&mut self, vehicles: &mut [VehicleView], t: Utc, orientation: Orientation) {
+        let done = self
+            .pass_worker
+            .as_ref()
+            .map(crate::passes::Worker::poll)
+            .unwrap_or_default();
+        for d in done {
+            if let Some(e) = self.pass_entries.get_mut(&d.vehicle)
+                && e.pending.as_ref().is_some_and(|(id, _)| *id == d.id)
+            {
+                let (_, key) = e.pending.take().expect("checked");
+                e.key = key;
+                e.from = d.sets.first().map_or(t, |s| s.from);
+                e.to = d.sets.first().map_or(t, |s| s.to);
+                e.sets = d.sets;
+            }
+        }
+        let o = self.cfg.observer.clone();
+        let sites_key: String = self
+            .sites
+            .iter()
+            .map(|(s, _)| format!("{}@{},{},{}", s.name, s.lat_deg, s.lon_deg, s.alt_m))
+            .collect::<Vec<_>>()
+            .join(";");
+        for (vm, view) in self.vehicles.iter().zip(vehicles.iter_mut()) {
+            let mut parts: Vec<Arc<dyn Trajectory>> = Vec::new();
+            let mut labels = Vec::new();
+            let mut key = format!("{sites_key}|{}|", o.mask_deg);
+            for k in &vm.def.sources {
+                match k {
+                    SourceKind::Gp => {
+                        if let Some(g) = &vm.gp {
+                            parts.push(g.data.clone());
+                            labels.push("GP/SGP4");
+                            key += &format!("gp{}", g.fetched_at.0);
+                        }
+                    }
+                    SourceKind::Oem => {
+                        if let Some(x) = &vm.oem {
+                            parts.push(x.data.clone());
+                            labels.push("OEM");
+                            key += &format!("oem{}", x.fetched_at.0);
+                        }
+                    }
+                }
+            }
+            if parts.is_empty() {
+                continue;
+            }
+            let entry = self
+                .pass_entries
+                .entry(vm.def.id.clone())
+                .or_insert(PassEntry {
+                    key: String::new(),
+                    from: t,
+                    to: t,
+                    sets: vec![],
+                    pending: None,
+                });
+            let in_window = t.0 >= entry.from.0 && t.0 <= entry.to.0 - 86_400.0;
+            let fresh = entry.key == key && in_window;
+            let already_asked = entry.pending.as_ref().is_some_and(|(_, k)| *k == key);
+            if !fresh && !already_asked {
+                self.job_counter += 1;
+                let job = crate::passes::Job {
+                    id: self.job_counter,
+                    vehicle: vm.def.id.clone(),
+                    traj: Arc::new(crate::passes::Chain { parts }),
+                    source: labels.join(" then "),
+                    sites: self.sites.iter().map(|(s, _)| s.clone()).collect(),
+                    t0: t,
+                    days: o.pass_days,
+                    mask_deg: o.mask_deg,
+                    step_s: o.step_s,
+                    orientation,
+                };
+                entry.pending = Some((job.id, key));
+                match &self.pass_worker {
+                    Some(w) => w.submit(job),
+                    None => {
+                        let d = crate::passes::compute(&job);
+                        let (_, key) = entry.pending.take().expect("just set");
+                        entry.key = key;
+                        entry.from = t;
+                        entry.to = t.plus(o.pass_days * 86_400.0);
+                        entry.sets = d.sets;
+                    }
+                }
+            }
+            let mut sets = entry.sets.clone();
+            if let Some(sol) = &view.solution {
+                for set in &mut sets {
+                    if let Some((site, _)) = self.sites.iter().find(|(s, _)| s.name == set.site) {
+                        let l = site.look(&sol.state_itrf.r);
+                        set.look_now = Some(LookView {
+                            az_deg: l.az_deg,
+                            el_deg: l.el_deg,
+                            range_km: l.range_km,
+                        });
+                    }
+                }
+            }
+            view.passes = sets;
         }
     }
 
@@ -542,7 +779,7 @@ impl Model {
         );
         let eop = self.eop.as_ref().map(|l| l.data.clone());
         let mut revision = self.track_revision;
-        let vehicles = self
+        let mut vehicles = self
             .vehicles
             .iter_mut()
             .map(|v| {
@@ -602,10 +839,17 @@ impl Model {
                 })
                 .collect(),
         });
+        self.update_passes(&mut vehicles, t, orientation);
+        let sun = vehicles
+            .iter()
+            .find_map(|v| v.solution.as_ref())
+            .map(|s| (s.sun_gcrf_km, s.ecef_from_gcrf));
+        let observer = self.observer_view(sun.as_ref().map(|(a, b)| (a, b)));
         let cw = self.cw_step(&vehicles, &eop_view, telemetry.as_ref(), wall);
         World {
             telemetry,
             cw,
+            observer,
             t,
             clock,
             log: self.log.iter().cloned().collect(),
@@ -823,6 +1067,7 @@ fn vehicle_view(
         sources,
         solution,
         track,
+        passes: vec![],
     }
 }
 
@@ -943,9 +1188,35 @@ impl Drop for Engine {
 /// Apply every queued command to the clock, logging the outcome.
 fn drain_commands(rx: &Receiver<Command>, clock: &mut Clock, model: &mut Model, wall_utc: Utc) {
     while let Ok(cmd) = rx.try_recv() {
-        if cmd == Command::Ack {
-            model.ack(wall_utc);
-            continue;
+        match &cmd {
+            Command::Ack => {
+                model.ack(wall_utc);
+                continue;
+            }
+            Command::SelectSite(n) => {
+                if let Err(e) = model.select_site(n, wall_utc) {
+                    model.note(wall_utc, format!("command rejected: {e}"));
+                }
+                continue;
+            }
+            Command::AddSite {
+                name,
+                lat_deg,
+                lon_deg,
+                alt_m,
+            } => {
+                let site = Site {
+                    name: name.clone(),
+                    lat_deg: *lat_deg,
+                    lon_deg: *lon_deg,
+                    alt_m: *alt_m,
+                };
+                if let Err(e) = model.add_site(site, wall_utc) {
+                    model.note(wall_utc, format!("command rejected: {e}"));
+                }
+                continue;
+            }
+            _ => {}
         }
         match clock.apply(&cmd, Instant::now(), wall_utc) {
             Ok(text) => model.note(wall_utc, text),
@@ -971,6 +1242,7 @@ pub fn start(cfg: Config, sources: SourceSet, recorder: Option<Recorder>) -> Eng
             // channels would tell every source thread to exit.
             let sources = sources;
             let mut model = Model::new(cfg);
+            model.enable_pass_worker();
             if let Some(tx) = record_tx {
                 model.set_recorder(tx);
             }
@@ -1576,5 +1848,108 @@ mod tests {
         });
         let t = t_in_oem();
         assert!(m.world(t).seq > 0, "still publishing");
+    }
+
+    #[test]
+    fn passes_are_predicted_for_every_site_with_the_fallback_site_marked_default() {
+        let mut m = model();
+        feed(&mut m, true, true);
+        let t = t_in_oem();
+        let w = m.world(t);
+        let o = &w.observer;
+        assert_eq!(o.sites.len(), 1);
+        assert_eq!(
+            (o.sites[0].name.as_str(), o.sites[0].origin.as_str()),
+            ("NASA HQ", "DEFAULT"),
+            "no site configured: the fallback, labelled"
+        );
+        let v = &w.vehicles[0];
+        assert_eq!(v.passes.len(), 1);
+        let set = &v.passes[0];
+        assert_eq!(
+            set.source,
+            "GP/SGP4 then OEM".replace("GP/SGP4 then OEM", "OEM then GP/SGP4"),
+            "OEM has priority, GP covers beyond its span"
+        );
+        assert!((set.to.minus(set.from) - 7.0 * 86_400.0).abs() < 1.0);
+        assert!(
+            set.passes.len() >= 10,
+            "a week gives dozens of passes over DC, got {}",
+            set.passes.len()
+        );
+        assert!(set.passes.iter().all(|p| p.max_el_deg >= 10.0 - 0.01
+            && p.aos.0 < p.tca.0
+            && p.tca.0 < p.los.0
+            && p.path.len() >= 2));
+        assert!(
+            set.look_now.is_some(),
+            "live look angles accompany the predictions"
+        );
+        assert!(
+            o.sites[0]
+                .sun_el_deg
+                .is_some_and(|e| (-90.0..=90.0).contains(&e))
+        );
+    }
+
+    #[test]
+    fn selecting_and_adding_sites_validates_and_logs() {
+        let mut m = model();
+        let t = t_in_oem();
+        assert!(
+            m.select_site("Atlantis", t)
+                .unwrap_err()
+                .contains("known: NASA HQ")
+        );
+        m.add_site(
+            Site {
+                name: "Home".into(),
+                lat_deg: 51.05,
+                lon_deg: -114.07,
+                alt_m: 1045.0,
+            },
+            t,
+        )
+        .unwrap();
+        assert!(
+            m.add_site(
+                Site {
+                    name: "home".into(),
+                    lat_deg: 0.0,
+                    lon_deg: 0.0,
+                    alt_m: 0.0
+                },
+                t
+            )
+            .unwrap_err()
+            .contains("already exists")
+        );
+        assert!(
+            m.add_site(
+                Site {
+                    name: "Bad".into(),
+                    lat_deg: 95.0,
+                    lon_deg: 0.0,
+                    alt_m: 0.0
+                },
+                t
+            )
+            .is_err()
+        );
+        let w = m.world(t);
+        assert_eq!(w.observer.sites.len(), 2);
+        assert_eq!(
+            w.observer.active_site().unwrap().name,
+            "Home",
+            "a new site becomes active"
+        );
+        m.select_site("nasa hq", t).unwrap();
+        assert_eq!(m.world(t).observer.active_site().unwrap().name, "NASA HQ");
+        assert!(
+            m.world(t)
+                .log
+                .iter()
+                .any(|e| e.text.contains("site added for this session: Home"))
+        );
     }
 }

@@ -8,7 +8,7 @@ use crate::sun::EARTH_RADIUS_KM;
 /// Earth GM, km^3/s^2 (WGS-84).
 pub const MU_KM3_S2: f64 = 398_600.441_8;
 /// WGS-84 flattening.
-const FLATTENING: f64 = 1.0 / 298.257_223_563;
+pub const FLATTENING: f64 = 1.0 / 298.257_223_563;
 const TAU: f64 = std::f64::consts::TAU;
 
 /// Threshold below which an orbit is treated as circular / equatorial when choosing angle references.

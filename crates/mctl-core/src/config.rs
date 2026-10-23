@@ -35,6 +35,9 @@ pub struct Config {
     pub engine: Engine,
     #[serde(default)]
     pub store: StoreConfig,
+    pub observer: ObserverConfig,
+    #[serde(rename = "site", default)]
+    pub sites: Vec<SiteDef>,
     #[serde(rename = "vehicle")]
     pub vehicles: Vec<VehicleDef>,
     /// Caution and warning threshold rules (FR-40).
@@ -87,6 +90,45 @@ pub struct EopSource {
 pub struct Limits {
     pub residual_caution_km: f64,
     pub residual_warning_km: f64,
+}
+
+/// A named observer site (DESIGN.md §8, FR-51).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SiteDef {
+    pub name: String,
+    pub lat_deg: f64,
+    pub lon_deg: f64,
+    pub alt_m: f64,
+}
+
+impl SiteDef {
+    pub fn validate(&self) -> Result<(), String> {
+        let ok = self.lat_deg.abs() <= 90.0
+            && self.lon_deg.abs() <= 180.0
+            && self.alt_m.is_finite()
+            && (-500.0..=9000.0).contains(&self.alt_m);
+        if self.name.trim().is_empty() || !ok {
+            return Err(format!(
+                "site {:?}: need a name, |lat| <= 90, |lon| <= 180 and altitude -500..9000 m",
+                self.name
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ObserverConfig {
+    /// Name of the site to use; empty means the fallback.
+    pub active: String,
+    pub mask_deg: f64,
+    pub pass_days: f64,
+    /// Elevation sampling step of the pass search, seconds.
+    pub step_s: f64,
+    /// Used when no site is configured as active (DESIGN.md §8 step 4).
+    pub fallback: SiteDef,
 }
 
 /// Recording to SQLite (DESIGN.md §10).
@@ -200,6 +242,40 @@ impl Config {
 
     fn validate(&self) -> Result<(), ConfigError> {
         let bad = |m: String| Err(ConfigError::Invalid(m));
+        let o = &self.observer;
+        if !(0.0..=89.0).contains(&o.mask_deg)
+            || !(o.pass_days > 0.0 && o.pass_days <= 14.0)
+            || !(o.step_s >= 1.0 && o.step_s <= 120.0)
+        {
+            return bad(
+                "observer: mask_deg must be 0..89, pass_days in (0, 14], step_s 1..120".into(),
+            );
+        }
+        if let Err(m) = o.fallback.validate() {
+            return bad(m);
+        }
+        for (i, s) in self.sites.iter().enumerate() {
+            if let Err(m) = s.validate() {
+                return bad(m);
+            }
+            if self.sites[..i]
+                .iter()
+                .any(|x| x.name.eq_ignore_ascii_case(&s.name))
+            {
+                return bad(format!("duplicate site {:?}", s.name));
+            }
+        }
+        if !o.active.is_empty()
+            && !self
+                .sites
+                .iter()
+                .any(|s| s.name.eq_ignore_ascii_case(&o.active))
+        {
+            return bad(format!(
+                "observer.active {:?} is not a configured [[site]]",
+                o.active
+            ));
+        }
         let s = &self.store;
         if !(s.state_hz > 0.0
             && s.state_hz <= 50.0

@@ -30,6 +30,29 @@ min_refresh_s = 86400
 residual_caution_km = 5.0
 residual_warning_km = 20.0
 
+[observer]
+# Observer site resolution (DESIGN.md 8): the configured `active` site, else the fallback below.
+# GeoClue and IP geolocation (steps 2 and 3 of the design's chain) are NOT implemented yet.
+active = ""
+mask_deg = 10.0
+pass_days = 7.0
+step_s = 20.0
+
+[observer.fallback]
+# NASA Headquarters, per DESIGN.md 8. The design says to verify these coordinates against a survey
+# source before release; they are not verified.
+name = "NASA HQ"
+lat_deg = 38.8830
+lon_deg = -77.0163
+alt_m = 10.0
+
+# Add your own sites like this, then set `active = "Home"` above or use `:site Home` while running.
+# [[site]]
+# name = "Home"
+# lat_deg = 51.05
+# lon_deg = -114.07
+# alt_m = 1045.0
+
 [store]
 # Recording to SQLite (DESIGN.md 10). path = "" means $XDG_DATA_HOME/mctl/mctl.db.
 enabled = true

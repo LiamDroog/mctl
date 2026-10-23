@@ -88,7 +88,10 @@ fn header(grid: &mut Grid, inp: &PageInput<'_>) {
         sub_title(inp),
         inp.world.t.gmt_doy()
     );
-    let after = format!(" | SRC {src}{age}");
+    let site = inp.world.observer.active_site().map_or(String::new(), |s| {
+        format!(" | SITE {} ({})", s.name, s.origin)
+    });
+    let after = format!(" | SRC {src}{age}{site}");
     let mut col = 0;
     for (text, style) in [(before, bright), (clock, clock_style), (after, bright)] {
         let room = budget.saturating_sub(col);
@@ -758,6 +761,296 @@ fn group_table(
     Layout::default()
 }
 
+fn active_pass_set<'a>(inp: &'a PageInput<'_>) -> Option<&'a mctl_core::world::PassSet> {
+    let site = inp.world.observer.active_site()?;
+    inp.vehicle?.passes.iter().find(|s| s.site == site.name)
+}
+
+/// The pass in progress, else the next one.
+fn current_or_next_pass(
+    set: &mctl_core::world::PassSet,
+    now: Utc,
+) -> Option<&mctl_core::world::PassView> {
+    set.passes.iter().find(|p| p.los.0 > now.0)
+}
+
+fn pass_state(l: &mut Lines<'_>, inp: &PageInput<'_>) {
+    match inp.world.observer.active_site() {
+        None => l.no_data("NO OBSERVER SITE"),
+        Some(s) => {
+            let src = match s.origin.as_str() {
+                "DEFAULT" => "DEFAULT, NOT YOUR LOCATION: SET [observer] active",
+                "ADDED" => "ADDED THIS SESSION (NOT SAVED)",
+                _ => "CONFIGURED",
+            };
+            l.line(
+                &format!("SITE {}  ({src})", s.name),
+                Style::new(Role::Bright),
+            );
+            l.line(
+                &format!(
+                    "{:+.4} {:+.4} {:.0} M  MASK {:.0} DEG",
+                    s.lat_deg, s.lon_deg, s.alt_m, inp.world.observer.mask_deg
+                ),
+                Style::new(Role::Dim),
+            );
+        }
+    }
+    if !inp.world.clock.is_live() {
+        l.line(
+            "SIM CLOCK: PASSES ARE PREDICTED FROM THE CLOCK TIME",
+            Style::limit(Limit::Caution),
+        );
+    }
+}
+
+fn pass_sky(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
+    let (cols, rows) = (grid.cols, grid.rows);
+    let (top, h) = body(rows);
+    let lw = cols * 58 / 100;
+    let plot = CellRect::new(0, top, lw, h);
+    boxed(grid, plot, "SKY PLOT  N UP, E RIGHT, ZENITH CENTRE");
+    let right = CellRect::new(lw, top, cols - lw, h);
+    boxed(grid, right, "NEXT PASS");
+    let mut l = Lines::new(grid, right);
+    pass_state(&mut l, inp);
+    l.row += 1;
+    let Some(set) = active_pass_set(inp) else {
+        l.no_data("NO PREDICTION YET (NEEDS A TRAJECTORY SOURCE)");
+        return Layout {
+            sky: Some(plot.inner()),
+            ..Layout::default()
+        };
+    };
+    let now = inp.world.t;
+    if let Some(n) = set.look_now {
+        let above = n.el_deg >= inp.world.observer.mask_deg;
+        l.line(
+            &format!(
+                "NOW  AZ {:5.1}  EL {:+5.1}  RANGE {:.0} KM  {}",
+                n.az_deg,
+                n.el_deg,
+                n.range_km,
+                if above {
+                    "ABOVE MASK"
+                } else if n.el_deg >= 0.0 {
+                    "BELOW MASK"
+                } else {
+                    "BELOW HORIZON"
+                }
+            ),
+            if above {
+                Style::new(Role::Bright)
+            } else {
+                Style::new(Role::Fg)
+            },
+        );
+    }
+    match current_or_next_pass(set, now) {
+        None => l.line(
+            "NO PASS IN THE PREDICTION WINDOW",
+            Style::limit(Limit::Caution),
+        ),
+        Some(p) => {
+            let in_progress = p.aos.0 <= now.0;
+            let fg = Style::new(Role::Fg);
+            l.line(
+                &if in_progress {
+                    format!("IN PROGRESS  LOS IN {}", fmt_dur(p.los.minus(now)))
+                } else {
+                    format!("AOS IN {}", fmt_dur(p.aos.minus(now)))
+                },
+                Style::new(Role::Bright),
+            );
+            l.line(
+                &format!("AOS {}  AZ {:5.1}", p.aos.gmt_doy(), p.aos_az_deg),
+                fg,
+            );
+            l.line(
+                &format!(
+                    "TCA {}  AZ {:5.1}  MAX EL {:.1}",
+                    p.tca.gmt_doy(),
+                    p.tca_az_deg,
+                    p.max_el_deg
+                ),
+                fg,
+            );
+            l.line(
+                &format!(
+                    "LOS {}  AZ {:5.1}  DURATION {}",
+                    p.los.gmt_doy(),
+                    p.los_az_deg,
+                    fmt_dur(p.duration_s())
+                ),
+                fg,
+            );
+            l.line(
+                match p.visible {
+                    Some(true) => "VISIBLE PASS: DARK SKY AND VEHICLE SUNLIT AT CULMINATION",
+                    Some(false) => "NOT VISIBLE (DAYLIGHT OR VEHICLE IN SHADOW AT CULMINATION)",
+                    None => "VISIBILITY UNKNOWN (NO SUN POSITION)",
+                },
+                Style::new(Role::Dim),
+            );
+            if p.started_before_window || p.ends_after_window {
+                l.line(
+                    "PASS CLIPPED BY THE PREDICTION WINDOW",
+                    Style::limit(Limit::Caution),
+                );
+            }
+        }
+    }
+    l.row += 1;
+    if let Some(el) = inp.world.observer.active_site().and_then(|s| s.sun_el_deg) {
+        let sky = if el <= mctl_astro::observer::DARK_SKY_SUN_ELEVATION_DEG {
+            "DARK SKY"
+        } else if el > 0.0 {
+            "DAYTIME"
+        } else {
+            "TWILIGHT"
+        };
+        l.line(&format!("SUN EL {el:+.1}  {sky}"), Style::new(Role::Dim));
+    }
+    l.line(
+        &format!(
+            "SOURCE {}  WINDOW {} DAYS",
+            set.source.to_uppercase(),
+            ((set.to.minus(set.from)) / 86_400.0).round()
+        ),
+        Style::new(Role::Dim),
+    );
+    Layout {
+        sky: Some(plot.inner()),
+        ..Layout::default()
+    }
+}
+
+fn pass_list(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
+    let (top, h) = body(grid.rows);
+    let rect = CellRect::new(0, top, grid.cols, h);
+    let name = inp
+        .world
+        .observer
+        .active_site()
+        .map_or("--", |s| s.name.as_str());
+    boxed(
+        grid,
+        rect,
+        &format!(
+            "PASS LIST  {name}  MASK {:.0} DEG",
+            inp.world.observer.mask_deg
+        ),
+    );
+    let mut l = Lines::new(grid, rect);
+    pass_state(&mut l, inp);
+    let Some(set) = active_pass_set(inp) else {
+        l.no_data("NO PREDICTION YET (NEEDS A TRAJECTORY SOURCE)");
+        return Layout::default();
+    };
+    l.line(
+        " #  IN         AOS GMT          DURATION  MAX EL  AOS AZ -> LOS AZ  VISIBLE",
+        Style::new(Role::Dim),
+    );
+    let now = inp.world.t;
+    let rows = l.rect.rows.saturating_sub(l.row);
+    for (i, p) in set
+        .passes
+        .iter()
+        .filter(|p| p.los.0 > now.0)
+        .take(rows)
+        .enumerate()
+    {
+        let until = if p.aos.0 <= now.0 {
+            "NOW".to_owned()
+        } else {
+            fmt_dur(p.aos.minus(now))
+        };
+        let vis = match p.visible {
+            Some(true) => "YES",
+            Some(false) => "no",
+            None => "?",
+        };
+        let clip = if p.started_before_window || p.ends_after_window {
+            "*"
+        } else {
+            ""
+        };
+        let style = if p.visible == Some(true) {
+            Style::new(Role::Bright)
+        } else {
+            Style::new(Role::Fg)
+        };
+        l.line(
+            &format!(
+                "{:>2}  {until:<9}  {}  {:>8}{clip:<1}  {:>6.1}  {:>6.0} -> {:<6.0}  {vis}",
+                i + 1,
+                p.aos.gmt_doy(),
+                fmt_dur(p.duration_s()),
+                p.max_el_deg,
+                p.aos_az_deg,
+                p.los_az_deg
+            ),
+            style,
+        );
+    }
+    Layout::default()
+}
+
+fn pass_sites(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
+    let (top, h) = body(grid.rows);
+    let rect = CellRect::new(0, top, grid.cols, h);
+    boxed(grid, rect, "OBSERVER SITES");
+    let mut l = Lines::new(grid, rect);
+    l.line(
+        "   NAME             ORIGIN       LAT       LON      ALT M  NEXT PASS (IN)   MAX EL",
+        Style::new(Role::Dim),
+    );
+    let now = inp.world.t;
+    let active = inp.world.observer.active;
+    for (i, s) in inp.world.observer.sites.iter().enumerate() {
+        let next = inp
+            .vehicle
+            .and_then(|v| v.passes.iter().find(|p| p.site == s.name))
+            .and_then(|set| current_or_next_pass(set, now));
+        let (when, el) = next.map_or(("--".to_owned(), "--".to_owned()), |p| {
+            (
+                if p.aos.0 <= now.0 {
+                    "NOW".into()
+                } else {
+                    fmt_dur(p.aos.minus(now))
+                },
+                format!("{:.0}", p.max_el_deg),
+            )
+        });
+        l.line(
+            &format!(
+                "{} {:<16} {:<10} {:>9.4} {:>9.4} {:>7.0}  {when:<15}  {el}",
+                if i == active { ">" } else { " " },
+                s.name,
+                s.origin,
+                s.lat_deg,
+                s.lon_deg,
+                s.alt_m
+            ),
+            if i == active {
+                Style::new(Role::Bright)
+            } else {
+                Style::new(Role::Fg)
+            },
+        );
+    }
+    l.row += 1;
+    for t in [
+        "`:site <name>` SELECTS A SITE; `:site add <name> <lat> <lon> [alt_m]` ADDS ONE FOR THIS SESSION.",
+        "PERMANENT SITES GO IN ~/.config/mctl/config.toml AS [[site]] ENTRIES; `:site save` IS NOT IMPLEMENTED.",
+        "DESIGN.md 8 ALSO CALLS FOR GEOCLUE2 AND OPTIONAL IP GEOLOCATION BEFORE THE FALLBACK: NOT IMPLEMENTED YET.",
+        "THE DEFAULT SITE (NASA HQ) COORDINATES ARE FROM DESIGN.md AND ARE NOT VERIFIED AGAINST A SURVEY SOURCE.",
+    ] {
+        l.line(t, Style::new(Role::Dim));
+    }
+    Layout::default()
+}
+
 fn sys_events(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     let (top, h) = body(grid.rows);
     let rect = CellRect::new(0, top, grid.cols, h);
@@ -1125,6 +1418,9 @@ pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             (Page::Traj, 0) => traj_orbit(grid, inp),
             (Page::Traj, 1) => traj_ground(grid, inp),
             (Page::Traj, _) => traj_elements(grid, inp),
+            (Page::Pass, 0) => pass_sky(grid, inp),
+            (Page::Pass, 1) => pass_list(grid, inp),
+            (Page::Pass, _) => pass_sites(grid, inp),
             (Page::Gnc, 0) => gnc_adi(grid, inp),
             (Page::Gnc, 1) => group_table(
                 grid,

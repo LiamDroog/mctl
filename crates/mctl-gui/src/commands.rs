@@ -43,6 +43,7 @@ pub enum Action {
 pub struct Names<'a> {
     pub themes: &'a [String],
     pub vehicles: &'a [String],
+    pub sites: &'a [String],
 }
 
 /// Every command and a one-line usage, in the order shown by `help`.
@@ -68,6 +69,10 @@ pub const COMMANDS: &[(&str, &str)] = &[
         "page <name> [sub]  master traj gnc eps tcs comm pass prox view sys",
     ),
     ("vehicle", "vehicle <id>       switch vehicle"),
+    (
+        "site",
+        "site <name>        active observer site; `site add <name> <lat> <lon> [alt_m]` adds one",
+    ),
     ("theme", "theme <name>       switch theme"),
     (
         "fx",
@@ -165,6 +170,34 @@ pub fn parse(line: &str, names: &Names<'_>) -> Result<Action, String> {
             parse_offset(one_arg(cmd, args)?).map_err(|e| format!("step: {e}"))?,
         )),
         "ack" => eng(Command::Ack),
+        "site" => match args {
+            [] => Err("site: missing name (or: site add <name> <lat> <lon> [alt_m])".into()),
+            [a, name, rest @ ..] if a.eq_ignore_ascii_case("add") => {
+                let num = |what: &str, s: &str| {
+                    s.parse::<f64>()
+                        .map_err(|_| format!("site add: {what} {s:?} is not a number"))
+                };
+                match rest {
+                    [lat, lon] => eng(Command::AddSite {
+                        name: (*name).to_owned(),
+                        lat_deg: num("latitude", lat)?,
+                        lon_deg: num("longitude", lon)?,
+                        alt_m: 0.0,
+                    }),
+                    [lat, lon, alt] => eng(Command::AddSite {
+                        name: (*name).to_owned(),
+                        lat_deg: num("latitude", lat)?,
+                        lon_deg: num("longitude", lon)?,
+                        alt_m: num("altitude", alt)?,
+                    }),
+                    _ => Err("site add: expected <name> <lat> <lon> [alt_m]".into()),
+                }
+            }
+            [name] => eng(Command::SelectSite(
+                pick("site", name, names.sites)?.clone(),
+            )),
+            _ => Err("site: too many arguments".into()),
+        },
         "pause" => eng(Command::Pause),
         "resume" => eng(Command::Resume),
         "live" => eng(Command::Live),
@@ -332,6 +365,12 @@ pub fn complete(line: &str, names: &Names<'_>) -> Completion {
             match (cmd, words.len()) {
                 (Some("theme"), 1) => names.themes.to_vec(),
                 (Some("vehicle"), 1) => names.vehicles.to_vec(),
+                (Some("site"), 1) => names
+                    .sites
+                    .iter()
+                    .cloned()
+                    .chain(["add".to_owned()])
+                    .collect(),
                 (Some("page"), 1) => crate::pages::ALL_PAGES.map(|p| p.key().to_owned()).to_vec(),
                 (Some("page"), 2) => Page::from_name(words[1]).map_or(vec![], |p| {
                     p.subpages()
@@ -391,6 +430,7 @@ mod tests {
             &Names {
                 themes: &t,
                 vehicles: &v,
+                sites: &["NASA HQ".to_owned(), "Home".to_owned()],
             },
         )
     }
@@ -402,6 +442,7 @@ mod tests {
             &Names {
                 themes: &t,
                 vehicles: &v,
+                sites: &["NASA HQ".to_owned(), "Home".to_owned()],
             },
         )
     }
@@ -555,6 +596,49 @@ mod tests {
     }
 
     #[test]
+    fn site_commands_select_by_prefix_and_add_with_validation() {
+        assert_eq!(
+            p("site home"),
+            Ok(Action::Engine(Command::SelectSite("Home".into())))
+        );
+        assert_eq!(
+            p("site nasa"),
+            Ok(Action::Engine(Command::SelectSite("NASA HQ".into())))
+        );
+        assert!(
+            p("site atlantis")
+                .unwrap_err()
+                .contains("known: NASA HQ, Home")
+        );
+        assert_eq!(
+            p("site add YYC 51.05 -114.07 1045"),
+            Ok(Action::Engine(Command::AddSite {
+                name: "YYC".into(),
+                lat_deg: 51.05,
+                lon_deg: -114.07,
+                alt_m: 1045.0
+            }))
+        );
+        assert_eq!(
+            p("site add Sea 0 0"),
+            Ok(Action::Engine(Command::AddSite {
+                name: "Sea".into(),
+                lat_deg: 0.0,
+                lon_deg: 0.0,
+                alt_m: 0.0
+            }))
+        );
+        assert!(
+            p("site add X north 0")
+                .unwrap_err()
+                .contains("not a number")
+        );
+        assert!(p("site add X 1").unwrap_err().contains("expected <name>"));
+        assert!(p("site").unwrap_err().contains("missing"));
+        assert_eq!(c("site h").line, "site Home ");
+    }
+
+    #[test]
     fn every_listed_command_parses_with_valid_arguments() {
         for (name, _) in COMMANDS {
             let arg = match *name {
@@ -564,6 +648,7 @@ mod tests {
                 "page" => " master",
                 "vehicle" => " iss",
                 "theme" => " modern",
+                "site" => " home",
                 "fx" => " all",
                 "alt" => " 2",
                 "camera" => " inertial",

@@ -257,11 +257,18 @@ impl Console {
 
     fn execute(&mut self, line: &str, world: &World) -> Outcome {
         let (themes, vehicles) = self.names(world);
+        let sites: Vec<String> = world
+            .observer
+            .sites
+            .iter()
+            .map(|s| s.name.clone())
+            .collect();
         match commands::parse(
             line,
             &Names {
                 themes: &themes,
                 vehicles: &vehicles,
+                sites: &sites,
             },
         ) {
             Err(e) => {
@@ -308,11 +315,18 @@ impl Console {
                             .map(|v| v.id.clone())
                             .collect::<Vec<_>>(),
                     );
+                    let sites: Vec<String> = world
+                        .observer
+                        .sites
+                        .iter()
+                        .map(|s| s.name.clone())
+                        .collect();
                     let c = commands::complete(
                         &cmd.text,
                         &Names {
                             themes: &themes,
                             vehicles: &vehicles,
+                            sites: &sites,
                         },
                     );
                     cmd.text = c.line;
@@ -487,6 +501,7 @@ impl Console {
         let ground_px = layout.ground.map(|r| cell_rect_px(&theme, r));
         let eclipse_px = layout.eclipse.map(|r| cell_rect_px(&theme, r));
         let adi_px = layout.adi.map(|r| cell_rect_px(&theme, r));
+        let sky_px = layout.sky.map(|r| cell_rect_px(&theme, r));
         let attitude = adi_px.map(|_| crate::adi::attitude(world.telemetry.as_ref()));
         let has_area = globe_px[2] > 0 && globe_px[3] > 0;
         let aspect = globe_px[2] as f32 / globe_px[3].max(1) as f32;
@@ -513,6 +528,23 @@ impl Console {
         let now = world.t;
         let mut out = self.ctx.run_ui(raw, |ui| {
             let painter = ui.ctx().layer_painter(LayerId::background());
+            if let Some(px) = sky_px {
+                let site = world.observer.active_site();
+                let set = site
+                    .and_then(|s| vehicle.and_then(|v| v.passes.iter().find(|p| p.site == s.name)));
+                crate::sky::paint(
+                    &painter,
+                    &theme,
+                    px,
+                    &crate::sky::SkyInput {
+                        mask_deg: world.observer.mask_deg as f32,
+                        pass: set.and_then(|s| s.passes.iter().find(|p| p.los.0 > now.0)),
+                        now,
+                        look_now: set.and_then(|s| s.look_now),
+                        sun_az_el: site.and_then(|s| s.sun_az_deg.zip(s.sun_el_deg)),
+                    },
+                );
+            }
             if let (Some(px), Some(att)) = (adi_px, attitude.clone()) {
                 crate::adi::paint(&painter, &theme, px, att);
             }

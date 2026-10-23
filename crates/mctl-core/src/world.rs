@@ -114,6 +114,77 @@ pub struct VehicleView {
     /// `None` until some source can produce a state.
     pub solution: Option<Solution>,
     pub track: Option<Arc<Track>>,
+    /// One set per observer site; empty until the first prediction completes.
+    pub passes: Vec<PassSet>,
+}
+
+/// Where an observer site came from (DESIGN.md §8).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SiteView {
+    pub name: String,
+    pub lat_deg: f64,
+    pub lon_deg: f64,
+    pub alt_m: f64,
+    /// `CONFIGURED`, `ADDED` (this session) or `DEFAULT` (the fallback).
+    pub origin: String,
+    pub sun_az_deg: Option<f64>,
+    pub sun_el_deg: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObserverView {
+    pub sites: Vec<SiteView>,
+    pub active: usize,
+    pub mask_deg: f64,
+}
+
+impl ObserverView {
+    pub fn active_site(&self) -> Option<&SiteView> {
+        self.sites.get(self.active)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LookView {
+    pub az_deg: f64,
+    pub el_deg: f64,
+    pub range_km: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PassView {
+    pub aos: Utc,
+    pub tca: Utc,
+    pub los: Utc,
+    pub max_el_deg: f64,
+    pub aos_az_deg: f64,
+    pub tca_az_deg: f64,
+    pub los_az_deg: f64,
+    pub started_before_window: bool,
+    pub ends_after_window: bool,
+    /// Dark sky at the site and the vehicle lit at culmination; `None` when the Sun cannot be computed.
+    pub visible: Option<bool>,
+    /// Sky track as `[azimuth, elevation]` degrees from AOS to LOS.
+    pub path: Vec<[f32; 2]>,
+}
+
+impl PassView {
+    pub fn duration_s(&self) -> f64 {
+        self.los.minus(self.aos)
+    }
+}
+
+/// Predicted passes of one vehicle over one site.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PassSet {
+    pub site: String,
+    /// Window start the prediction was made for.
+    pub from: Utc,
+    pub to: Utc,
+    /// Trajectory source(s) used, e.g. `OEM then GP/SGP4`.
+    pub source: String,
+    pub passes: Vec<PassView>,
+    pub look_now: Option<LookView>,
 }
 
 /// Earth-orientation data status (DESIGN.md §6.3: assume zero UT1-UTC, but say so).
@@ -253,6 +324,7 @@ pub struct World {
     /// ISSLIVE telemetry, present only when a configured vehicle uses it.
     pub telemetry: Option<TelemetryView>,
     pub cw: CwView,
+    pub observer: ObserverView,
     pub vehicles: Vec<VehicleView>,
 }
 
@@ -269,6 +341,11 @@ impl World {
             },
             telemetry: None,
             cw: CwView::default(),
+            observer: ObserverView {
+                sites: Vec::new(),
+                active: 0,
+                mask_deg: 10.0,
+            },
             vehicles: Vec::new(),
         }
     }

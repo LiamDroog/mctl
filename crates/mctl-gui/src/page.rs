@@ -58,6 +58,7 @@ pub struct Layout {
     pub ground: Option<CellRect>,
     pub eclipse: Option<CellRect>,
     pub adi: Option<CellRect>,
+    pub sky: Option<CellRect>,
 }
 
 pub use mctl_core::time::fmt_dur;
@@ -518,6 +519,7 @@ mod tests {
             }],
             solution: Some(sol(SourceKind::Oem)),
             track: None,
+            passes: vec![],
         }
     }
 
@@ -660,8 +662,8 @@ mod tests {
             "{t}"
         );
         assert!(layout.adi.is_none(), "no ADI without a telemetry source");
-        let (g, _) = render_page(&w, Some(&hubble), Page::Pass, 0, 160, 45);
-        assert!(g.text().contains("M4"));
+        let (g, _) = render_page(&w, Some(&hubble), Page::View, 0, 160, 45);
+        assert!(g.text().contains("M7"));
     }
 
     #[test]
@@ -794,6 +796,118 @@ mod tests {
         assert!(
             t.contains("warp <rate>"),
             "every command is documented in the help"
+        );
+    }
+
+    fn world_with_passes() -> (World, VehicleView) {
+        use mctl_core::world::{LookView, ObserverView, PassSet, PassView, SiteView};
+        let t = Utc(1.0e9);
+        let pass = |dt: f64, max_el: f64, visible: Option<bool>| PassView {
+            aos: t.plus(dt),
+            tca: t.plus(dt + 180.0),
+            los: t.plus(dt + 360.0),
+            max_el_deg: max_el,
+            aos_az_deg: 220.0,
+            tca_az_deg: 140.0,
+            los_az_deg: 50.0,
+            started_before_window: false,
+            ends_after_window: false,
+            visible,
+            path: vec![[220.0, 10.0], [140.0, max_el as f32], [50.0, 10.0]],
+        };
+        let mut v = view(SourceStatus::Active, Health::Ok, None);
+        v.passes = vec![PassSet {
+            site: "Home".into(),
+            from: t,
+            to: t.plus(7.0 * 86_400.0),
+            source: "OEM then GP/SGP4".into(),
+            passes: vec![
+                pass(600.0, 66.6, Some(true)),
+                pass(6_000.0, 12.3, Some(false)),
+            ],
+            look_now: Some(LookView {
+                az_deg: 200.0,
+                el_deg: -20.0,
+                range_km: 6000.0,
+            }),
+        }];
+        let mut w = bare_world();
+        w.t = t;
+        w.observer = ObserverView {
+            sites: vec![
+                SiteView {
+                    name: "Home".into(),
+                    lat_deg: 51.05,
+                    lon_deg: -114.07,
+                    alt_m: 1045.0,
+                    origin: "CONFIGURED".into(),
+                    sun_az_deg: Some(180.0),
+                    sun_el_deg: Some(-30.0),
+                },
+                SiteView {
+                    name: "NASA HQ".into(),
+                    lat_deg: 38.883,
+                    lon_deg: -77.0163,
+                    alt_m: 10.0,
+                    origin: "DEFAULT".into(),
+                    sun_az_deg: None,
+                    sun_el_deg: None,
+                },
+            ],
+            active: 0,
+            mask_deg: 10.0,
+        };
+        (w, v)
+    }
+
+    #[test]
+    fn the_pass_pages_show_times_elevations_visibility_and_the_active_site() {
+        let (w, v) = world_with_passes();
+        let (g, layout) = render_page(&w, Some(&v), Page::Pass, 0, 160, 45);
+        let t = g.text();
+        assert!(layout.sky.is_some(), "the sky plot reports its rectangle");
+        assert!(
+            t.contains("AOS IN 10m00s")
+                && t.contains("MAX EL 66.6")
+                && t.contains("DURATION 6m00s"),
+            "{t}"
+        );
+        assert!(
+            t.contains("VISIBLE PASS") && t.contains("DARK SKY") && t.contains("BELOW HORIZON"),
+            "{t}"
+        );
+        assert!(
+            g.row_text(0).contains("SITE Home (CONFIGURED)"),
+            "{}",
+            g.row_text(0)
+        );
+        let (g, _) = render_page(&w, Some(&v), Page::Pass, 1, 160, 45);
+        let t = g.text();
+        assert!(
+            t.contains(" 1  10m00s") && t.contains("66.6") && t.contains("YES") && t.contains("no"),
+            "{t}"
+        );
+        let (g, _) = render_page(&w, Some(&v), Page::Pass, 2, 160, 45);
+        let t = g.text();
+        assert!(
+            t.contains("> Home") && t.contains("NASA HQ") && t.contains("DEFAULT"),
+            "{t}"
+        );
+        assert!(
+            t.contains("GEOCLUE2 AND OPTIONAL IP GEOLOCATION") && t.contains("NOT IMPLEMENTED"),
+            "unimplemented parts are stated"
+        );
+    }
+
+    #[test]
+    fn a_default_site_says_it_is_not_the_users_location() {
+        let (mut w, v) = world_with_passes();
+        w.observer.active = 1;
+        let (g, _) = render_page(&w, Some(&v), Page::Pass, 1, 160, 45);
+        assert!(g.text().contains("DEFAULT, NOT YOUR LOCATION"));
+        assert!(
+            g.text().contains("NO PREDICTION YET"),
+            "no passes for a site that has none, and no invented ones"
         );
     }
 }
