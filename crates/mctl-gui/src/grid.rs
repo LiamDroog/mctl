@@ -137,6 +137,24 @@ impl Grid {
     }
 
     /// Fill a rectangle with spaces of a style (used to blank a region for an overlay).
+    /// The characters of one row (for tests and diagnostics).
+    #[cfg(test)]
+    pub fn row_text(&self, row: usize) -> String {
+        self.cells[row * self.cols..(row + 1) * self.cols]
+            .iter()
+            .map(|c| c.ch)
+            .collect()
+    }
+
+    /// All rows joined with newlines.
+    #[cfg(test)]
+    pub fn text(&self) -> String {
+        (0..self.rows)
+            .map(|r| self.row_text(r))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     pub fn fill(&mut self, rect: CellRect, style: Style) {
         for r in rect.row..(rect.row + rect.rows).min(self.rows) {
             for c in rect.col..(rect.col + rect.cols).min(self.cols) {

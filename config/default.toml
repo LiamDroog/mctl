@@ -53,3 +53,76 @@ norad = 20580
 sources = ["gp"]
 # STS-31 liftoff, 1990-04-24 12:33:51 UTC (assumption; verify).
 met_epoch = "1990-04-24T12:33:51"
+
+# ---- Caution and warning rules (DESIGN.md 4.5) ---------------------------------------------------
+# Every rule says where its limits come from in `basis`. DESIGN.md FR-43: ISS subsystem limits are
+# user-defined and public flight-rule limits are not assumed, so the subsystem rules below are
+# ILLUSTRATIVE starting points, not flight rules. Edit them in ~/.config/mctl/config.toml (a user
+# overlay replaces this whole list if it defines any [[rule]]).
+
+[[rule]]
+id = "iss-tle-age"
+title = "ISS GP element age"
+metric = "gp_age_h:iss"
+direction = "above"
+caution = 72.0
+warning = 168.0
+hysteresis = 2.0
+units = "h"
+basis = "illustrative: element sets older than ~3 days degrade the prediction noticeably"
+
+[[rule]]
+id = "hubble-tle-age"
+title = "Hubble GP element age"
+metric = "gp_age_h:hubble"
+direction = "above"
+caution = 120.0
+warning = 240.0
+hysteresis = 2.0
+units = "h"
+basis = "illustrative"
+
+[[rule]]
+id = "telemetry-feed"
+title = "ISSLIVE feed down"
+metric = "telemetry_feed_down"
+direction = "above"
+warning = 1.0
+persist_s = 30.0
+units = ""
+basis = "feed loss: any state other than delivering for 30 s"
+
+[[rule]]
+id = "iss-cabin-pressure"
+title = "Lab cabin pressure"
+metric = "item:USLAB000058"
+direction = "below"
+caution = 700.0
+warning = 650.0
+hysteresis = 5.0
+persist_s = 10.0
+units = "mmHg"
+basis = "illustrative, not a flight rule (nominal cabin is ~740-760 mmHg)"
+
+[[rule]]
+id = "iss-ppco2"
+title = "Lab ppCO2"
+metric = "item:USLAB000055"
+direction = "above"
+caution = 6.0
+warning = 8.0
+hysteresis = 0.3
+persist_s = 30.0
+units = "mmHg"
+basis = "illustrative, not a flight rule"
+
+[[rule]]
+id = "iss-cmgs-online"
+title = "CMGs online"
+metric = "item:USLAB000005"
+direction = "below"
+caution = 3.0
+warning = 2.0
+persist_s = 10.0
+units = ""
+basis = "illustrative, not a flight rule"

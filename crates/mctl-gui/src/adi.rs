@@ -12,6 +12,9 @@ use crate::theme::Theme;
 
 /// Telemetry item IDs of the current LVLH attitude quaternion (config/isslive.toml, from ISS Mimic).
 pub const QUAT_ITEMS: [&str; 4] = ["USLAB000018", "USLAB000019", "USLAB000020", "USLAB000021"];
+/// Commanded attitude quaternion items and the reported roll/pitch/yaw error items (deg).
+pub const COMMANDED_ITEMS: [&str; 4] = ["USLAB000028", "USLAB000029", "USLAB000030", "USLAB000031"];
+pub const ERROR_ITEMS: [&str; 3] = ["USLAB000022", "USLAB000023", "USLAB000024"];
 /// Largest allowed deviation of the quaternion's norm from 1 before it is rejected as not a quaternion.
 pub const NORM_TOLERANCE: f64 = 0.01;
 /// Degrees of pitch from the ball centre to its edge.
@@ -55,6 +58,45 @@ pub fn attitude(t: Option<&TelemetryView>) -> Result<Attitude, String> {
         .ok_or_else(|| format!("quaternion norm outside 1 +- {NORM_TOLERANCE}: not an attitude"))
 }
 
+/// Cross-check of the quaternion convention against the feed's own error items: the difference of the
+/// current and commanded attitudes, in the assumed convention, should match the reported errors.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Consistency {
+    pub derived_deg: [f64; 3],
+    pub reported_deg: [f64; 3],
+}
+
+impl Consistency {
+    pub fn max_diff_deg(&self) -> f64 {
+        self.derived_deg
+            .iter()
+            .zip(self.reported_deg)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0, f64::max)
+    }
+}
+
+fn wrap_deg(a: f64) -> f64 {
+    (a + 180.0).rem_euclid(360.0) - 180.0
+}
+
+pub fn consistency(t: Option<&TelemetryView>) -> Option<Consistency> {
+    let t = t?;
+    let get =
+        |ids: &[&str]| -> Option<Vec<f64>> { ids.iter().map(|id| t.get(id)?.value).collect() };
+    let cur = euler_deg(get(&QUAT_ITEMS)?.try_into().ok()?)?;
+    let cmd = euler_deg(get(&COMMANDED_ITEMS)?.try_into().ok()?)?;
+    let rep = get(&ERROR_ITEMS)?;
+    Some(Consistency {
+        derived_deg: [
+            wrap_deg(cur.roll_deg - cmd.roll_deg),
+            wrap_deg(cur.pitch_deg - cmd.pitch_deg),
+            wrap_deg(cur.yaw_deg - cmd.yaw_deg),
+        ],
+        reported_deg: [rep[0], rep[1], rep[2]],
+    })
+}
+
 /// Draw the ball in `rect_px` (`[x, y, w, h]`). No attitude: draw the OFF flag instead, never a guess.
 pub fn paint(painter: &Painter, theme: &Theme, rect_px: [u32; 4], att: Result<Attitude, String>) {
     let [x, y, w, h] = rect_px;
@@ -64,9 +106,10 @@ pub fn paint(painter: &Painter, theme: &Theme, rect_px: [u32; 4], att: Result<At
     }
     let centre = Pos2::new(x as f32 + w as f32 / 2.0, y as f32 + h as f32 / 2.0);
     let p = &theme.palette;
+    // Sky and ground differ in brightness only, so the split reads in monochrome themes too.
     let (sky, ground, line) = (
-        p.info.to_egui().gamma_multiply(0.35),
-        p.dim.to_egui().gamma_multiply(0.6),
+        p.foreground.to_egui().gamma_multiply(0.10),
+        p.foreground.to_egui().gamma_multiply(0.45),
         p.bright.to_egui(),
     );
     let Ok(a) = att else {
@@ -196,6 +239,31 @@ mod tests {
         assert!((a.pitch_deg + 7.7).abs() < 0.2, "{a:?}");
         assert!((a.yaw_deg + 3.9).abs() < 0.2, "{a:?}");
         assert!(a.roll_deg.abs() < 0.5, "{a:?}");
+    }
+
+    #[test]
+    fn commanded_attitude_is_a_round_number_triple_in_the_assumed_convention() {
+        // Captured live 2026-10-23 from USLAB000028-31. A convention mismatch would not give round
+        // numbers: this is the evidence that the scalar-first 3-2-1 reading is right.
+        let c = euler_deg([
+            0.997064411640167,
+            0.005457313731313,
+            -0.068245224654675,
+            -0.034283746033907,
+        ])
+        .unwrap();
+        assert!(
+            (c.roll_deg - 0.9).abs() < 1e-4
+                && (c.pitch_deg + 7.8).abs() < 1e-4
+                && (c.yaw_deg + 4.0).abs() < 1e-4,
+            "{c:?}"
+        );
+    }
+
+    #[test]
+    fn wrap_keeps_angles_in_half_turn() {
+        assert!((wrap_deg(359.0) + 1.0).abs() < 1e-9);
+        assert!((wrap_deg(-181.0) - 179.0).abs() < 1e-9);
     }
 
     #[test]

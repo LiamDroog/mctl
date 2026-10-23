@@ -35,6 +35,9 @@ pub struct Config {
     pub engine: Engine,
     #[serde(rename = "vehicle")]
     pub vehicles: Vec<VehicleDef>,
+    /// Caution and warning threshold rules (FR-40).
+    #[serde(rename = "rule", default)]
+    pub rules: Vec<crate::cw::RuleDef>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -170,6 +173,22 @@ impl Config {
 
     fn validate(&self) -> Result<(), ConfigError> {
         let bad = |m: String| Err(ConfigError::Invalid(m));
+        for (i, r) in self.rules.iter().enumerate() {
+            if let Err(m) = r.validate() {
+                return bad(m);
+            }
+            if self.rules[..i].iter().any(|o| o.id == r.id) {
+                return bad(format!("duplicate rule id {:?}", r.id));
+            }
+            use crate::cw::Metric;
+            let vehicle = match &r.metric {
+                Metric::GpAgeHours(v) | Metric::ResidualKm(v) => Some(v),
+                _ => None,
+            };
+            if let Some(v) = vehicle.filter(|v| !self.vehicles.iter().any(|d| &d.id == *v)) {
+                return bad(format!("rule {}: unknown vehicle {v:?}", r.id));
+            }
+        }
         let f = &self.fetch;
         if !(f.timeout_s > 0.0
             && f.backoff_initial_s > 0.0
@@ -294,13 +313,38 @@ mod tests {
 
     #[test]
     fn user_layer_overrides_scalars_and_replaces_arrays() {
-        let c = Config::from_layers(DEFAULT_CONFIG, Some(("u", "[limits]\nresidual_caution_km = 9.0\n[[vehicle]]\nid=\"x\"\nname=\"X\"\nnorad=1\nsources=[\"gp\"]\n"))).unwrap();
+        let c = Config::from_layers(DEFAULT_CONFIG, Some(("u", "[limits]\nresidual_caution_km = 9.0\n[[vehicle]]\nid=\"x\"\nname=\"X\"\nnorad=1\nsources=[\"gp\"]\n[[rule]]\nid=\"r\"\ntitle=\"R\"\nmetric=\"gp_age_h:x\"\ndirection=\"above\"\ncaution=1.0\nunits=\"h\"\nbasis=\"test\"\n"))).unwrap();
         assert_eq!(c.limits.residual_caution_km, 9.0);
         assert_eq!(
             c.limits.residual_warning_km, 20.0,
             "untouched keys keep defaults"
         );
         assert!(c.vehicles.iter().any(|v| v.id == "x"));
+    }
+
+    #[test]
+    fn a_vehicle_overlay_that_orphans_a_rule_is_an_error_not_a_silent_no_data() {
+        let e = Config::from_layers(
+            DEFAULT_CONFIG,
+            Some((
+                "u",
+                "[[vehicle]]\nid=\"x\"\nname=\"X\"\nnorad=1\nsources=[\"gp\"]\n",
+            )),
+        )
+        .unwrap_err();
+        assert!(e.to_string().contains("unknown vehicle"), "{e}");
+    }
+
+    #[test]
+    fn default_rules_are_valid_and_state_their_basis() {
+        let c = Config::from_layers(DEFAULT_CONFIG, None).unwrap();
+        assert!(c.rules.len() >= 6);
+        assert!(c.rules.iter().all(|r| !r.basis.is_empty()));
+        assert!(
+            c.rules
+                .iter()
+                .any(|r| r.id == "iss-cabin-pressure" && r.basis.contains("illustrative"))
+        );
     }
 
     #[test]

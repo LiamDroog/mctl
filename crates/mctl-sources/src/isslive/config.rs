@@ -63,6 +63,9 @@ pub struct Item {
     pub group: String,
     /// Documentation text from ISS Mimic's spreadsheet; not verified.
     pub description: String,
+    /// Short display name; the description when absent.
+    #[serde(default)]
+    pub label: Option<String>,
     pub units: String,
 }
 

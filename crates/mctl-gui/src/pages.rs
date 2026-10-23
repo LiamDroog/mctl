@@ -96,7 +96,7 @@ impl Page {
             Self::Pass => &["SKY PLOT", "PASS LIST", "SITES"],
             Self::Prox => &["R-BAR/V-BAR"],
             Self::View => &["WINDOW VIEW"],
-            Self::Sys => &["EVENT LOG", "SOURCE HEALTH", "SETTINGS"],
+            Self::Sys => &["EVENT LOG", "SOURCE HEALTH", "SETTINGS", "C&W RULES"],
         }
     }
 
@@ -135,31 +135,29 @@ pub fn availability(page: Page, sub: usize, vehicle: Option<&VehicleView>) -> Av
         None => NoSource("no vehicle data yet".into()),
         Some(v) => match v.telemetry.as_deref() {
             None => NoSource(format!("{} has no telemetry source", v.name)),
-            Some("isslive") => NoSource("ISSLIVE is configured but this page has no source".into()),
+            Some("isslive") => NoSource("no source for this page".into()),
             Some(other) => NoSource(format!("telemetry source {other} is not implemented")),
         },
     };
-    // ISSLIVE vehicles have a feed; only some pages have item IDs configured for them so far.
-    let telemetry_ready =
-        |vehicle: Option<&VehicleView>| match vehicle.and_then(|v| v.telemetry.as_deref()) {
-            Some("isslive") => Available,
-            _ => telemetry(vehicle),
-        };
-    let telemetry_unconfigured = |vehicle: Option<&VehicleView>| match vehicle
+    // ISSLIVE vehicles have a feed; a page is available when it has item IDs configured.
+    let isslive = |vehicle: Option<&VehicleView>, available: bool, why: &str| match vehicle
         .and_then(|v| v.telemetry.as_deref())
     {
-        Some("isslive") => NoSource("no ISSLIVE item IDs are configured for this page yet".into()),
+        Some("isslive") if available => Available,
+        Some("isslive") => NoSource(why.into()),
         _ => telemetry(vehicle),
     };
     match page {
         Page::Master | Page::Sys => Available,
         Page::Traj if sub == 3 => NoSource("maneuver planner arrives in M5".into()),
         Page::Traj => Available,
-        Page::Gnc if sub < 2 => telemetry_ready(vehicle),
-        Page::Eps if sub == 0 => telemetry_ready(vehicle),
-        Page::Gnc | Page::Eps | Page::Tcs => telemetry_unconfigured(vehicle),
-        Page::Comm if sub == 1 => NoSource("TDRS coverage is a v2 feature".into()),
-        Page::Comm => telemetry_unconfigured(vehicle),
+        Page::Gnc | Page::Tcs => isslive(vehicle, true, ""),
+        Page::Eps => isslive(
+            vehicle,
+            sub == 0,
+            "the public ISSLIVE item list has no battery or bus items",
+        ),
+        Page::Comm => isslive(vehicle, sub == 0, "TDRS coverage is a v2 feature"),
         Page::Pass => NoSource("observer site and pass finder arrive in M4".into()),
         Page::Prox => NoSource("no visiting vehicle is defined; prox-ops arrive in M6".into()),
         Page::View => NoSource("window view arrives in M7".into()),
@@ -234,7 +232,7 @@ mod tests {
             matches!(availability(Page::Traj, 3, Some(&iss)), Availability::NoSource(r) if r.contains("M5"))
         );
         assert!(
-            matches!(availability(Page::Gnc, 2, Some(&iss)), Availability::NoSource(r) if r.contains("item IDs"))
+            matches!(availability(Page::Eps, 1, Some(&iss)), Availability::NoSource(r) if r.contains("no battery"))
         );
         assert!(
             matches!(availability(Page::Gnc, 0, Some(&hst)), Availability::NoSource(r) if r.contains("no telemetry source"))

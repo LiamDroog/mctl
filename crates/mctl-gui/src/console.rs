@@ -103,6 +103,14 @@ pub struct Console {
     pending_textures: TexturesDelta,
 }
 
+impl Drop for Console {
+    fn drop(&mut self) {
+        // egui panics if a texture delta is dropped unapplied; if the console goes away before its
+        // first frame (an early error exit, a test) there is nothing left to upload to.
+        self.pending_textures.clear();
+    }
+}
+
 /// Pixel rectangle `[x, y, w, h]` of a cell rectangle.
 pub fn cell_rect_px(theme: &Theme, r: crate::grid::CellRect) -> [u32; 4] {
     let (cw, ch) = (theme.font.cell_w_px, theme.font.cell_h_px);
@@ -384,6 +392,7 @@ impl Console {
             '4' => self.toggles.curvature = !self.toggles.curvature,
             'e' => self.toggles = EffectToggles::all(!self.toggles.any()),
             '0' => self.send(Command::Live),
+            'a' => self.send(Command::Ack),
             ' ' => {
                 let c = if world.clock.paused {
                     Command::Resume
@@ -590,4 +599,211 @@ fn warp_step(world: &World, up: bool) -> f64 {
     // Doubling moves the magnitude away from zero for `]` regardless of direction of travel.
     let mag = if up { cur.abs() * 2.0 } else { cur.abs() / 2.0 };
     mag.clamp(MIN_RATE, MAX_RATE).copysign(cur)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::mpsc::{Receiver, channel};
+
+    use mctl_core::time::Utc;
+    use mctl_core::world::ClockView;
+
+    use super::*;
+
+    fn console() -> (Console, Receiver<Command>) {
+        let limits = Limits {
+            residual_caution_km: 5.0,
+            residual_warning_km: 20.0,
+        };
+        let mut c = Console::new(
+            crate::theme::embedded().unwrap(),
+            None,
+            "test".into(),
+            limits,
+            "iss".into(),
+        )
+        .unwrap();
+        let (tx, rx) = channel();
+        c.connect(Some(tx), vec![]);
+        (c, rx)
+    }
+
+    fn world() -> World {
+        World::empty(Utc(1.0e9))
+    }
+
+    fn keys(c: &mut Console, w: &World, text: &str) -> Outcome {
+        let mut out = Outcome::Continue;
+        for ch in text.chars() {
+            out = c.handle_key(KeyInput::Char(ch), w);
+        }
+        out
+    }
+
+    #[test]
+    fn function_keys_switch_pages_and_tab_cycles_sub_pages_both_ways() {
+        let (mut c, _rx) = console();
+        let w = world();
+        c.handle_key(KeyInput::F(2), &w);
+        assert_eq!(c.page, Page::Traj);
+        c.handle_key(KeyInput::Tab, &w);
+        assert_eq!(c.sub, 1);
+        c.handle_key(KeyInput::BackTab, &w);
+        c.handle_key(KeyInput::BackTab, &w);
+        assert_eq!(c.sub, 3, "wraps backwards to the last sub-page");
+        c.handle_key(KeyInput::F(10), &w);
+        assert_eq!(
+            (c.page, c.sub),
+            (Page::Sys, 0),
+            "a new page starts at its first sub-page"
+        );
+        c.handle_key(KeyInput::F(11), &w);
+        assert_eq!(c.page, Page::Sys, "F11 is not a page");
+    }
+
+    #[test]
+    fn clock_keys_send_engine_commands() {
+        let (mut c, rx) = console();
+        let w = world();
+        keys(&mut c, &w, " ]a0");
+        let got: Vec<Command> = rx.try_iter().collect();
+        assert_eq!(
+            got,
+            vec![
+                Command::Pause,
+                Command::SetRate(2.0),
+                Command::Ack,
+                Command::Live
+            ]
+        );
+        let mut sim = world();
+        sim.clock = ClockView {
+            mode: mctl_core::world::ClockMode::Sim,
+            rate: 64.0,
+            paused: true,
+        };
+        keys(&mut c, &sim, " [");
+        let got: Vec<Command> = rx.try_iter().collect();
+        assert_eq!(
+            got,
+            vec![Command::Resume, Command::SetRate(32.0)],
+            "space resumes a paused clock; [ halves"
+        );
+        sim.clock.rate = -10_000.0;
+        keys(&mut c, &sim, "]");
+        assert_eq!(
+            rx.try_iter().collect::<Vec<_>>(),
+            vec![Command::SetRate(-10_000.0)],
+            "warp saturates at the limit"
+        );
+    }
+
+    #[test]
+    fn the_command_line_collects_text_runs_on_enter_and_escape_cancels_without_quitting() {
+        let (mut c, rx) = console();
+        let w = world();
+        keys(&mut c, &w, ":warp 60");
+        assert!(c.cmd.is_some());
+        c.handle_key(KeyInput::Enter, &w);
+        assert!(c.cmd.is_none());
+        assert_eq!(rx.try_recv(), Ok(Command::SetRate(60.0)));
+        keys(&mut c, &w, ":qui");
+        assert_eq!(
+            c.handle_key(KeyInput::Escape, &w),
+            Outcome::Continue,
+            "Esc in the command line only cancels"
+        );
+        assert!(c.cmd.is_none());
+        assert_eq!(
+            c.handle_key(KeyInput::Escape, &w),
+            Outcome::Quit,
+            "Esc outside it quits"
+        );
+        keys(&mut c, &w, ":quit");
+        assert_eq!(c.handle_key(KeyInput::Enter, &w), Outcome::Quit);
+    }
+
+    #[test]
+    fn typing_command_text_does_not_trigger_hot_keys() {
+        let (mut c, rx) = console();
+        let w = world();
+        let theme = c.theme_idx;
+        keys(&mut c, &w, ":t a q v ");
+        assert_eq!(c.theme_idx, theme, "'t' typed into the line is text");
+        assert!(
+            rx.try_recv().is_err(),
+            "'a' typed into the line does not acknowledge"
+        );
+        assert!(c.cmd.is_some());
+    }
+
+    #[test]
+    fn bad_commands_report_an_error_and_send_nothing() {
+        let (mut c, rx) = console();
+        let w = world();
+        keys(&mut c, &w, ":warp fast");
+        c.handle_key(KeyInput::Enter, &w);
+        assert!(rx.try_recv().is_err());
+        let (msg, _) = c.status.as_ref().expect("an error is shown");
+        assert!(
+            msg.error && msg.text.contains("not a number"),
+            "{}",
+            msg.text
+        );
+    }
+
+    #[test]
+    fn tab_completes_history_recalls_and_backspace_edits() {
+        let (mut c, _rx) = console();
+        let w = world();
+        keys(&mut c, &w, ":the");
+        c.handle_key(KeyInput::Tab, &w);
+        assert_eq!(c.cmd.as_ref().unwrap().text, "theme ");
+        keys(&mut c, &w, "modern");
+        c.handle_key(KeyInput::Enter, &w);
+        assert_eq!(c.theme().name, "Modern");
+        keys(&mut c, &w, ":");
+        c.handle_key(KeyInput::Up, &w);
+        assert_eq!(
+            c.cmd.as_ref().unwrap().text,
+            "theme modern",
+            "Up recalls the last command"
+        );
+        c.handle_key(KeyInput::Backspace, &w);
+        assert_eq!(c.cmd.as_ref().unwrap().text, "theme moder");
+    }
+
+    #[test]
+    fn help_toggles_swallows_keys_and_closes_with_escape() {
+        let (mut c, rx) = console();
+        let w = world();
+        keys(&mut c, &w, "?");
+        assert!(c.help);
+        keys(&mut c, &w, "a");
+        assert!(rx.try_recv().is_err(), "keys do nothing while help is open");
+        assert_eq!(c.handle_key(KeyInput::Escape, &w), Outcome::Continue);
+        assert!(!c.help);
+    }
+
+    #[test]
+    fn camera_and_effect_keys_still_work() {
+        let (mut c, _rx) = console();
+        let w = world();
+        let az = c.camera.azimuth_deg;
+        c.handle_key(KeyInput::Right, &w);
+        assert!((c.camera.azimuth_deg - az).abs() > 1.0);
+        let before = c.toggles.scanlines;
+        keys(&mut c, &w, "1");
+        assert_ne!(c.toggles.scanlines, before);
+        keys(&mut c, &w, "x");
+        assert!(c.show_ecef);
+    }
+
+    #[test]
+    fn without_an_engine_a_clock_key_says_so_instead_of_doing_nothing() {
+        let (mut c, _rx) = console();
+        c.connect(None, vec![]);
+        keys(&mut c, &world(), "a");
+        assert!(c.status.as_ref().unwrap().0.text.contains("no engine"));
+    }
 }

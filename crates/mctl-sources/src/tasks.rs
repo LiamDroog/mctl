@@ -51,6 +51,7 @@ pub struct TelemetryMeta {
     pub id: String,
     pub group: String,
     pub description: String,
+    pub label: String,
     pub units: String,
 }
 
@@ -206,6 +207,7 @@ pub fn start(
                 id: i.id.clone(),
                 group: i.group.clone(),
                 description: i.description.clone(),
+                label: i.label.clone().unwrap_or_else(|| i.description.clone()),
                 units: i.units.clone(),
             })
             .collect();

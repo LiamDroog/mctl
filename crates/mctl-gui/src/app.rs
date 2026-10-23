@@ -443,3 +443,37 @@ pub fn run(themes: Vec<Theme>, opts: Options) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::inside;
+
+    #[test]
+    fn a_point_is_inside_only_within_the_orbit_map_rectangle() {
+        let rect = Some([100, 50, 200, 100]);
+        assert!(
+            inside(rect, Some((100.0, 50.0))),
+            "top-left corner is inside"
+        );
+        assert!(inside(rect, Some((299.9, 149.9))));
+        assert!(!inside(rect, Some((300.0, 100.0))), "right edge is outside");
+        assert!(
+            !inside(rect, Some((150.0, 150.0))),
+            "bottom edge is outside"
+        );
+        assert!(!inside(rect, Some((99.0, 100.0))));
+        assert!(!inside(rect, Some((150.0, 49.0))));
+    }
+
+    #[test]
+    fn without_a_rectangle_or_a_cursor_nothing_is_inside() {
+        assert!(
+            !inside(None, Some((10.0, 10.0))),
+            "pages with no orbit map cannot rotate it"
+        );
+        assert!(
+            !inside(Some([0, 0, 100, 100]), None),
+            "unknown cursor position"
+        );
+    }
+}

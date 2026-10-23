@@ -2,7 +2,7 @@
 //! immutable [`World`] snapshot (DESIGN.md §6.2, §3.2). It runs on its own thread at `engine.tick_hz`;
 //! the UI only ever reads the latest snapshot.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError, channel, sync_channel};
 use std::thread::JoinHandle;
@@ -18,11 +18,12 @@ use mctl_core::arbiter::{Candidate, select};
 use mctl_core::bus::Bus;
 use mctl_core::command::Command;
 use mctl_core::config::{Config, VehicleDef};
+use mctl_core::cw::{Condition, Latch, Metric, RuleDef, Sample as CwSample, Tracker};
 use mctl_core::state::{Elements, Geodetic, Quality, SourceKind, State};
 use mctl_core::time::{EopTable, Utc};
 use mctl_core::world::{
-    ClockView, EopView, Health, LogEntry, Residual, Solution, SourceStatus, SourceView,
-    TelemetryItem, TelemetryView, Track, TrackPoint, VehicleView, World,
+    ClockView, CwRuleView, CwView, EopView, Health, LogEntry, Residual, Solution, SourceStatus,
+    SourceView, TelemetryItem, TelemetryView, Track, TrackPoint, VehicleView, World,
 };
 use mctl_sources::tasks::{DataInfo, Event, Payload, SourceKey, SourceSet, TelemetryMeta};
 
@@ -32,6 +33,9 @@ use crate::clock::Clock;
 const FALLBACK_PERIOD_S: f64 = 5_600.0;
 /// Event-log entries kept in each snapshot.
 const LOG_CAPACITY: usize = 200;
+/// After the first snapshot, conditions only list (they do not latch the master annunciator) for
+/// this long, so the normal start-up (sources still loading, EOP not yet read) is not an alarm.
+const CW_STARTUP_GRACE_S: f64 = 10.0;
 /// Track is rebuilt at least this often, seconds.
 const TRACK_REBUILD_S: f64 = 1.0;
 
@@ -61,6 +65,10 @@ pub struct Model {
     telemetry_meta: Vec<TelemetryMeta>,
     telemetry: HashMap<String, (Option<String>, Utc)>,
     telemetry_health: Option<Health>,
+    cw_rules: Vec<(RuleDef, Tracker)>,
+    latch: Latch,
+    prev_conditions: HashSet<String>,
+    first_wall_s: Option<f64>,
     prev: HashMap<String, Observed>,
     prev_eop_loaded: Option<bool>,
 }
@@ -70,6 +78,59 @@ pub struct Model {
 struct Observed {
     active: Option<SourceKind>,
     sources: Vec<(SourceKind, Health, SourceStatus)>,
+}
+
+/// The value a rule watches right now, and its data quality.
+fn rule_sample(
+    def: &RuleDef,
+    vehicles: &[VehicleView],
+    telemetry: Option<&TelemetryView>,
+) -> (CwSample, Option<f64>) {
+    let by_id = |id: &str| vehicles.iter().find(|v| v.id == id);
+    match &def.metric {
+        Metric::Item(id) => match telemetry.and_then(|t| t.get(id)) {
+            None => (CwSample::Missing, None),
+            Some(i) if i.value.is_none() => (CwSample::Missing, None),
+            Some(i) if i.age_s > def.stale_after_s => (CwSample::Stale, i.value),
+            Some(i) => (CwSample::Value(i.value.unwrap_or(f64::NAN)), i.value),
+        },
+        Metric::GpAgeHours(v) => {
+            let age = by_id(v)
+                .and_then(|v| v.sources.iter().find(|s| s.kind == SourceKind::Gp))
+                .and_then(|s| s.age_s);
+            age.map_or((CwSample::Missing, None), |a| {
+                (CwSample::Value(a.abs() / 3600.0), Some(a.abs() / 3600.0))
+            })
+        }
+        Metric::ResidualKm(v) => {
+            let worst = by_id(v).and_then(|v| {
+                v.sources
+                    .iter()
+                    .filter_map(|s| s.residual)
+                    .map(|r| r.norm_km)
+                    .reduce(f64::max)
+            });
+            worst.map_or((CwSample::Missing, None), |r| (CwSample::Value(r), Some(r)))
+        }
+        Metric::TelemetryFeedDown => match telemetry {
+            None => (CwSample::Missing, None),
+            Some(t) => {
+                let down = if t.health == Health::Ok { 0.0 } else { 1.0 };
+                (CwSample::Value(down), Some(down))
+            }
+        },
+    }
+}
+
+fn group_totals(meta: &[TelemetryMeta]) -> Vec<(String, usize)> {
+    let mut out: Vec<(String, usize)> = Vec::new();
+    for m in meta {
+        match out.iter_mut().find(|(g, _)| *g == m.group) {
+            Some((_, n)) => *n += 1,
+            None => out.push((m.group.clone(), 1)),
+        }
+    }
+    out
 }
 
 fn status_label(s: &SourceStatus) -> String {
@@ -106,6 +167,11 @@ impl Model {
                 track: None,
             })
             .collect();
+        let cw_rules = cfg
+            .rules
+            .iter()
+            .map(|r| (r.clone(), Tracker::default()))
+            .collect();
         Self {
             cfg,
             vehicles,
@@ -116,6 +182,10 @@ impl Model {
             telemetry_meta: Vec::new(),
             telemetry: HashMap::new(),
             telemetry_health: None,
+            cw_rules,
+            latch: Latch::default(),
+            prev_conditions: HashSet::new(),
+            first_wall_s: None,
             prev: HashMap::new(),
             prev_eop_loaded: None,
         }
@@ -199,6 +269,89 @@ impl Model {
                 self.note(wall, l);
             }
             self.prev.insert(v.id.clone(), now);
+        }
+    }
+
+    /// Acknowledge the master caution and warning latches.
+    pub fn ack(&mut self, wall: Utc) {
+        let was = (self.latch.caution, self.latch.warning);
+        self.latch.ack(wall);
+        self.note(
+            wall,
+            format!(
+                "C&W acknowledged (latched: caution {}, warning {})",
+                if was.0 { "yes" } else { "no" },
+                if was.1 { "yes" } else { "no" }
+            ),
+        );
+    }
+
+    /// Evaluate every rule and condition for this snapshot; log transitions and update the latch.
+    fn cw_step(
+        &mut self,
+        vehicles: &[VehicleView],
+        eop: &EopView,
+        telemetry: Option<&TelemetryView>,
+        wall: Utc,
+    ) -> CwView {
+        let now_s = wall.0;
+        let mut views = Vec::new();
+        let mut events = Vec::new();
+        for (def, tracker) in &mut self.cw_rules {
+            let (sample, value) = rule_sample(def, vehicles, telemetry);
+            if let Some(tr) = tracker.update(def, now_s, sample) {
+                events.push((def.clone(), tr, value));
+            }
+            views.push(CwRuleView {
+                id: def.id.clone(),
+                title: def.title.clone(),
+                state: tracker.state(),
+                value,
+                units: def.units.clone(),
+                caution: def.caution,
+                warning: def.warning,
+                basis: def.basis.clone(),
+            });
+        }
+        for (def, tr, value) in events {
+            let v = value.map_or(String::new(), |v| format!(" ({v:.2} {})", def.units));
+            self.note(
+                wall,
+                format!(
+                    "C&W {}: {} -> {}{v}",
+                    def.id,
+                    tr.from.label(),
+                    tr.to.label()
+                ),
+            );
+            let rose = tr
+                .to
+                .severity()
+                .filter(|s| tr.from.severity().is_none_or(|f| *s > f));
+            if let Some(s) = rose {
+                self.latch.raise(s);
+            }
+        }
+        let mut conditions: Vec<Condition> =
+            mctl_core::cw::eop_condition(eop).into_iter().collect();
+        for v in vehicles {
+            conditions.extend(mctl_core::cw::vehicle_conditions(v, &self.cfg.limits));
+        }
+        let first = *self.first_wall_s.get_or_insert(now_s);
+        if now_s - first >= CW_STARTUP_GRACE_S {
+            let keys: HashSet<String> = conditions.iter().map(Condition::key).collect();
+            for c in conditions
+                .iter()
+                .filter(|c| !self.prev_conditions.contains(&c.key()))
+            {
+                self.latch.raise(c.severity);
+            }
+            self.prev_conditions = keys;
+        }
+        CwView {
+            rules: views,
+            conditions,
+            latch: self.latch,
         }
     }
 
@@ -348,6 +501,7 @@ impl Model {
         let telemetry = self.telemetry_health.clone().map(|health| TelemetryView {
             health,
             subscribed: self.telemetry_meta.len(),
+            group_totals: group_totals(&self.telemetry_meta),
             items: self
                 .telemetry_meta
                 .iter()
@@ -357,6 +511,7 @@ impl Model {
                         id: m.id.clone(),
                         group: m.group.clone(),
                         description: m.description.clone(),
+                        label: m.label.clone(),
                         units: m.units.clone(),
                         value: text.as_deref().and_then(|t| t.trim().parse().ok()),
                         text: text.clone(),
@@ -366,8 +521,10 @@ impl Model {
                 })
                 .collect(),
         });
+        let cw = self.cw_step(&vehicles, &eop_view, telemetry.as_ref(), wall);
         World {
             telemetry,
+            cw,
             t,
             clock,
             log: self.log.iter().cloned().collect(),
@@ -694,6 +851,10 @@ pub struct Engine {
 /// Apply every queued command to the clock, logging the outcome.
 fn drain_commands(rx: &Receiver<Command>, clock: &mut Clock, model: &mut Model, wall_utc: Utc) {
     while let Ok(cmd) = rx.try_recv() {
+        if cmd == Command::Ack {
+            model.ack(wall_utc);
+            continue;
+        }
         match clock.apply(&cmd, Instant::now(), wall_utc) {
             Ok(text) => model.note(wall_utc, text),
             Err(why) => model.note(wall_utc, format!("command rejected: {why}")),
@@ -1076,5 +1237,148 @@ mod tests {
         assert!(eng.bus.latest().clock.is_live());
         drop(eng);
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    fn meta(id: &str) -> TelemetryMeta {
+        TelemetryMeta {
+            id: id.into(),
+            group: "eclss".into(),
+            description: id.into(),
+            label: id.into(),
+            units: "mmHg".into(),
+        }
+    }
+
+    #[test]
+    fn a_telemetry_rule_escalates_after_persistence_latches_and_clears_on_ack() {
+        let mut m = model();
+        m.set_telemetry(vec![meta("USLAB000058"), meta("USLAB000055")]);
+        let t0 = Utc::parse("2026-10-23T12:00:00").unwrap();
+        let live = ClockView::LIVE;
+        let send = |m: &mut Model, id: &str, v: &str, at: Utc| {
+            m.apply(Event::Telemetry {
+                id: id.into(),
+                text: Some(v.into()),
+                rx: at,
+            })
+        };
+        send(&mut m, "USLAB000058", "749", t0);
+        let w = m.world_at(t0, live, t0);
+        let rule = |w: &World| {
+            w.cw.rules
+                .iter()
+                .find(|r| r.id == "iss-cabin-pressure")
+                .unwrap()
+                .state
+        };
+        assert_eq!(rule(&w), mctl_core::cw::CwState::Nom);
+        // Pressure drops below the warning threshold: nothing is declared until it has held 10 s.
+        send(&mut m, "USLAB000058", "640", t0.plus(1.0));
+        assert_eq!(
+            rule(&m.world_at(t0.plus(1.0), live, t0.plus(1.0))),
+            mctl_core::cw::CwState::Nom
+        );
+        send(&mut m, "USLAB000058", "640", t0.plus(12.0));
+        let w = m.world_at(t0.plus(12.0), live, t0.plus(12.0));
+        assert_eq!(rule(&w), mctl_core::cw::CwState::Warning);
+        assert!(w.cw.latch.warning && w.cw.latch.caution);
+        assert_eq!(
+            w.cw.worst_now(Some("iss")),
+            Some(mctl_core::cw::Severity::Warning)
+        );
+        assert!(
+            w.log
+                .iter()
+                .any(|e| e.text.contains("C&W iss-cabin-pressure: NOM -> WARN")),
+            "{:?}",
+            w.log
+        );
+        // Recovery clears the live state but the latch stays until acknowledged.
+        send(&mut m, "USLAB000058", "749", t0.plus(20.0));
+        let w = m.world_at(t0.plus(20.0), live, t0.plus(20.0));
+        assert_eq!(rule(&w), mctl_core::cw::CwState::Nom);
+        assert!(w.cw.latch.warning, "latched until acknowledged");
+        m.ack(t0.plus(21.0));
+        let w = m.world_at(t0.plus(21.0), live, t0.plus(21.0));
+        assert!(!w.cw.latch.warning && !w.cw.latch.caution);
+        assert!(w.log.iter().any(|e| e.text.contains("C&W acknowledged")));
+    }
+
+    #[test]
+    fn rules_on_missing_or_old_telemetry_are_no_data_or_stale_never_nominal() {
+        let mut m = model();
+        m.set_telemetry(vec![meta("USLAB000058")]);
+        let t0 = Utc::parse("2026-10-23T12:00:00").unwrap();
+        let rule = |w: &World| {
+            w.cw.rules
+                .iter()
+                .find(|r| r.id == "iss-cabin-pressure")
+                .unwrap()
+                .state
+        };
+        assert_eq!(
+            rule(&m.world_at(t0, ClockView::LIVE, t0)),
+            mctl_core::cw::CwState::NoData
+        );
+        m.apply(Event::Telemetry {
+            id: "USLAB000058".into(),
+            text: Some("749".into()),
+            rx: t0,
+        });
+        assert_eq!(
+            rule(&m.world_at(t0, ClockView::LIVE, t0)),
+            mctl_core::cw::CwState::Nom
+        );
+        assert_eq!(
+            rule(&m.world_at(t0.plus(300.0), ClockView::LIVE, t0.plus(300.0))),
+            mctl_core::cw::CwState::Stale,
+            "5 minutes old"
+        );
+    }
+
+    #[test]
+    fn a_new_source_condition_latches_a_caution_but_start_up_does_not() {
+        let mut m = model();
+        feed(&mut m, true, true);
+        let t = t_in_oem();
+        let w = m.world_at(t, ClockView::LIVE, t);
+        assert!(
+            !w.cw.latch.caution,
+            "inside the start-up grace nothing latches"
+        );
+        // Past the grace, standing conditions that were already there (no EOP in this model) latch once.
+        let later = t.plus(CW_STARTUP_GRACE_S + 1.0);
+        let w = m.world_at(t, ClockView::LIVE, later);
+        assert!(
+            w.cw.conditions
+                .iter()
+                .any(|c| c.text.contains("EOP ASSUMED"))
+        );
+        assert!(w.cw.latch.caution);
+        m.ack(later);
+        let w = m.world_at(t, ClockView::LIVE, later.plus(1.0));
+        assert!(
+            !w.cw.latch.caution,
+            "acknowledged, and nothing new has appeared"
+        );
+        m.apply(Event::Health {
+            key: SourceKey::Oem("iss".into()),
+            health: Health::Failing("HTTP 503".into()),
+        });
+        let w = m.world_at(t, ClockView::LIVE, later.plus(2.0));
+        assert!(w.cw.latch.caution);
+        assert!(
+            w.cw.conditions
+                .iter()
+                .any(|c| c.text.contains("FETCH FAILING"))
+        );
+        m.ack(later.plus(3.5));
+        assert!(
+            !m.world_at(t, ClockView::LIVE, later.plus(4.0))
+                .cw
+                .latch
+                .caution,
+            "a persisting condition does not re-latch"
+        );
     }
 }

@@ -304,6 +304,20 @@ impl EopTable {
     }
 }
 
+/// `1d02h`, `15h22m`, `4m10s`, `37s`; negative or non-finite values render as `--`.
+pub fn fmt_dur(secs: f64) -> String {
+    if !secs.is_finite() || secs < 0.0 {
+        return "--".into();
+    }
+    let s = secs as u64;
+    match s {
+        0..=59 => format!("{s}s"),
+        60..=3599 => format!("{}m{:02}s", s / 60, s % 60),
+        3600..=86_399 => format!("{}h{:02}m", s / 3600, (s % 3600) / 60),
+        _ => format!("{}d{:02}h", s / 86_400, (s % 86_400) / 3600),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

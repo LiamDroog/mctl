@@ -24,6 +24,8 @@ pub enum Command {
     Step(f64),
     /// Return to wall-clock time at 1x.
     Live,
+    /// Acknowledge the master caution and warning latches (not a clock command).
+    Ack,
 }
 
 #[derive(Debug, Error, PartialEq)]

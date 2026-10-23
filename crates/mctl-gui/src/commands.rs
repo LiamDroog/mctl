@@ -56,6 +56,10 @@ pub const COMMANDS: &[(&str, &str)] = &[
         "seek <time>        +2h, -30m, 90s, now, or 2026-10-25T12:00:00 (UTC)",
     ),
     ("step", "step <offset>      advance by +5m / -30s and pause"),
+    (
+        "ack",
+        "ack                acknowledge the master caution/warning latch",
+    ),
     ("pause", "pause              freeze the simulation clock"),
     ("resume", "resume             continue from a pause"),
     ("live", "live               return to wall-clock time"),
@@ -160,6 +164,7 @@ pub fn parse(line: &str, names: &Names<'_>) -> Result<Action, String> {
         "step" => eng(Command::Step(
             parse_offset(one_arg(cmd, args)?).map_err(|e| format!("step: {e}"))?,
         )),
+        "ack" => eng(Command::Ack),
         "pause" => eng(Command::Pause),
         "resume" => eng(Command::Resume),
         "live" => eng(Command::Live),

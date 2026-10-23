@@ -147,6 +147,7 @@ impl Clock {
                 *self = Self::live(wall);
                 Ok("clock: LIVE".into())
             }
+            Command::Ack => Err("acknowledge is not a clock command".into()),
         }
     }
 }

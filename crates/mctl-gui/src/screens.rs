@@ -1,14 +1,14 @@
 //! Page composition: the header, footer, every page and sub-page of the page map (DESIGN.md §9.4),
 //! the greyed `NO SOURCE` page and the help overlay. Panels are small functions so pages are layouts.
 
-use mctl_core::time::Utc;
+use mctl_core::cw::{CwState, Severity};
+use mctl_core::time::{Utc, fmt_dur};
 use mctl_core::world::{ClockMode, EopView, SourceStatus, SourceView};
 
 use crate::commands::COMMANDS;
 use crate::grid::{CellRect, Grid, Limit, Role, Style};
 use crate::page::{
-    Layout, Lines, MIN_COLS, MIN_ROWS, PageInput, cw_lines, fmt_dur, quality_text, source_row,
-    upcoming_events, worst,
+    Layout, Lines, MIN_COLS, MIN_ROWS, PageInput, quality_text, source_row, upcoming_events,
 };
 use crate::pages::{ALL_PAGES, Availability, Page, availability};
 
@@ -56,8 +56,7 @@ fn sub_title(inp: &PageInput<'_>) -> String {
 fn header(grid: &mut Grid, inp: &PageInput<'_>) {
     let cols = grid.cols;
     let (bright, _dim) = (Style::new(Role::Bright), Style::new(Role::Dim));
-    let cw = cw_lines(inp.world, inp.vehicle, inp.limits);
-    let severity = worst(&cw);
+    let (severity, latched) = master_state(inp);
     let (name, norad) = inp
         .vehicle
         .map_or(("--".to_owned(), 0), |v| (v.name.clone(), v.norad));
@@ -74,11 +73,13 @@ fn header(grid: &mut Grid, inp: &PageInput<'_>) {
         .vehicle
         .and_then(|v| v.met_epoch)
         .map_or("--".to_owned(), |e| fmt_met(inp.world.t.minus(e)));
-    let annunciator = match severity {
-        Some(Limit::Warning) => " WARN ",
-        Some(Limit::Caution) => " CAUT ",
-        Some(Limit::Stale) => " STALE ",
-        None => " NOM ",
+    let annunciator = match (severity, latched) {
+        (Some(Severity::Warning), true) => " WARN* ",
+        (Some(Severity::Warning), false) => " WARN ",
+        (Some(Severity::Caution), true) => " CAUT* ",
+        (Some(Severity::Caution), false) => " CAUT ",
+        (Some(Severity::Stale), _) => " STALE ",
+        (None, _) => " NOM ",
     };
     let budget = cols.saturating_sub(annunciator.len() + 1);
     let (clock, clock_style) = clock_text(inp);
@@ -99,7 +100,7 @@ fn header(grid: &mut Grid, inp: &PageInput<'_>) {
         budget + 1,
         0,
         annunciator,
-        severity.map_or(Style::new(Role::Nominal), Style::limit),
+        severity.map_or(Style::new(Role::Nominal), |s| Style::limit(limit_of(s))),
     );
 }
 
@@ -302,36 +303,109 @@ fn elements_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
 fn subsystem_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
     boxed(grid, rect, "SUBSYSTEM SUMMARY");
     let mut l = Lines::new(grid, rect);
-    if !inp.world.clock.is_live() {
-        l.line("NOT LIVE", Style::limit(Limit::Caution));
+    telemetry_banner(&mut l, inp);
+    let Some(t) = inp.world.telemetry.as_ref() else {
+        let why = match availability(Page::Gnc, 0, inp.vehicle) {
+            Availability::NoSource(why) => why.to_uppercase(),
+            Availability::Available => "NO TELEMETRY FEED".to_owned(),
+        };
+        l.no_data(&format!("NO SOURCE: {why}"));
+        return;
+    };
+    for (group, title) in TELEMETRY_GROUPS {
+        let got = t.items.iter().filter(|i| i.group == *group).count();
+        let total = t.total_in(group);
+        let style = if got == 0 {
+            Style::limit(Limit::Stale)
+        } else {
+            Style::new(Role::Fg)
+        };
+        l.line(
+            &format!("{title:<10} {got:>3}/{total:<3} ITEMS RECEIVED"),
+            style,
+        );
     }
-    l.no_data(match availability(Page::Gnc, 0, inp.vehicle) {
-        Availability::NoSource(why) => {
-            Box::leak(format!("NO SOURCE: {}", why.to_uppercase()).into_boxed_str())
-        }
-        Availability::Available => "",
-    });
+}
+
+fn limit_of(s: Severity) -> Limit {
+    match s {
+        Severity::Warning => Limit::Warning,
+        Severity::Caution => Limit::Caution,
+        Severity::Stale => Limit::Stale,
+    }
+}
+
+/// Severity to annunciate (live, or latched until acknowledged) and whether it is only latched.
+fn master_state(inp: &PageInput<'_>) -> (Option<Severity>, bool) {
+    let cw = &inp.world.cw;
+    let live = cw.worst_now(inp.vehicle.map(|v| v.id.as_str()));
+    let latched = if cw.latch.warning {
+        Some(Severity::Warning)
+    } else if cw.latch.caution {
+        Some(Severity::Caution)
+    } else {
+        None
+    };
+    let shown = live.max(latched);
+    (shown, latched.is_some())
 }
 
 fn cw_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
     let dim = Style::new(Role::Dim);
-    let cw = cw_lines(inp.world, inp.vehicle, inp.limits);
-    boxed(grid, rect, "CAUTION & WARNING  SOURCE HEALTH");
+    let cw = &inp.world.cw;
+    boxed(grid, rect, "CAUTION & WARNING");
     let mut l = Lines::new(grid, rect);
-    if cw.is_empty() {
-        l.line("NOM  NO SOURCE ANOMALIES", Style::new(Role::Nominal));
-    }
-    for c in &cw {
-        let (tag, style) = match c.severity {
-            Some(Limit::Warning) => ("WARN ", Style::limit(Limit::Warning)),
-            Some(Limit::Caution) => ("CAUT ", Style::limit(Limit::Caution)),
-            Some(Limit::Stale) => ("STALE", Style::limit(Limit::Stale)),
-            None => ("NOM  ", Style::new(Role::Nominal)),
+    let vehicle = inp.vehicle.map(|v| v.id.as_str());
+    if cw.latch.warning || cw.latch.caution {
+        let which = if cw.latch.warning {
+            "WARNING"
+        } else {
+            "CAUTION"
         };
-        l.line(&format!("{tag} {}", c.text), style);
+        l.line(
+            &format!("MASTER {which} LATCHED  PRESS A TO ACKNOWLEDGE"),
+            Style::limit(if cw.latch.warning {
+                Limit::Warning
+            } else {
+                Limit::Caution
+            }),
+        );
+    }
+    let mut shown = 0;
+    for c in cw
+        .conditions
+        .iter()
+        .filter(|c| c.vehicle.is_none() || c.vehicle.as_deref() == vehicle)
+    {
+        l.line(
+            &format!("{:<5} {}", c.severity.label(), c.text),
+            Style::limit(limit_of(c.severity)),
+        );
+        shown += 1;
+    }
+    for r in cw.rules.iter().filter(|r| r.state != CwState::Nom) {
+        let v = r
+            .value
+            .map_or(String::new(), |v| format!(" {v:.2} {}", r.units));
+        let style = r
+            .state
+            .severity()
+            .map_or(dim, |s| Style::limit(limit_of(s)));
+        l.line(&format!("{:<5} {}{v}", r.state.label(), r.title), style);
+        shown += 1;
+    }
+    if shown == 0 {
+        l.line(
+            "NOM   NO ACTIVE CAUTIONS OR WARNINGS",
+            Style::new(Role::Nominal),
+        );
     }
     l.row = l.rect.rows.saturating_sub(1);
-    l.line("RULE ENGINE (TLE AGE, LIMITS): M3", dim);
+    let nom = cw.rules.iter().filter(|r| r.state == CwState::Nom).count();
+    l.line(
+        &format!("{nom}/{} RULES NOM  (F10 TAB: DETAIL)", cw.rules.len()),
+        dim,
+    );
 }
 
 fn sources_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
@@ -517,6 +591,11 @@ fn traj_elements(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     Layout::default()
 }
 
+/// Largest disagreement between the quaternion-derived and the reported attitude errors that still
+/// counts as consistent. The two are sampled up to a few seconds apart at rates up to ~0.07 deg/s, and
+/// the feed rounds, so 0.5 deg is generous for a hold and tight enough to catch a wrong convention.
+const ADI_CONSISTENCY_TOL_DEG: f64 = 0.5;
+
 /// Telemetry older than this is shown STALE. Labelled constant: the feed updates items every few
 /// seconds at most, so this is generous (DESIGN.md FR-6 defines the STALE quality).
 const TELEMETRY_STALE_S: f64 = 30.0;
@@ -555,7 +634,7 @@ fn telemetry_rows(l: &mut Lines<'_>, inp: &PageInput<'_>, group: &str) {
             Style::new(Role::Fg)
         };
         let desc: String = i
-            .description
+            .label
             .chars()
             .take(l.rect.cols.saturating_sub(44))
             .collect();
@@ -591,10 +670,28 @@ fn gnc_adi(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
                 ),
                 Style::new(Role::Fg),
             );
-            l.line(
-                "QUATERNION ORDER/AXES UNVERIFIED (R4): SCALAR-FIRST 3-2-1 ASSUMED",
-                Style::limit(Limit::Caution),
-            );
+            match crate::adi::consistency(inp.world.telemetry.as_ref()) {
+                Some(c) if c.max_diff_deg() <= ADI_CONSISTENCY_TOL_DEG => {
+                    l.line(
+                        &format!(
+                            "CONVENTION CHECK OK (QUAT DIFF VS REPORTED ERROR, MAX {:.2} DEG)",
+                            c.max_diff_deg()
+                        ),
+                        Style::new(Role::Dim),
+                    );
+                }
+                Some(c) => l.line(
+                    &format!(
+                        "CONVENTION CHECK FAILED: MAX DIFF {:.2} DEG; ADI MAY BE WRONG",
+                        c.max_diff_deg()
+                    ),
+                    Style::limit(Limit::Warning),
+                ),
+                None => l.line(
+                    "CONVENTION CHECK: COMMANDED OR ERROR ITEMS NOT RECEIVED",
+                    Style::limit(Limit::Caution),
+                ),
+            }
         }
         Err(why) => l.line(
             &format!("OFF: {}", why.to_uppercase()),
@@ -616,37 +713,48 @@ fn gnc_adi(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     }
 }
 
-fn gnc_rates(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
+/// Telemetry groups in display order, with their titles.
+const TELEMETRY_GROUPS: &[(&str, &str)] = &[
+    ("attitude", "ATTITUDE"),
+    ("cmg", "CMG"),
+    ("eps", "EPS"),
+    ("tcs", "TCS"),
+    ("eclss", "ECLSS"),
+    ("comm", "COMM"),
+];
+
+/// A full-page table of one telemetry group.
+fn group_table(
+    grid: &mut Grid,
+    inp: &PageInput<'_>,
+    title: &str,
+    group: &str,
+    note: &str,
+) -> Layout {
     let (top, h) = body(grid.rows);
     let rect = CellRect::new(0, top, grid.cols, h);
+    let counts = inp.world.telemetry.as_ref().map_or((0, 0), |t| {
+        (
+            t.items.iter().filter(|i| i.group == group).count(),
+            t.total_in(group),
+        )
+    });
     boxed(
         grid,
         rect,
-        "GNC  ATTITUDE ITEMS (LABELS FROM ISS MIMIC SPREADSHEET, UNVERIFIED)",
+        &format!("{title}  {}/{} ITEMS RECEIVED", counts.0, counts.1),
     );
     let mut l = Lines::new(grid, rect);
     telemetry_banner(&mut l, inp);
     l.line(
-        "ITEM         VALUE          UNITS  AGE",
+        "ITEM         VALUE          UNITS  AGE    LABEL (AS PUBLISHED BY ISS MIMIC; UNVERIFIED)",
         Style::new(Role::Dim),
     );
-    telemetry_rows(&mut l, inp, "attitude");
-    l.row += 1;
-    l.line("NOTE: ERROR ITEMS SAY (deg) IN THE DESCRIPTION BUT RAD IN UNITS; THE VALUES (~0.1) FIT DEGREES.", Style::new(Role::Dim));
-    Layout::default()
-}
-
-fn eps_arrays(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
-    let (top, h) = body(grid.rows);
-    let rect = CellRect::new(0, top, grid.cols, h);
-    boxed(grid, rect, "EPS  SARJ AND BETA GIMBAL ANGLES");
-    let mut l = Lines::new(grid, rect);
-    telemetry_banner(&mut l, inp);
-    l.line(
-        "ITEM         VALUE          UNITS  AGE",
-        Style::new(Role::Dim),
-    );
-    telemetry_rows(&mut l, inp, "joint");
+    telemetry_rows(&mut l, inp, group);
+    if !note.is_empty() {
+        l.row = l.rect.rows.saturating_sub(1);
+        l.line(note, Style::new(Role::Dim));
+    }
     Layout::default()
 }
 
@@ -800,6 +908,61 @@ fn sys_sources(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     Layout::default()
 }
 
+fn sys_rules(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
+    let (top, h) = body(grid.rows);
+    let rect = CellRect::new(0, top, grid.cols, h);
+    let cw = &inp.world.cw;
+    boxed(
+        grid,
+        rect,
+        &format!(
+            "C&W RULES  {}  EDIT IN ~/.config/mctl/config.toml",
+            cw.rules.len()
+        ),
+    );
+    let mut l = Lines::new(grid, rect);
+    l.line(
+        "STATE   RULE                          VALUE        CAUTION    WARNING    BASIS",
+        Style::new(Role::Dim),
+    );
+    for r in &cw.rules {
+        let th = |t: Option<f64>| t.map_or("--".to_owned(), |v| format!("{v}"));
+        let value = r
+            .value
+            .map_or("--".to_owned(), |v| format!("{v:.2} {}", r.units));
+        let style = r
+            .state
+            .severity()
+            .map_or(Style::new(Role::Fg), |s| Style::limit(limit_of(s)));
+        l.line(
+            &format!(
+                "{:<7} {:<29} {value:<12} {:<10} {:<10} {}",
+                r.state.label(),
+                r.title,
+                th(r.caution),
+                th(r.warning),
+                r.basis.to_uppercase()
+            ),
+            style,
+        );
+    }
+    l.row += 1;
+    l.line(
+        &format!(
+            "{} STANDING CONDITIONS (SOURCE HEALTH):",
+            cw.conditions.len()
+        ),
+        Style::new(Role::Dim),
+    );
+    for c in &cw.conditions {
+        l.line(
+            &format!("  {:<5} {}", c.severity.label(), c.text),
+            Style::limit(limit_of(c.severity)),
+        );
+    }
+    Layout::default()
+}
+
 fn sys_settings(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     let (top, h) = body(grid.rows);
     let rect = CellRect::new(0, top, grid.cols, h);
@@ -916,7 +1079,7 @@ fn help_overlay(grid: &mut Grid) {
         "TAB / SHIFT-TAB  next / previous sub-page",
         "V              next vehicle              T   next theme",
         "SPACE          pause / resume            [ ]  halve / double warp",
-        "0              return to LIVE            :   command line",
+        "0              return to LIVE            :   command line      A   acknowledge C&W",
         "ARROWS         orbit camera              +/-  zoom",
         "MOUSE          drag inside the ORBIT MAP to orbit; wheel there to zoom",
         "Z alt x1/2/5/10  F inertial/Earth-fixed  C focus Earth/vehicle  X GCRF/ITRF",
@@ -963,11 +1126,40 @@ pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             (Page::Traj, 1) => traj_ground(grid, inp),
             (Page::Traj, _) => traj_elements(grid, inp),
             (Page::Gnc, 0) => gnc_adi(grid, inp),
-            (Page::Gnc, 1) => gnc_rates(grid, inp),
-            (Page::Eps, 0) => eps_arrays(grid, inp),
+            (Page::Gnc, 1) => group_table(
+                grid,
+                inp,
+                "GNC  ATTITUDE ITEMS",
+                "attitude",
+                "ERROR AND RATE ITEMS ARE deg AND deg/s (CHECKED: docs/step3/attitude-verification.md), NOT THE RAD THE SPREADSHEET SAYS.",
+            ),
+            (Page::Gnc, _) => group_table(
+                grid,
+                inp,
+                "GNC  CMG",
+                "cmg",
+                "THE PUBLIC FEED GIVES CMG MOMENTUM AS A MAGNITUDE ONLY; NO PER-AXIS MOMENTUM VECTOR IS PUBLISHED.",
+            ),
+            (Page::Eps, _) => group_table(
+                grid,
+                inp,
+                "EPS  ARRAYS, SARJ, BGA",
+                "eps",
+                "PVCU ARRAY NAMES ARE AS THE SPREADSHEET PUBLISHES THEM (SOME REPEAT, E.g. 3B); NOT CORRECTED.",
+            ),
+            (Page::Tcs, 0) => group_table(grid, inp, "TCS  LOOPS AND COOLING", "tcs", ""),
+            (Page::Tcs, _) => group_table(
+                grid,
+                inp,
+                "ECLSS  ATMOSPHERE, WATER, O2",
+                "eclss",
+                "PRESSURE AND TEMPERATURE UNITS ARE AS PUBLISHED (OFTEN 'CNT'); SEE THE LABEL.",
+            ),
+            (Page::Comm, _) => group_table(grid, inp, "COMM  S-BAND, KU-BAND, UHF", "comm", ""),
             (Page::Sys, 0) => sys_events(grid, inp),
             (Page::Sys, 1) => sys_sources(grid, inp),
-            (Page::Sys, _) => sys_settings(grid, inp),
+            (Page::Sys, 2) => sys_settings(grid, inp),
+            (Page::Sys, _) => sys_rules(grid, inp),
             (p, _) => no_source(grid, inp, &format!("{} is not implemented", p.title())),
         },
     };

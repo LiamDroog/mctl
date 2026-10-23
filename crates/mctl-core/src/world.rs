@@ -170,6 +170,7 @@ pub struct TelemetryItem {
     pub group: String,
     /// Documentation text from the item list; not verified against the vehicle.
     pub description: String,
+    pub label: String,
     pub units: String,
     /// The numeric value, when the feed's text parses as one.
     pub value: Option<f64>,
@@ -187,11 +188,56 @@ pub struct TelemetryView {
     pub items: Vec<TelemetryItem>,
     /// Total items the feed is subscribed to.
     pub subscribed: usize,
+    /// Subscribed item count per group.
+    pub group_totals: Vec<(String, usize)>,
 }
 
 impl TelemetryView {
+    /// Items subscribed in `group`, received or not.
+    pub fn total_in(&self, group: &str) -> usize {
+        self.group_totals
+            .iter()
+            .find(|(g, _)| g == group)
+            .map_or(0, |(_, n)| *n)
+    }
+
     pub fn get(&self, id: &str) -> Option<&TelemetryItem> {
         self.items.iter().find(|i| i.id == id)
+    }
+}
+
+/// One threshold rule's published state.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CwRuleView {
+    pub id: String,
+    pub title: String,
+    pub state: crate::cw::CwState,
+    /// The watched value, when there is one.
+    pub value: Option<f64>,
+    pub units: String,
+    pub caution: Option<f64>,
+    pub warning: Option<f64>,
+    pub basis: String,
+}
+
+/// Caution and warning picture: rules, standing conditions and the master latches (FR-40..42).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct CwView {
+    pub rules: Vec<CwRuleView>,
+    pub conditions: Vec<crate::cw::Condition>,
+    pub latch: crate::cw::Latch,
+}
+
+impl CwView {
+    /// Worst severity annunciating now, for the given vehicle (global conditions always count).
+    pub fn worst_now(&self, vehicle: Option<&str>) -> Option<crate::cw::Severity> {
+        let r = self.rules.iter().filter_map(|r| r.state.severity());
+        let c = self
+            .conditions
+            .iter()
+            .filter(|c| c.vehicle.is_none() || c.vehicle.as_deref() == vehicle)
+            .map(|c| c.severity);
+        r.chain(c).max()
     }
 }
 
@@ -206,6 +252,7 @@ pub struct World {
     pub eop: EopView,
     /// ISSLIVE telemetry, present only when a configured vehicle uses it.
     pub telemetry: Option<TelemetryView>,
+    pub cw: CwView,
     pub vehicles: Vec<VehicleView>,
 }
 
@@ -221,6 +268,7 @@ impl World {
                 reason: "starting".into(),
             },
             telemetry: None,
+            cw: CwView::default(),
             vehicles: Vec::new(),
         }
     }

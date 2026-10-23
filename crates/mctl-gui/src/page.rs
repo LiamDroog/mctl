@@ -6,7 +6,7 @@
 use egui::{Painter, Pos2, Stroke};
 use mctl_core::config::Limits;
 use mctl_core::time::Utc;
-use mctl_core::world::{EopView, Health, SourceStatus, SourceView, Track, VehicleView, World};
+use mctl_core::world::{Health, SourceStatus, SourceView, Track, VehicleView, World};
 
 use crate::globe::Camera;
 use crate::grid::{CellRect, Grid, Limit, Role, Style};
@@ -60,112 +60,10 @@ pub struct Layout {
     pub adi: Option<CellRect>,
 }
 
-/// A caution or warning line derived from source health (a stand-in for the M3 C&W engine).
-#[derive(Debug, Clone, PartialEq)]
-pub struct CwLine {
-    pub severity: Option<Limit>,
-    pub text: String,
-}
-
-/// `1d02h`, `15h22m`, `4m10s`, `37s`; negative or non-finite values render as `--`.
-pub fn fmt_dur(secs: f64) -> String {
-    if !secs.is_finite() || secs < 0.0 {
-        return "--".into();
-    }
-    let s = secs as u64;
-    match s {
-        0..=59 => format!("{s}s"),
-        60..=3599 => format!("{}m{:02}s", s / 60, s % 60),
-        3600..=86_399 => format!("{}h{:02}m", s / 3600, (s % 3600) / 60),
-        _ => format!("{}d{:02}h", s / 86_400, (s % 86_400) / 3600),
-    }
-}
+pub use mctl_core::time::fmt_dur;
 
 pub(crate) fn quality_text(sol: &mctl_core::world::Solution) -> String {
     format!("{} ({})", sol.quality.label(), sol.source.label())
-}
-
-/// Derive the caution/warning list for the displayed vehicle from source health and residuals.
-pub fn cw_lines(world: &World, v: Option<&VehicleView>, limits: &Limits) -> Vec<CwLine> {
-    let mut out = Vec::new();
-    let mut add = |severity, text: String| out.push(CwLine { severity, text });
-    let Some(v) = v else {
-        add(Some(Limit::Warning), "NO VEHICLE DATA YET".into());
-        return out;
-    };
-    if let EopView::Assumed { .. } = world.eop {
-        add(
-            Some(Limit::Caution),
-            "EOP ASSUMED 0 (UT1 UP TO 0.9 S)".into(),
-        );
-    }
-    if v.solution.is_none() {
-        add(
-            Some(Limit::Warning),
-            format!("{} NO TRAJECTORY SOLUTION", v.name),
-        );
-    }
-    for s in &v.sources {
-        match (&s.health, &s.status) {
-            (_, SourceStatus::Failed(why)) => add(
-                Some(Limit::Warning),
-                format!("{} {} FAILED: {}", v.name, s.kind.label(), why),
-            ),
-            (Health::Failing(why), _) => add(
-                Some(Limit::Caution),
-                format!("{} {} FETCH FAILING: {}", v.name, s.kind.label(), why),
-            ),
-            (Health::Offline, _) => add(
-                Some(Limit::Stale),
-                format!("{} {} OFFLINE, CACHE ONLY", v.name, s.kind.label()),
-            ),
-            _ => {}
-        }
-        if s.status == SourceStatus::Stale {
-            add(
-                Some(Limit::Caution),
-                format!(
-                    "{} {} DATA STALE ({})",
-                    v.name,
-                    s.kind.label(),
-                    s.age_s.map_or("--".into(), fmt_dur)
-                ),
-            );
-        }
-        if let Some(r) = s.residual {
-            let (a, b) = (
-                v.solution.as_ref().map_or("?", |x| x.source.label()),
-                s.kind.label(),
-            );
-            if r.norm_km >= limits.residual_warning_km {
-                add(
-                    Some(Limit::Warning),
-                    format!("{a} vs {b} DIFFER {:.1} KM", r.norm_km),
-                );
-            } else if r.norm_km >= limits.residual_caution_km {
-                add(
-                    Some(Limit::Caution),
-                    format!("{a} vs {b} DIFFER {:.1} KM", r.norm_km),
-                );
-            }
-        }
-    }
-    if let Some(sol) = &v.solution
-        && sol.quality == mctl_core::state::Quality::Stale
-    {
-        add(
-            Some(Limit::Caution),
-            format!("{} SOLUTION IS STALE", v.name),
-        );
-    }
-    out
-}
-
-/// Worst severity in `lines` (Warning > Caution > Stale > none).
-pub fn worst(lines: &[CwLine]) -> Option<Limit> {
-    [Limit::Warning, Limit::Caution, Limit::Stale]
-        .into_iter()
-        .find(|s| lines.iter().any(|l| l.severity == Some(*s)))
 }
 
 /// An upcoming event read off the sampled track.
@@ -623,94 +521,6 @@ mod tests {
         }
     }
 
-    fn world_with(eop: EopView) -> World {
-        World {
-            t: Utc(1.0e9),
-            clock: mctl_core::world::ClockView::LIVE,
-            log: vec![],
-            telemetry: None,
-            seq: 1,
-            eop,
-            vehicles: vec![],
-        }
-    }
-
-    #[test]
-    fn durations_format_compactly() {
-        assert_eq!(fmt_dur(37.0), "37s");
-        assert_eq!(fmt_dur(250.0), "4m10s");
-        assert_eq!(fmt_dur(55_320.0), "15h22m");
-        assert_eq!(fmt_dur(100_000.0), "1d03h");
-        assert_eq!(fmt_dur(-1.0), "--");
-        assert_eq!(fmt_dur(f64::NAN), "--");
-    }
-
-    #[test]
-    fn cw_lines_grade_residuals_by_the_configured_limits() {
-        let loaded = EopView::Loaded {
-            covers_to: Utc(2.0e9),
-            fetched_at: None,
-            from_cache: false,
-        };
-        let w = world_with(loaded.clone());
-        assert!(
-            cw_lines(
-                &w,
-                Some(&view(SourceStatus::Standby, Health::Ok, Some(1.0))),
-                &limits()
-            )
-            .is_empty(),
-            "small residual is nominal"
-        );
-        let caut = cw_lines(
-            &w,
-            Some(&view(SourceStatus::Standby, Health::Ok, Some(7.0))),
-            &limits(),
-        );
-        assert_eq!(worst(&caut), Some(Limit::Caution));
-        let warn = cw_lines(
-            &w,
-            Some(&view(SourceStatus::Standby, Health::Ok, Some(25.0))),
-            &limits(),
-        );
-        assert_eq!(worst(&warn), Some(Limit::Warning));
-    }
-
-    #[test]
-    fn cw_lines_report_health_staleness_failures_and_missing_eop() {
-        let assumed = world_with(EopView::Assumed { reason: "x".into() });
-        let l = cw_lines(
-            &assumed,
-            Some(&view(
-                SourceStatus::Stale,
-                Health::Failing("503".into()),
-                None,
-            )),
-            &limits(),
-        );
-        let text: Vec<&str> = l.iter().map(|c| c.text.as_str()).collect();
-        assert!(text.iter().any(|t| t.contains("EOP ASSUMED")));
-        assert!(text.iter().any(|t| t.contains("STALE")));
-        assert!(text.iter().any(|t| t.contains("FETCH FAILING: 503")));
-        let f = cw_lines(
-            &assumed,
-            Some(&view(
-                SourceStatus::Failed("decayed".into()),
-                Health::Ok,
-                None,
-            )),
-            &limits(),
-        );
-        assert_eq!(worst(&f), Some(Limit::Warning));
-        let none = cw_lines(&assumed, None, &limits());
-        assert_eq!(
-            worst(&none),
-            Some(Limit::Warning),
-            "no vehicle data is never silent"
-        );
-        assert_eq!(worst(&[]), None);
-    }
-
     fn point(t: f64, z: f64, illum: f32) -> TrackPoint {
         TrackPoint {
             t: Utc(t),
@@ -760,5 +570,230 @@ mod tests {
         assert!(terminator_lat_deg(180.0, 0.0, 23.4) > 60.0);
         // 90 degrees from the Sun the terminator crosses the equator.
         assert!(terminator_lat_deg(90.0, 0.0, 23.4).abs() < 1e-9);
+    }
+
+    use crate::globe::Camera;
+    use crate::grid::Grid;
+    use crate::pages::{ALL_PAGES, Page};
+    use crate::render::EffectToggles;
+    use crate::theme::Theme;
+    use mctl_core::cw::{Condition, CwState, Latch, Severity};
+    use mctl_core::world::{CwRuleView, CwView};
+
+    fn bare_world() -> World {
+        World::empty(Utc(1.0e9))
+    }
+
+    /// Render a page into a fresh grid of the given size.
+    fn render_page(
+        world: &World,
+        vehicle: Option<&VehicleView>,
+        page: Page,
+        sub: usize,
+        cols: usize,
+        rows: usize,
+    ) -> (Grid, crate::page::Layout) {
+        let theme: Theme = crate::theme::embedded().unwrap().remove(0);
+        let (camera, limits, settings) = (Camera::default(), limits(), vec![]);
+        let mut grid = Grid::new(cols, rows);
+        let layout = crate::screens::render(
+            &mut grid,
+            &PageInput {
+                world,
+                vehicle,
+                theme: &theme,
+                toggles: EffectToggles::from_theme(&theme.effects),
+                camera: &camera,
+                show_ecef: false,
+                limits: &limits,
+                frame_ms: 16.7,
+                gpu_ms: None,
+                adapter: "test",
+                size_px: [(cols * 12) as u32, (rows * 24) as u32],
+                page,
+                sub,
+                command: None,
+                status: None,
+                help: false,
+                settings: &settings,
+            },
+        );
+        (grid, layout)
+    }
+
+    #[test]
+    fn every_page_renders_at_every_size_without_panicking_and_keeps_header_and_footer() {
+        let mut v = view(SourceStatus::Active, Health::Ok, None);
+        v.telemetry = Some("isslive".into());
+        let w = bare_world();
+        for (cols, rows) in [(160, 45), (100, 30), (60, 20), (40, 12), (20, 6), (3, 3)] {
+            for page in ALL_PAGES {
+                for sub in 0..page.subpages().len() {
+                    for vehicle in [Some(&v), None] {
+                        let (g, _) = render_page(&w, vehicle, page, sub, cols, rows);
+                        if cols >= 100 {
+                            assert!(
+                                g.row_text(0).contains(page.title()),
+                                "{page:?}/{sub} {cols}x{rows}: {}",
+                                g.row_text(0)
+                            );
+                            assert!(
+                                g.row_text(rows - 1).contains("F1 MASTER")
+                                    || g.row_text(rows - 1).contains("[F1 MASTER]"),
+                                "footer legend at {cols}x{rows}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn pages_without_a_source_say_why_and_never_show_invented_numbers() {
+        let hubble = view(SourceStatus::Active, Health::Ok, None);
+        let w = bare_world();
+        let (g, layout) = render_page(&w, Some(&hubble), Page::Gnc, 0, 160, 45);
+        let t = g.text();
+        assert!(
+            t.contains("NO SOURCE") && t.contains("HAS NO TELEMETRY SOURCE"),
+            "{t}"
+        );
+        assert!(layout.adi.is_none(), "no ADI without a telemetry source");
+        let (g, _) = render_page(&w, Some(&hubble), Page::Pass, 0, 160, 45);
+        assert!(g.text().contains("M4"));
+    }
+
+    #[test]
+    fn pages_that_draw_pixels_report_where_so_mouse_and_painters_agree() {
+        let v = view(SourceStatus::Active, Health::Ok, None);
+        let w = bare_world();
+        let (_, master) = render_page(&w, Some(&v), Page::Master, 0, 160, 45);
+        assert!(master.globe.is_some() && master.ground.is_some() && master.eclipse.is_some());
+        let (_, orbit) = render_page(&w, Some(&v), Page::Traj, 0, 160, 45);
+        assert!(orbit.globe.is_some() && orbit.ground.is_none());
+        let (_, ground) = render_page(&w, Some(&v), Page::Traj, 1, 160, 45);
+        assert!(ground.globe.is_none() && ground.ground.is_some());
+        let (_, sys) = render_page(&w, Some(&v), Page::Sys, 0, 160, 45);
+        assert!(
+            sys.globe.is_none(),
+            "text pages have no orbit map, so no mouse rotation target"
+        );
+    }
+
+    #[test]
+    fn the_cw_panel_shows_latched_conditions_and_active_rules() {
+        let v = view(SourceStatus::Active, Health::Ok, None);
+        let mut w = bare_world();
+        w.cw = CwView {
+            rules: vec![CwRuleView {
+                id: "r".into(),
+                title: "Cabin pressure".into(),
+                state: CwState::Warning,
+                value: Some(640.0),
+                units: "mmHg".into(),
+                caution: Some(700.0),
+                warning: Some(650.0),
+                basis: "illustrative".into(),
+            }],
+            conditions: vec![
+                Condition {
+                    vehicle: Some("iss".into()),
+                    severity: Severity::Caution,
+                    text: "ISS OEM FETCH FAILING: 503".into(),
+                },
+                Condition {
+                    vehicle: Some("other".into()),
+                    severity: Severity::Warning,
+                    text: "OTHER VEHICLE PROBLEM".into(),
+                },
+            ],
+            latch: Latch {
+                caution: true,
+                warning: true,
+                acked_at: None,
+            },
+        };
+        let (g, _) = render_page(&w, Some(&v), Page::Master, 0, 160, 45);
+        let t = g.text();
+        assert!(t.contains("MASTER WARNING LATCHED"), "{t}");
+        assert!(t.contains("Cabin pressure 640.00 mmHg"));
+        assert!(t.contains("FETCH FAILING: 503"));
+        assert!(
+            !t.contains("OTHER VEHICLE PROBLEM"),
+            "other vehicles' conditions are not shown"
+        );
+        assert!(
+            g.row_text(0).contains("WARN*"),
+            "latched warning is starred: {}",
+            g.row_text(0)
+        );
+        w.cw.latch = Latch::default();
+        w.cw.rules[0].state = CwState::Nom;
+        w.cw.conditions.clear();
+        let (g, _) = render_page(&w, Some(&v), Page::Master, 0, 160, 45);
+        assert!(g.text().contains("NO ACTIVE CAUTIONS OR WARNINGS"));
+        assert!(g.row_text(0).contains("NOM"));
+    }
+
+    #[test]
+    fn the_sys_rules_page_lists_each_rule_with_its_basis() {
+        let v = view(SourceStatus::Active, Health::Ok, None);
+        let mut w = bare_world();
+        w.cw.rules.push(CwRuleView {
+            id: "r".into(),
+            title: "Lab ppCO2".into(),
+            state: CwState::NoData,
+            value: None,
+            units: "mmHg".into(),
+            caution: Some(6.0),
+            warning: Some(8.0),
+            basis: "illustrative, not a flight rule".into(),
+        });
+        let (g, _) = render_page(&w, Some(&v), Page::Sys, 3, 160, 45);
+        let t = g.text();
+        assert!(
+            t.contains("Lab ppCO2")
+                && t.contains("NO DATA")
+                && t.contains("ILLUSTRATIVE, NOT A FLIGHT RULE"),
+            "{t}"
+        );
+    }
+
+    #[test]
+    fn the_help_overlay_hides_what_is_under_it() {
+        let v = view(SourceStatus::Active, Health::Ok, None);
+        let w = bare_world();
+        let theme: Theme = crate::theme::embedded().unwrap().remove(0);
+        let (camera, limits) = (Camera::default(), limits());
+        let mut grid = Grid::new(160, 45);
+        crate::screens::render(
+            &mut grid,
+            &PageInput {
+                world: &w,
+                vehicle: Some(&v),
+                theme: &theme,
+                toggles: EffectToggles::from_theme(&theme.effects),
+                camera: &camera,
+                show_ecef: false,
+                limits: &limits,
+                frame_ms: 1.0,
+                gpu_ms: None,
+                adapter: "t",
+                size_px: [1920, 1080],
+                page: Page::Master,
+                sub: 0,
+                command: None,
+                status: None,
+                help: true,
+                settings: &[],
+            },
+        );
+        let t = grid.text();
+        assert!(t.contains("KEYS") && t.contains("COMMANDS") && t.contains("acknowledge C&W"));
+        assert!(
+            t.contains("warp <rate>"),
+            "every command is documented in the help"
+        );
     }
 }
