@@ -81,6 +81,8 @@ pub struct Model {
     active_site: usize,
     /// The user picked or added a site, so a late location lookup must not replace it.
     site_pinned: bool,
+    trend_worker: Option<crate::trends::Worker>,
+    trends_latest: Option<Arc<mctl_core::world::TrendSet>>,
     pass_worker: Option<crate::passes::Worker>,
     pass_entries: HashMap<String, PassEntry>,
     job_counter: u64,
@@ -244,6 +246,8 @@ impl Model {
             sites,
             active_site,
             site_pinned: false,
+            trend_worker: None,
+            trends_latest: None,
             pass_worker: None,
             pass_entries: HashMap::new(),
             job_counter: 0,
@@ -342,6 +346,27 @@ impl Model {
                 self.note(wall, l);
             }
             self.prev.insert(v.id.clone(), now);
+        }
+    }
+
+    /// Serve trend requests from the recording at `db`.
+    pub fn enable_trends(&mut self, db: std::path::PathBuf) {
+        self.trend_worker = Some(crate::trends::Worker::start(db));
+    }
+
+    /// Ask for trend plots; the result appears in later snapshots (a log line when there is no
+    /// recording to read).
+    pub fn request_trend(&mut self, vehicle: &str, window_s: f64, wall: Utc) {
+        match &self.trend_worker {
+            Some(w) => w.submit(crate::trends::Job {
+                vehicle: vehicle.to_owned(),
+                now: wall,
+                window_s,
+            }),
+            None => self.note(
+                wall,
+                "trends need the recording, which is off or unavailable",
+            ),
         }
     }
 
@@ -762,7 +787,7 @@ impl Model {
                     if let Some(raw) = raw {
                         self.record(Record::Elements {
                             vehicle: id.clone(),
-                            source: "GP".into(),
+                            source: SourceKind::Gp.label().into(),
                             epoch: Some(m.epoch),
                             fetched_at,
                             blob: raw.to_string(),
@@ -781,7 +806,7 @@ impl Model {
                     if let Some(raw) = raw {
                         self.record(Record::Elements {
                             vehicle: id.clone(),
-                            source: "OEM".into(),
+                            source: SourceKind::Oem.label().into(),
                             epoch: Some(o.creation_date),
                             fetched_at,
                             blob: raw.to_string(),
@@ -900,15 +925,21 @@ impl Model {
         if clock.is_live() && wall.0 - self.last_state_rec_s >= self.state_period_s {
             self.last_state_rec_s = wall.0;
             for v in &vehicles {
-                if let Some(s) = &v.solution {
+                // Every source with a state is recorded (FR-60), so source differences can be trended.
+                for src in &v.sources {
+                    let Some(st) = src.state_gcrf else { continue };
+                    let quality = match (&v.solution, src.status == SourceStatus::Active) {
+                        (Some(s), true) => s.quality.label().to_owned(),
+                        _ => "STANDBY".to_owned(),
+                    };
                     self.record(Record::State {
                         vehicle: v.id.clone(),
-                        source: s.source.label().into(),
+                        source: src.kind.label().into(),
                         t,
                         frame: "GCRF",
-                        r_km: [s.state_gcrf.r.x, s.state_gcrf.r.y, s.state_gcrf.r.z],
-                        v_km_s: [s.state_gcrf.v.x, s.state_gcrf.v.y, s.state_gcrf.v.z],
-                        quality: s.quality.label().into(),
+                        r_km: [st[0], st[1], st[2]],
+                        v_km_s: [st[3], st[4], st[5]],
+                        quality,
                     });
                 }
             }
@@ -940,6 +971,17 @@ impl Model {
                 .collect(),
         });
         self.update_passes(&mut vehicles, t, orientation);
+        let finished = self
+            .trend_worker
+            .as_ref()
+            .map(crate::trends::Worker::poll)
+            .unwrap_or_default();
+        for r in finished {
+            match r {
+                Ok(set) => self.trends_latest = Some(Arc::new(set)),
+                Err(e) => self.note(wall, format!("trends failed: {e}")),
+            }
+        }
         let sun = vehicles
             .iter()
             .find_map(|v| v.solution.as_ref())
@@ -950,6 +992,7 @@ impl Model {
             telemetry,
             cw,
             observer,
+            trends: self.trends_latest.clone(),
             t,
             clock,
             log: self.log.iter().cloned().collect(),
@@ -1108,6 +1151,10 @@ fn vehicle_view(
                 age_s: age(s),
                 validity: s.validity,
                 residual,
+                state_gcrf: match &s.state {
+                    Some(Ok(st)) => Some([st.r.x, st.r.y, st.r.z, st.v.x, st.v.y, st.v.z]),
+                    _ => None,
+                },
             }
         })
         .collect();
@@ -1300,6 +1347,10 @@ fn drain_commands(rx: &Receiver<Command>, clock: &mut Clock, model: &mut Model, 
                 }
                 continue;
             }
+            Command::Trend { vehicle, window_s } => {
+                model.request_trend(vehicle, *window_s, wall_utc);
+                continue;
+            }
             Command::SaveSite(n) => {
                 if let Err(e) = model.save_site(n.as_deref(), wall_utc) {
                     model.note(wall_utc, format!("command rejected: {e}"));
@@ -1333,7 +1384,13 @@ fn drain_commands(rx: &Receiver<Command>, clock: &mut Clock, model: &mut Model, 
 }
 
 /// Start the engine thread. It owns `sources` and publishes to the returned bus.
-pub fn start(cfg: Config, sources: SourceSet, recorder: Option<Recorder>) -> Engine {
+/// `trends_db` is the recording to read trend plots from (usually the one `recorder` writes).
+pub fn start(
+    cfg: Config,
+    sources: SourceSet,
+    recorder: Option<Recorder>,
+    trends_db: Option<std::path::PathBuf>,
+) -> Engine {
     let record_tx = recorder.as_ref().map(Recorder::sender);
     let bus = Bus::new(World::empty(Utc::now().unwrap_or(Utc(0.0))));
     let (stop_tx, stop_rx) = sync_channel::<()>(1);
@@ -1350,6 +1407,9 @@ pub fn start(cfg: Config, sources: SourceSet, recorder: Option<Recorder>) -> Eng
             let sources = sources;
             let mut model = Model::new(cfg);
             model.enable_pass_worker();
+            if let Some(db) = trends_db {
+                model.enable_trends(db);
+            }
             if let Some(tx) = record_tx {
                 model.set_recorder(tx);
             }
@@ -1576,7 +1636,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mctl-engine-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let set = mctl_sources::tasks::start(&cfg, dir.clone(), true).unwrap();
-        let eng = start(cfg, set, None);
+        let eng = start(cfg, set, None, None);
         let s0 = eng.bus.latest().seq;
         std::thread::sleep(Duration::from_millis(500));
         let advanced = eng.bus.latest().seq - s0;
@@ -1690,7 +1750,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mctl-engine-cmd-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let set = mctl_sources::tasks::start(&cfg, dir.clone(), true).unwrap();
-        let eng = start(cfg, set, None);
+        let eng = start(cfg, set, None, None);
         let target = Utc::parse("2026-10-25T00:00:00").unwrap();
         eng.commands.send(Command::Seek(target)).unwrap();
         eng.commands.send(Command::SetRate(1000.0)).unwrap();
@@ -1908,7 +1968,7 @@ mod tests {
         let recs: Vec<Record> = rx.try_iter().collect();
         let count = |f: fn(&Record) -> bool| recs.iter().filter(|r| f(r)).count();
         assert_eq!(
-            count(|r| matches!(r, Record::Elements { source, .. } if source == "GP")),
+            count(|r| matches!(r, Record::Elements { source, .. } if source == "GP/SGP4")),
             1
         );
         assert_eq!(count(|r| matches!(r, Record::Telemetry { .. })), 2);
@@ -1920,8 +1980,8 @@ mod tests {
         ));
         assert_eq!(
             count(|r| matches!(r, Record::State { .. })),
-            2,
-            "1 Hz while live: t and t+1.1, not t+0.5; nothing in SIM"
+            4,
+            "1 Hz while live (t and t+1.1, not t+0.5) for each of the two sources; nothing in SIM"
         );
         assert!(
             recs.iter()

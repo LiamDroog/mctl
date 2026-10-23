@@ -100,6 +100,16 @@ impl Record {
     }
 }
 
+/// A recorded state row as read back for trends and replay.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StateRow {
+    pub source: String,
+    pub t: Utc,
+    pub r_km: [f64; 3],
+    pub v_km_s: [f64; 3],
+    pub quality: String,
+}
+
 pub struct Store {
     conn: Connection,
     path: PathBuf,
@@ -152,6 +162,78 @@ impl Store {
         .map(|n| n > 0)
     }
 
+    /// Open an existing database for reading only (the trends worker); never creates or migrates.
+    pub fn open_readonly(path: &Path) -> Result<Self, StoreError> {
+        let db = |source| StoreError::Db {
+            path: path.to_owned(),
+            source,
+        };
+        let conn = Connection::open_with_flags(
+            path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .map_err(db)?;
+        let found: i64 = conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .map_err(db)?;
+        if found != SCHEMA_VERSION {
+            return Err(StoreError::Version {
+                path: path.to_owned(),
+                found,
+            });
+        }
+        Ok(Self {
+            conn,
+            path: path.to_owned(),
+        })
+    }
+
+    /// Recorded states of `vehicle` with `from <= t < to`, oldest first, thinned to at most
+    /// `max_rows` per source by taking evenly spaced rows.
+    pub fn states(
+        &self,
+        vehicle: &str,
+        from: Utc,
+        to: Utc,
+        max_rows: usize,
+    ) -> Result<Vec<StateRow>, StoreError> {
+        let mut out = Vec::new();
+        let sources: Vec<String> = self.conn.prepare("SELECT DISTINCT source FROM state WHERE vehicle = ?1 AND t_utc >= ?2 AND t_utc < ?3")?.query_map(params![vehicle, from.0, to.0], |r| r.get(0))?.collect::<Result<_, _>>()?;
+        for source in sources {
+            let n: i64 = self.conn.query_row("SELECT count(*) FROM state WHERE vehicle = ?1 AND source = ?2 AND t_utc >= ?3 AND t_utc < ?4", params![vehicle, source, from.0, to.0], |r| r.get(0))?;
+            let stride = ((n as usize).div_ceil(max_rows.max(1))).max(1) as i64;
+            let mut stmt = self.conn.prepare("SELECT t_utc, rx, ry, rz, vx, vy, vz, quality FROM (SELECT *, row_number() OVER (ORDER BY t_utc) AS rn FROM state WHERE vehicle = ?1 AND source = ?2 AND t_utc >= ?3 AND t_utc < ?4) WHERE (rn - 1) % ?5 = 0 ORDER BY t_utc")?;
+            let rows = stmt.query_map(params![vehicle, source, from.0, to.0, stride], |r| {
+                Ok(StateRow {
+                    source: source.clone(),
+                    t: Utc(r.get(0)?),
+                    r_km: [r.get(1)?, r.get(2)?, r.get(3)?],
+                    v_km_s: [r.get(4)?, r.get(5)?, r.get(6)?],
+                    quality: r.get(7)?,
+                })
+            })?;
+            for row in rows {
+                out.push(row?);
+            }
+        }
+        out.sort_by(|a, b| a.t.0.total_cmp(&b.t.0));
+        Ok(out)
+    }
+
+    /// `(source, epoch)` of every recorded element set of `vehicle` with an epoch in the range.
+    pub fn element_epochs(
+        &self,
+        vehicle: &str,
+        from: Utc,
+        to: Utc,
+    ) -> Result<Vec<(String, Utc)>, StoreError> {
+        let mut stmt = self.conn.prepare("SELECT DISTINCT source, epoch FROM elements WHERE vehicle = ?1 AND epoch >= ?2 AND epoch < ?3 ORDER BY epoch")?;
+        let rows = stmt.query_map(params![vehicle, from.0, to.0], |r| {
+            Ok((r.get::<_, String>(0)?, Utc(r.get(1)?)))
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -163,7 +245,7 @@ impl Store {
             match r {
                 Record::State { vehicle, source, t, frame, r_km, v_km_s, quality } => tx.prepare_cached("INSERT INTO state (vehicle, source, t_utc, frame, rx, ry, rz, vx, vy, vz, quality) VALUES (?,?,?,?,?,?,?,?,?,?,?)")?.execute(params![vehicle, source, t.0, frame, r_km[0], r_km[1], r_km[2], v_km_s[0], v_km_s[1], v_km_s[2], quality])?,
                 Record::Telemetry { item_id, t_rx, value, text } => tx.prepare_cached("INSERT INTO telemetry (item_id, t_rx, value_real, value_text) VALUES (?,?,?,?)")?.execute(params![item_id, t_rx.0, value, text])?,
-                Record::Elements { vehicle, source, epoch, fetched_at, blob } => tx.prepare_cached("INSERT INTO elements (vehicle, source, epoch, fetched_at, blob) VALUES (?,?,?,?,?)")?.execute(params![vehicle, source, epoch.map(|e| e.0), fetched_at.0, blob])?,
+                Record::Elements { vehicle, source, epoch, fetched_at, blob } => tx.prepare_cached("INSERT INTO elements (vehicle, source, epoch, fetched_at, blob) SELECT ?1,?2,?3,?4,?5 WHERE NOT EXISTS (SELECT 1 FROM elements WHERE vehicle = ?1 AND source = ?2 AND fetched_at = ?4)")?.execute(params![vehicle, source, epoch.map(|e| e.0), fetched_at.0, blob])?,
                 Record::Event { t, vehicle, kind, payload } => tx.prepare_cached("INSERT INTO events (t_utc, vehicle, kind, payload) VALUES (?,?,?,?)")?.execute(params![t.0, vehicle, kind, payload])?,
                 Record::CwLog { t, rule, from_state, to_state, value, acked_at } => tx.prepare_cached("INSERT INTO cw_log (t_utc, rule, from_state, to_state, value, acked_at) VALUES (?,?,?,?,?,?)")?.execute(params![t.0, rule, from_state, to_state, value, acked_at.map(|a| a.0)])?,
             };
@@ -323,6 +405,7 @@ CREATE INDEX cw_log_t ON cw_log (t_utc);
 
 /// Handle to the writer thread. Dropping it flushes and stops the thread.
 pub struct Recorder {
+    path: PathBuf,
     tx: Option<Sender<Record>>,
     thread: Option<JoinHandle<()>>,
 }
@@ -330,15 +413,22 @@ pub struct Recorder {
 impl Recorder {
     /// Start the writer thread. `retention_s` and `max_bytes` are applied at start and hourly.
     pub fn start(mut store: Store, retention_s: f64, max_bytes: u64) -> Self {
+        let path = store.path().to_owned();
         let (tx, rx) = channel::<Record>();
         let thread = std::thread::Builder::new()
             .name("recorder".into())
             .spawn(move || run_writer(&mut store, &rx, retention_s, max_bytes))
             .expect("spawn recorder thread");
         Self {
+            path,
             tx: Some(tx),
             thread: Some(thread),
         }
+    }
+
+    /// The database being written, for readers.
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 
     /// A sender for the engine. Sending fails only after the recorder has stopped.
@@ -666,5 +756,94 @@ mod tests {
             50,
             "nothing queued is lost on shutdown"
         );
+    }
+
+    #[test]
+    fn states_read_back_per_source_thinned_and_ordered() {
+        let (_d, mut s) = store();
+        let rows: Vec<Record> = (0..1000)
+            .flat_map(|i| {
+                let t = f64::from(i);
+                ["OEM", "GP/SGP4"].map(|src| Record::State {
+                    vehicle: "iss".into(),
+                    source: src.into(),
+                    t: Utc(t),
+                    frame: "GCRF",
+                    r_km: [t, 0.0, 0.0],
+                    v_km_s: [0.0; 3],
+                    quality: "PRED".into(),
+                })
+            })
+            .collect();
+        s.write(&rows).unwrap();
+        s.write(&[Record::State {
+            vehicle: "hubble".into(),
+            source: "GP/SGP4".into(),
+            t: Utc(5.0),
+            frame: "GCRF",
+            r_km: [9.0; 3],
+            v_km_s: [0.0; 3],
+            quality: "PRED".into(),
+        }])
+        .unwrap();
+        let got = s.states("iss", Utc(100.0), Utc(900.0), 100).unwrap();
+        assert!(
+            got.iter().all(|r| r.t.0 >= 100.0 && r.t.0 < 900.0),
+            "range is [from, to)"
+        );
+        let oem = got.iter().filter(|r| r.source == "OEM").count();
+        assert!(
+            (80..=100).contains(&oem),
+            "thinned to about 100 per source, got {oem}"
+        );
+        assert!(
+            got.windows(2).all(|w| w[0].t.0 <= w[1].t.0),
+            "ordered by time"
+        );
+        assert!(
+            got.iter().all(|r| r.r_km[0] != 9.0),
+            "other vehicles are not mixed in"
+        );
+        assert_eq!(
+            s.states("iss", Utc(2000.0), Utc(3000.0), 10).unwrap().len(),
+            0
+        );
+    }
+
+    #[test]
+    fn an_element_set_is_stored_once_however_often_it_is_offered_and_epochs_read_back() {
+        let (_d, mut s) = store();
+        let el = |f: f64| Record::Elements {
+            vehicle: "iss".into(),
+            source: "GP/SGP4".into(),
+            epoch: Some(Utc(f)),
+            fetched_at: Utc(f + 1.0),
+            blob: "x".into(),
+        };
+        s.write(&[el(10.0), el(10.0)]).unwrap();
+        s.write(&[el(10.0), el(20.0)]).unwrap();
+        assert_eq!(
+            s.count("elements").unwrap(),
+            2,
+            "same (vehicle, source, fetched_at) is one row"
+        );
+        let e = s.element_epochs("iss", Utc(0.0), Utc(100.0)).unwrap();
+        assert_eq!(
+            e,
+            vec![
+                ("GP/SGP4".to_owned(), Utc(10.0)),
+                ("GP/SGP4".to_owned(), Utc(20.0))
+            ]
+        );
+    }
+
+    #[test]
+    fn a_read_only_open_refuses_a_missing_or_foreign_database() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(Store::open_readonly(&dir.path().join("none.db")).is_err());
+        let p = dir.path().join("a.db");
+        drop(Store::open(&p).unwrap());
+        let ro = Store::open_readonly(&p).unwrap();
+        assert_eq!(ro.count("state").unwrap(), 0);
     }
 }

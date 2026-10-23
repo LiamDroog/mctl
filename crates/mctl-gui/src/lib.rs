@@ -21,6 +21,7 @@ mod screens;
 mod sky;
 mod telemetry_view;
 mod theme;
+mod trendplot;
 
 pub use app::{Options, Present, run};
 pub use offline::{BenchOptions, Live, ShotOptions, bench, parse_size, shots};

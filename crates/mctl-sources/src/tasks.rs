@@ -293,7 +293,7 @@ fn supervise(
                         info: DataInfo {
                             from_cache: true,
                             fetched_at: Utc(f.meta.fetched_at),
-                            raw: None,
+                            raw: Some(Arc::from(f.body.as_str())),
                         },
                     },
                 ) || !health(Health::Ok)

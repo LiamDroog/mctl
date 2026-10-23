@@ -69,6 +69,8 @@ pub const ZOOM_STEP: f32 = 1.15;
 /// Seconds a status message stays in the footer.
 const STATUS_SECONDS: f64 = 6.0;
 const HISTORY_MAX: usize = 50;
+/// Seconds between trend refreshes while the page is showing.
+const TREND_REFRESH_S: f64 = 20.0;
 /// Clock rate ladder for `[` / `]` (powers of two times this base are clamped to the limits).
 const WARP_BASE: f64 = 1.0;
 
@@ -89,6 +91,9 @@ pub struct Console {
     pub page: Page,
     pub sub: usize,
     pub help: bool,
+    /// Index into [`crate::trendplot::WINDOWS`] when no custom window is set.
+    pub trend_window_s: f64,
+    trend_asked: Option<(String, f64, f64)>,
     cmd: Option<CommandLine>,
     history: Vec<String>,
     status: Option<(StatusMsg, f64)>,
@@ -161,6 +166,8 @@ impl Console {
             page: Page::Master,
             sub: 0,
             help: false,
+            trend_window_s: crate::trendplot::WINDOWS[1].1,
+            trend_asked: None,
             cmd: None,
             history: Vec::new(),
             status: None,
@@ -248,6 +255,10 @@ impl Console {
             UiAction::GoPage { page, sub } => self.set_page(page, sub.unwrap_or(0)),
             UiAction::Fx { which, on } => self.set_effect(which, on),
             UiAction::Altitude(i) => self.camera.exaggeration_idx = i,
+            UiAction::TrendWindow(s) => {
+                self.trend_window_s = s;
+                self.trend_asked = None;
+            }
             UiAction::CameraEarthFixed(b) => self.camera.earth_fixed = b,
             UiAction::FocusVehicle(b) => self.camera.focus_vehicle = b,
             UiAction::StateEcef(b) => self.show_ecef = b,
@@ -404,6 +415,15 @@ impl Console {
             '2' => self.toggles.bloom = !self.toggles.bloom,
             '3' => self.toggles.persistence = !self.toggles.persistence,
             '4' => self.toggles.curvature = !self.toggles.curvature,
+            'w' if self.page == Page::Traj && self.sub == 2 => {
+                let w = &crate::trendplot::WINDOWS;
+                let next = w
+                    .iter()
+                    .position(|(_, s)| (*s - self.trend_window_s).abs() < 1.0)
+                    .map_or(0, |i| (i + 1) % w.len());
+                self.trend_window_s = w[next].1;
+                self.trend_asked = None;
+            }
             'e' => self.toggles = EffectToggles::all(!self.toggles.any()),
             '0' => self.send(Command::Live),
             'a' => self.send(Command::Ack),
@@ -421,6 +441,26 @@ impl Console {
             _ => {}
         }
         Outcome::Continue
+    }
+
+    /// While the trends page is showing, ask the engine for fresh plots when the vehicle or window
+    /// changed, and every `TREND_REFRESH_S` otherwise (the recording keeps growing).
+    fn maybe_request_trend(&mut self, world: &World, elapsed_s: f64) {
+        if self.page != Page::Traj || self.sub != 2 {
+            return;
+        }
+        let want = (self.vehicle_id.clone(), self.trend_window_s);
+        let due = match &self.trend_asked {
+            Some((v, w, at)) => (v, *w) != (&want.0, want.1) || elapsed_s - at >= TREND_REFRESH_S,
+            None => true,
+        };
+        if due && world.vehicles.iter().any(|v| v.id == want.0) {
+            self.send(Command::Trend {
+                vehicle: want.0.clone(),
+                window_s: want.1,
+            });
+            self.trend_asked = Some((want.0, want.1, elapsed_s));
+        }
     }
 
     pub fn theme(&self) -> &Theme {
@@ -462,6 +502,7 @@ impl Console {
         );
         let vehicle_idx = world.vehicles.iter().position(|v| v.id == self.vehicle_id);
         let vehicle = vehicle_idx.map(|i| &world.vehicles[i]);
+        self.maybe_request_trend(world, stats.elapsed_s);
         let mut grid = Grid::new(cols, rows);
         let cmd_view = self.cmd.as_ref().map(|c| CommandView {
             text: c.text.clone(),
@@ -494,6 +535,7 @@ impl Console {
                 command: cmd_view.as_ref(),
                 status: self.status.as_ref().map(|(m, _)| m),
                 help: self.help,
+                trend_window_s: self.trend_window_s,
                 settings: &self.settings,
             },
         );
@@ -502,6 +544,11 @@ impl Console {
         let eclipse_px = layout.eclipse.map(|r| cell_rect_px(&theme, r));
         let adi_px = layout.adi.map(|r| cell_rect_px(&theme, r));
         let sky_px = layout.sky.map(|r| cell_rect_px(&theme, r));
+        let plot_px: Vec<([u32; 4], usize)> = layout
+            .plots
+            .iter()
+            .map(|(r, i)| (cell_rect_px(&theme, r.inner()), *i))
+            .collect();
         let attitude = adi_px.map(|_| crate::adi::attitude(world.telemetry.as_ref()));
         let has_area = globe_px[2] > 0 && globe_px[3] > 0;
         let aspect = globe_px[2] as f32 / globe_px[3].max(1) as f32;
@@ -528,6 +575,19 @@ impl Console {
         let now = world.t;
         let mut out = self.ctx.run_ui(raw, |ui| {
             let painter = ui.ctx().layer_painter(LayerId::background());
+            if let Some(set) = world
+                .trends
+                .as_ref()
+                .filter(|s| vehicle.is_some_and(|v| v.id == s.vehicle))
+            {
+                for (px, i) in &plot_px {
+                    if let Some(plot) = set.plots.get(*i) {
+                        let marks =
+                            matches!(plot.title.as_str(), "Semi-major axis" | "Apsis altitudes");
+                        crate::trendplot::paint(&painter, &theme, *px, plot, set, marks);
+                    }
+                }
+            }
             if let Some(px) = sky_px {
                 let site = world.observer.active_site();
                 let set = site

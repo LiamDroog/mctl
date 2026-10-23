@@ -213,7 +213,12 @@ fn start_live(
     } else {
         None
     };
-    let engine = mctl_sim::engine::start(cfg.clone(), sources, recorder);
+    let trends_db = if cfg.store.enabled {
+        Some(db_path(cfg)?).filter(|p| p.exists() || recorder.is_some())
+    } else {
+        None
+    };
+    let engine = mctl_sim::engine::start(cfg.clone(), sources, recorder, trends_db);
     Ok((
         Live {
             bus: engine.bus.clone(),

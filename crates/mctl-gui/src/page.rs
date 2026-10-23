@@ -37,6 +37,7 @@ pub struct PageInput<'a> {
     /// Last command result or error, shown briefly in the footer.
     pub status: Option<&'a StatusMsg>,
     pub help: bool,
+    pub trend_window_s: f64,
     /// Static key/value rows for the SETTINGS page (configuration echoes).
     pub settings: &'a [(String, String)],
 }
@@ -59,6 +60,8 @@ pub struct Layout {
     pub eclipse: Option<CellRect>,
     pub adi: Option<CellRect>,
     pub sky: Option<CellRect>,
+    /// Trend plots to draw: (pixel area, index into the trend set's plots).
+    pub plots: Vec<(CellRect, usize)>,
 }
 
 pub use mctl_core::time::fmt_dur;
@@ -652,6 +655,7 @@ mod tests {
                 from_cache: false,
                 age_s: Some(3600.0),
                 validity: None,
+                state_gcrf: None,
                 residual: residual_km.map(|k| Residual {
                     vs: SourceKind::Gp,
                     rtn_km: [0.0, k, 0.0],
@@ -760,6 +764,7 @@ mod tests {
                 command: None,
                 status: None,
                 help: false,
+                trend_window_s: 86_400.0,
                 settings: &settings,
             },
         );
@@ -931,6 +936,7 @@ mod tests {
                 command: None,
                 status: None,
                 help: true,
+                trend_window_s: 86_400.0,
                 settings: &[],
             },
         );

@@ -709,6 +709,7 @@ mod tests {
                 from_cache: false,
                 age_s: Some(3600.0),
                 validity: None,
+                state_gcrf: None,
                 residual: residual_km.map(|k| Residual {
                     vs: SourceKind::Gp,
                     rtn_km: [0.0, k, 0.0],

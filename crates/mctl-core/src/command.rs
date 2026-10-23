@@ -33,6 +33,11 @@ pub enum Command {
         lon_deg: f64,
         alt_m: f64,
     },
+    /// Compute trend plots for a vehicle over the last `window_s` seconds of the recording.
+    Trend {
+        vehicle: String,
+        window_s: f64,
+    },
     /// Save the active site into the user configuration, under `name` if given.
     SaveSite(Option<String>),
     /// Acknowledge the master caution and warning latches (not a clock command).

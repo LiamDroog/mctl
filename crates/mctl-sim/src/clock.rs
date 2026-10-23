@@ -150,7 +150,8 @@ impl Clock {
             Command::Ack
             | Command::SelectSite(_)
             | Command::AddSite { .. }
-            | Command::SaveSite(_) => Err("not a clock command".into()),
+            | Command::SaveSite(_)
+            | Command::Trend { .. } => Err("not a clock command".into()),
         }
     }
 }

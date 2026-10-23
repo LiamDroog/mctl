@@ -480,16 +480,6 @@ fn timeline_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
     }
 }
 
-/// Placeholder panel for data that does not exist yet; always says what and when, never invents content.
-fn pending_panel(grid: &mut Grid, rect: CellRect, title: &str, lines: &[&str]) {
-    boxed(grid, rect, title);
-    let mut l = Lines::new(grid, rect);
-    l.line("NO DATA", Style::new(Role::Dim));
-    for t in lines {
-        l.line(t, Style::new(Role::Dim));
-    }
-}
-
 // ---- pages ---------------------------------------------------------------------------------------------
 
 /// (row, height) of the body between the header and the two footer rows.
@@ -577,22 +567,66 @@ fn traj_ground(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
 fn traj_elements(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     let (cols, rows) = (grid.cols, grid.rows);
     let (top, h) = body(rows);
-    let lw = cols * 30 / 100;
+    let lw = cols * 24 / 100;
     let left = column(0, lw, top, &split(h, &[45, 55]));
     elements_panel(grid, left[0], inp);
     state_panel(grid, left[1], inp);
-    pending_panel(
-        grid,
-        CellRect::new(lw, top, cols - lw, h),
-        "TRENDS  SMA / ALTITUDE / ECC / INC / RAAN / ARGP / BETA / SOURCE DIFFERENCE",
-        &[
-            "",
-            "NEEDS THE RECORDING STORE (SQLITE), WHICH ARRIVES IN M3.",
-            "",
-            "WHEN PRESENT: WINDOW 6 H .. 90 D, ELEMENT-SET EPOCHS MARKED SO REBOOSTS SHOW AS STEPS (DESIGN.md 9.6).",
-        ],
+    let region = CellRect::new(lw, top, cols - lw, h);
+    let set = inp
+        .world
+        .trends
+        .as_ref()
+        .filter(|s| inp.vehicle.is_some_and(|v| v.id == s.vehicle));
+    let window = crate::trendplot::window_label(inp.trend_window_s);
+    let Some(set) = set else {
+        boxed(grid, region, &format!("TRENDS  {window}"));
+        let mut l = Lines::new(grid, region);
+        l.line("LOADING FROM THE RECORDING...", Style::new(Role::Dim));
+        l.line(
+            "(NEEDS THE RECORDING: IT IS OFF WITH --no-record OR [store] enabled = false)",
+            Style::new(Role::Dim),
+        );
+        return Layout::default();
+    };
+    // Header line, then a grid of plots, two columns by four rows at full size.
+    grid.put(
+        lw + 1,
+        top,
+        &format!(
+            "TRENDS {window}   {} STATE ROWS   {} GP ELEMENT SETS IN WINDOW (DASHED)   W CYCLES THE WINDOW, :trend <6h..90d>",
+            set.rows,
+            set.element_marks.len()
+        ),
+        Style::new(Role::Bright),
     );
-    Layout::default()
+    let area = CellRect::new(region.col, top + 1, region.cols, h.saturating_sub(1));
+    let (ncols, nrows) = if area.cols >= 90 { (2, 4) } else { (1, 8) };
+    let (cw, ch) = (area.cols / ncols, area.rows / nrows);
+    let mut plots = Vec::new();
+    for (i, plot) in set.plots.iter().enumerate().take(ncols * nrows) {
+        let rect = CellRect::new(
+            area.col + (i % ncols) * cw,
+            area.row + (i / ncols) * ch,
+            cw,
+            ch,
+        );
+        let unit = if plot.units.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", plot.units)
+        };
+        boxed(grid, rect, &format!("{}{unit}", plot.title.to_uppercase()));
+        if crate::trendplot::has_data(plot) {
+            plots.push((rect, i));
+        } else {
+            let mut l = Lines::new(grid, rect);
+            l.line("NO RECORDED DATA IN THIS WINDOW", Style::new(Role::Dim));
+        }
+    }
+    Layout {
+        plots,
+        ..Layout::default()
+    }
 }
 
 /// Largest disagreement between the quaternion-derived and the reported attitude errors that still

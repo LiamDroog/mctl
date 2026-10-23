@@ -28,6 +28,7 @@ pub enum UiAction {
         on: Option<bool>,
     },
     Altitude(usize),
+    TrendWindow(f64),
     CameraEarthFixed(bool),
     FocusVehicle(bool),
     StateEcef(bool),
@@ -79,6 +80,10 @@ pub const COMMANDS: &[(&str, &str)] = &[
         "fx <effect> [on|off]  scanlines bloom persistence crt, or all",
     ),
     ("alt", "alt <1|2|5|10>     orbit altitude exaggeration"),
+    (
+        "trend",
+        "trend <6h|24h|7d|30d|90d>  window of the trend plots (TRAJ, elements and trends)",
+    ),
     ("camera", "camera <inertial|earthfixed>"),
     ("focus", "focus <earth|vehicle>"),
     ("frame", "frame <eci|ecef>   state-vector frame"),
@@ -275,6 +280,9 @@ pub fn parse(line: &str, names: &Names<'_>) -> Result<Action, String> {
                 })?;
             ui(UiAction::Altitude(idx))
         }
+        "trend" => ui(UiAction::TrendWindow(crate::trendplot::parse_window(
+            one_arg(cmd, args)?,
+        )?)),
         "camera" => match one_arg(cmd, args)?.to_ascii_lowercase().as_str() {
             "inertial" => ui(UiAction::CameraEarthFixed(false)),
             "earthfixed" | "earth-fixed" | "ecef" => ui(UiAction::CameraEarthFixed(true)),
@@ -393,6 +401,9 @@ pub fn complete(line: &str, names: &Names<'_>) -> Completion {
                 (Some("fx"), 2) => vec!["on".into(), "off".into()],
                 (Some("alt"), 1) => crate::globe::EXAGGERATION_STEPS
                     .map(|s| format!("{s}"))
+                    .to_vec(),
+                (Some("trend"), 1) => crate::trendplot::WINDOWS
+                    .map(|(l, _)| l.to_owned())
                     .to_vec(),
                 (Some("camera"), 1) => vec!["inertial".into(), "earthfixed".into()],
                 (Some("focus"), 1) => vec!["earth".into(), "vehicle".into()],
@@ -656,6 +667,7 @@ mod tests {
                 "fx" => " all",
                 "alt" => " 2",
                 "camera" => " inertial",
+                "trend" => " 24h",
                 "focus" => " earth",
                 "frame" => " eci",
                 _ => "",

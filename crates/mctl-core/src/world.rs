@@ -59,6 +59,8 @@ pub struct SourceView {
     pub age_s: Option<f64>,
     pub validity: Option<(Utc, Utc)>,
     pub residual: Option<Residual>,
+    /// This source's own GCRF position (km) and velocity (km/s) now, whether or not it is active.
+    pub state_gcrf: Option<[f64; 6]>,
 }
 
 /// One revolution-scale track sample.
@@ -284,6 +286,34 @@ impl TelemetryView {
     }
 }
 
+/// One line on a trend plot.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrendSeries {
+    pub label: String,
+    /// (POSIX seconds, value)
+    pub points: Vec<(f64, f32)>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrendPlot {
+    pub title: String,
+    pub units: String,
+    pub series: Vec<TrendSeries>,
+}
+
+/// Time series computed from the recording (DESIGN.md §9.6 F2.3).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrendSet {
+    pub vehicle: String,
+    pub from: Utc,
+    pub to: Utc,
+    pub plots: Vec<TrendPlot>,
+    /// Epochs of recorded GP element sets inside the window; a reboost shows as a step at one of them.
+    pub element_marks: Vec<Utc>,
+    /// Recorded state rows the series were computed from.
+    pub rows: usize,
+}
+
 /// One threshold rule's published state.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CwRuleView {
@@ -332,6 +362,8 @@ pub struct World {
     pub telemetry: Option<TelemetryView>,
     pub cw: CwView,
     pub observer: ObserverView,
+    /// Latest trend computation requested by the UI.
+    pub trends: Option<Arc<TrendSet>>,
     pub vehicles: Vec<VehicleView>,
 }
 
@@ -348,6 +380,7 @@ impl World {
             },
             telemetry: None,
             cw: CwView::default(),
+            trends: None,
             observer: ObserverView {
                 sites: Vec::new(),
                 active: 0,

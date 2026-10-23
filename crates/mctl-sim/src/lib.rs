@@ -5,3 +5,4 @@
 pub mod clock;
 pub mod engine;
 pub mod passes;
+pub mod trends;
