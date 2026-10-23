@@ -17,3 +17,11 @@ culmination and the check samples it at 0.5 s; the 0.044 deg difference is on a 
 elevation changes fastest. This validates the frame reduction, WGS-84 geometry and root finding against an
 independent implementation using the **same element set**. It does not compare against a published pass
 predictor (Spot the Station, Heavens-Above), which would also test the element set's age and source.
+
+## Extended to a week (33 passes)
+
+Re-run over seven days (`xcheck_passes.py` and `print_fixture_passes` both set to 7 d): mctl and the
+independent implementation each find 33 passes. Largest differences: AOS 0.003 s, LOS 0.003 s, TCA 0.49 s,
+max elevation 0.056 deg. DESIGN.md §12 asks for 20 passes within 10 s and 0.5 deg against NASA Spot the
+Station or an independent tool; this meets the numbers against an independent *implementation*, but
+not against Spot the Station, which also depends on the element set it uses.

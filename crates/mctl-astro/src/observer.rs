@@ -391,7 +391,7 @@ mod tests {
         let s = site(51.05, -114.07, 1045.0);
         let look = |t: Utc| look_at(&gp, &s, t, Orientation::ASSUMED_ZERO);
         println!("EPOCH {}", gp.epoch.iso());
-        for p in find_passes(&look, gp.epoch, gp.epoch.plus(86_400.0), 5.0, 10.0) {
+        for p in find_passes(&look, gp.epoch, gp.epoch.plus(7.0 * 86_400.0), 5.0, 10.0) {
             println!(
                 "PASS {} {} {} {:.3}",
                 p.aos.0, p.tca.0, p.los.0, p.max_el_deg

@@ -46,7 +46,7 @@ def bis(lo, hi):
         else: hi = m
     return (lo+hi)/2
 t, prev, aos, out = epoch, look(epoch) >= mask, None, []
-while t < epoch + 86400:
+while t < epoch + 7*86400:
     n = t + 5
     cur = look(n) >= mask
     if cur != prev:
