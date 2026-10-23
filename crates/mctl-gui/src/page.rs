@@ -63,6 +63,8 @@ pub struct Layout {
     pub sky: Option<CellRect>,
     /// Trend plots to draw: (pixel area, index into the trend set's plots).
     pub plots: Vec<(CellRect, usize)>,
+    /// Clickable footer legend entries: (first column, last column inclusive, row, page).
+    pub legend: Vec<(usize, usize, usize, crate::pages::Page)>,
 }
 
 pub use mctl_core::time::fmt_dur;

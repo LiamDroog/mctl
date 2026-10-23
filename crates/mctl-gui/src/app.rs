@@ -365,6 +365,12 @@ impl ApplicationHandler for App {
                 button: winit::event::MouseButton::Left,
                 ..
             } => {
+                if state == ElementState::Pressed
+                    && !inside(self.interactive, self.last_cursor)
+                    && let (Some((x, y)), Some(r)) = (self.last_cursor, self.running.as_mut())
+                {
+                    r.console.click(x, y);
+                }
                 self.dragging =
                     state == ElementState::Pressed && inside(self.interactive, self.last_cursor);
                 self.last_cursor = self.last_cursor.filter(|_| self.dragging);

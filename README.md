@@ -1,8 +1,8 @@
 # mctl
 
 Mission control display for the ISS (and Hubble), styled after a flight control console. Design and
-requirements: [`DESIGN.md`](DESIGN.md). Decisions: [`docs/adr/`](docs/adr/). Status: M0-M3 done (core and sources, MASTER/TRAJ, live telemetry, C&W, recording); M4 done
-(sites, passes, sky plot, beta series); see "What is real" below.
+requirements: [`DESIGN.md`](DESIGN.md). Decisions: [`docs/adr/`](docs/adr/). Status: M0-M4 done (core and sources, MASTER/TRAJ with store-backed trends, live telemetry, C&W,
+recording, observer sites and passes); next is M5. See "What is real" below.
 
 ## Running
 
@@ -23,17 +23,19 @@ mctl check                       # validate config, fetch every source once, rep
 mctl shot --out-dir /tmp/shots --pages all   # headless PNGs, one per theme and page (page or page:sub)
 mctl isslive --duration-s 30     # print live ISS telemetry (the GNC/EPS/TCS/COMM pages show the same feed)
 mctl export telemetry --from 2026-10-23T00:00:00 --out t.csv   # state|telemetry|elements|events|cw_log
+mctl export --out ./dump         # every table, one CSV each
+tools/smoke.sh                   # render every page headless and check the images
 mctl --no-record                 # do not record this run
 ```
 
 The launcher runs `cargo build --release` (a no-op in ~0.3 s when nothing changed) and refuses to run a
 stale binary if the build fails. `MCTL_NO_BUILD=1` skips the build.
 
-Keys: `F1`-`F10` pages (MASTER TRAJ GNC EPS TCS/ECLSS COMM PASS PROX VIEW SYS), `Tab`/`Shift-Tab` sub-pages,
+Keys (all single-character keys are remappable under `[keys]` in the config): `F1`-`F10` pages (clickable in the footer) (MASTER TRAJ GNC EPS TCS/ECLSS COMM PASS PROX VIEW SYS), `Tab`/`Shift-Tab` sub-pages,
 `T` theme, `V` vehicle, `Space` pause/resume the simulation clock, `[` `]` halve/double the warp (up to
 10000x either way), `0` back to LIVE, `A` acknowledge the master caution/warning, `:` command line
 (`warp`, `seek`, `step`, `page`, `theme`, `vehicle`, `fx`, `ack`, ...; `Tab` completes), `?` help.
-Orbit map only: drag with the left button inside the map to rotate, wheel to zoom there; arrows and
+`W` cycles the trends window on TRAJ elements and trends. Orbit map only: drag with the left button inside the map to rotate, wheel to zoom there; arrows and
 `+`/`-` also work. `X` GCRF/ITRF, `Z` altitude exaggeration, `F` inertial/Earth-fixed, `C` focus,
 `1`-`4` effects, `E` all effects, `Q` quit.
 
@@ -53,7 +55,7 @@ ISS telemetry (137 ISSLIVE items) feeds GNC/EPS/TCS/COMM; units the live values 
 and documented in `docs/step3/attitude-verification.md`. Panels for later milestones say which milestone
 supplies them. Passes are predicted for each observer site (OEM then GP/SGP4); pass times match an independent
 implementation to milliseconds (`docs/step4/pass-verification.md`) but have not been compared with a
-published predictor. The observer site is the configured one, else GeoClue, else (optional, off by
+published predictor. SUP-GP (ISS-E) is implemented but off by default (`docs/step4/supgp-evaluation.md`). The observer site is the configured one, else GeoClue, else (optional, off by
 default) an IP lookup, else the NASA HQ fallback; `:site save` keeps one. Not yet: planner and replay
 (M5), other vehicles (M6).
 

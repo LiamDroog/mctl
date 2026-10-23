@@ -129,7 +129,7 @@ fn page_hints(page: Page, sub: usize, k: &KeyMap) -> String {
 }
 
 /// Last two rows: stats and hints (or the status message), then the F-key legend or the command line.
-fn footer(grid: &mut Grid, inp: &PageInput<'_>) {
+fn footer(grid: &mut Grid, inp: &PageInput<'_>) -> Vec<(usize, usize, usize, Page)> {
     let (cols, rows) = (grid.cols, grid.rows);
     let (dim, info) = (Style::new(Role::Dim), Style::new(Role::Info));
     let gpu = inp
@@ -196,9 +196,10 @@ fn footer(grid: &mut Grid, inp: &PageInput<'_>) {
     if let Some(cmd) = inp.command {
         let line: String = format!(":{}_", cmd.text).chars().take(cols).collect();
         grid.put(0, last, &line, Style::new(Role::Bright));
-        return;
+        return Vec::new();
     }
     let mut col = 1;
+    let mut hits = Vec::new();
     for p in ALL_PAGES {
         let label = format!("F{} {}", p.fkey(), p.title());
         let (text, style) = if p == inp.page {
@@ -209,10 +210,13 @@ fn footer(grid: &mut Grid, inp: &PageInput<'_>) {
             (label, Style::new(Role::Fg))
         };
         grid.put(col, last, &text, style);
-        col += text.chars().count() + 1;
+        let width = text.chars().count();
+        hits.push((col, col + width - 1, last, p));
+        col += width + 1;
     }
     let hint = ": CMD  ? HELP  Q QUIT";
     grid.put(cols.saturating_sub(hint.len() + 1), last, hint, dim);
+    hits
 }
 
 // ---- panels --------------------------------------------------------------------------------------------
@@ -1570,7 +1574,7 @@ fn help_overlay(grid: &mut Grid, k: &KeyMap) {
 /// Draw the header, the current page, the footer, and the help overlay when open.
 pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     header(grid, inp);
-    let layout = match availability(inp.page, inp.sub, inp.vehicle) {
+    let mut layout = match availability(inp.page, inp.sub, inp.vehicle) {
         Availability::NoSource(why) => no_source(grid, inp, &why),
         Availability::Available => match (inp.page, inp.sub) {
             (Page::Master, _) => master(grid, inp),
@@ -1618,7 +1622,7 @@ pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             (p, _) => no_source(grid, inp, &format!("{} is not implemented", p.title())),
         },
     };
-    footer(grid, inp);
+    layout.legend = footer(grid, inp);
     if inp.help {
         help_overlay(grid, inp.keys);
     }

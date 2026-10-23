@@ -95,6 +95,8 @@ pub struct Console {
     /// Index into [`crate::trendplot::WINDOWS`] when no custom window is set.
     pub trend_window_s: f64,
     keys: KeyMap,
+    /// Pixel rectangles of the footer's page legend from the last frame, for mouse clicks.
+    legend_px: Vec<([u32; 4], Page)>,
     trend_asked: Option<(String, f64, f64)>,
     cmd: Option<CommandLine>,
     history: Vec<String>,
@@ -171,6 +173,7 @@ impl Console {
             trend_window_s: crate::trendplot::WINDOWS[1].1,
             trend_asked: None,
             keys: KeyMap::embedded_default(),
+            legend_px: Vec::new(),
             cmd: None,
             history: Vec::new(),
             status: None,
@@ -183,6 +186,30 @@ impl Console {
             orbit_cache: None,
             pending_textures,
         })
+    }
+
+    /// A left click at pixel `(x, y)`: a footer legend entry switches page. Returns whether it was used.
+    pub fn click(&mut self, x: f32, y: f32) -> bool {
+        if self.help || self.cmd.is_some() {
+            return false;
+        }
+        let hit = self
+            .legend_px
+            .iter()
+            .find(|([rx, ry, rw, rh], _)| {
+                x >= *rx as f32
+                    && y >= *ry as f32
+                    && x < (*rx + *rw) as f32
+                    && y < (*ry + *rh) as f32
+            })
+            .map(|(_, p)| *p);
+        match hit {
+            Some(p) => {
+                self.set_page(p, 0);
+                true
+            }
+            None => false,
+        }
     }
 
     /// Replace the key bindings (from the user's configuration).
@@ -560,6 +587,19 @@ impl Console {
         let eclipse_px = layout.eclipse.map(|r| cell_rect_px(&theme, r));
         let adi_px = layout.adi.map(|r| cell_rect_px(&theme, r));
         let sky_px = layout.sky.map(|r| cell_rect_px(&theme, r));
+        self.legend_px = layout
+            .legend
+            .iter()
+            .map(|(c0, c1, row, page)| {
+                (
+                    cell_rect_px(
+                        &theme,
+                        crate::grid::CellRect::new(*c0, *row, c1 - c0 + 1, 1),
+                    ),
+                    *page,
+                )
+            })
+            .collect();
         let plot_px: Vec<([u32; 4], usize)> = layout
             .plots
             .iter()
@@ -945,5 +985,34 @@ mod tests {
         assert!(rx.try_recv().is_err(), "a is free now");
         press(&mut c, &w, "K");
         assert_eq!(rx.try_recv(), Ok(Command::Ack));
+    }
+
+    #[test]
+    fn clicking_a_footer_legend_entry_switches_page_and_other_clicks_do_nothing() {
+        let (mut c, _rx) = console();
+        // Render once so the legend rectangles exist.
+        let w = world();
+        let stats = FrameStats {
+            elapsed_s: 0.0,
+            frame_ms: 16.0,
+            gpu_ms: None,
+        };
+        let mut prepared = c.prepare(headless_input([1920, 1080], 0.0), [1920, 1080], &w, &stats);
+        prepared.textures_delta.clear(); // nothing to upload to in a test
+        let cell = c.theme().font.cell_w_px;
+        let row_y = (45.0 - 0.5) * c.theme().font.cell_h_px;
+        assert!(
+            !c.click(cell * 100.0, 5.0),
+            "a click in the header is not a legend click"
+        );
+        // "F2 TRAJ" starts after "[F1 MASTER] " (12 columns) plus the margin.
+        assert!(c.click(cell * 14.0, row_y), "F2 TRAJ");
+        assert_eq!(c.page, Page::Traj);
+        c.handle_key(KeyInput::Char('?'), &w);
+        assert!(
+            !c.click(cell * 2.0, row_y),
+            "clicks are ignored while help is open"
+        );
+        assert_eq!(c.page, Page::Traj);
     }
 }
