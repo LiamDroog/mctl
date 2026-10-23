@@ -30,4 +30,15 @@ The spikes build egui **without** that feature so that only the fonts above are 
 
 ## Embedded size
 
-See the "Binary size impact" section appended after the gfx spike was measured.
+Measured 2026-10-23 on the `gfx` spike (release build, `strip`ped), same code built with and without the assets:
+
+| | Bytes |
+|---|---|
+| Binary with assets | 17,357,856 |
+| Binary without assets | 15,922,768 |
+| **Delta** | **1,435,088 (≈ 1.4 MB)** |
+| Raw asset bytes | 1,320,184 |
+
+Raw breakdown: JetBrains Mono 270,224; Unscii-16 280,672; Blue Marble 2048×1024 JPEG 238,676; Natural Earth 110m `.bin` 41,564; 50m `.bin` 489,048.
+Assets are embedded uncompressed with `include_bytes!`. The 15.9 MB baseline (wgpu, naga, egui, image) dominates; the assets are about 8% of the binary.
+The spike embeds both coastline resolutions (110m for the ground-track panel, 50m for the globe mask). Using 110m everywhere would save 489 KB.

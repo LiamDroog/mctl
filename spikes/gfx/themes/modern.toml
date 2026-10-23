@@ -1,0 +1,63 @@
+# Dark slate with semantic colours; crisp, no post effects by default. DESIGN.md §9.2.
+name = "Modern"
+
+[font]
+family = "jetbrains"
+size_px = 30.0       # JetBrains Mono advance is 0.6 em = exactly 18 px here
+cell_w_px = 18.0
+cell_h_px = 36.0
+
+[palette]
+background = "#0e1217"
+foreground = "#c9d3dd"
+dim = "#5b6672"
+bright = "#ffffff"
+border = "#3d4b5a"
+nominal = "#45d483"
+caution = "#ffb347"
+warning = "#ff4d4d"
+info = "#4fc3f7"
+
+[limit.caution]
+inverse = false
+blink_hz = 0.0
+dim = false
+semantic_colour = true
+[limit.warning]
+inverse = false
+blink_hz = 0.0
+dim = false
+semantic_colour = true
+[limit.stale]
+inverse = false
+blink_hz = 0.0
+dim = true
+semantic_colour = false
+
+[effects.scanlines]
+enabled = false
+strength = 0.0
+period_px = 4.0
+[effects.bloom]
+enabled = false
+threshold = 0.7
+intensity = 0.0
+radius_px = 4.0
+[effects.persistence]
+enabled = false
+decay = 0.0
+[effects.curvature]
+enabled = false
+amount = 0.0
+vignette = 0.0
+
+[globe]
+mode = "colour"
+day_tint = "#ffffff"
+night_tint = "#0b1a33"
+graticule = "#6fa3d8"
+coast = "#e8f1fa"
+orbit = "#4fc3f7"
+vehicle = "#ffffff"
+ambient = 0.04
+terminator_softness = 0.10
