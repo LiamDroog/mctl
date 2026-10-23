@@ -110,15 +110,16 @@ enum Command {
     },
     /// Export recorded rows as CSV.
     Export {
-        /// state, telemetry, elements, events or cw_log.
-        table: String,
+        /// state, telemetry, elements, events or cw_log. Omit to export every table into the
+        /// `--out` directory, one CSV each.
+        table: Option<String>,
         /// Start (inclusive), e.g. 2026-10-23T00:00:00; default: the beginning of time.
         #[arg(long)]
         from: Option<String>,
         /// End (exclusive); default: now.
         #[arg(long)]
         to: Option<String>,
-        /// Output file; default: stdout.
+        /// Output file (one table) or directory (all tables); default for one table: stdout.
         #[arg(long)]
         out: Option<PathBuf>,
     },
@@ -268,12 +269,28 @@ fn wait_for_data(bus: &Arc<Bus>, vehicle_id: &str, wait_s: f64) {
     );
 }
 
+/// `--themes-dir` replaces the set; otherwise the embedded themes plus any `*.toml` in the user's
+/// `themes/` directory (a user theme with an embedded theme's name replaces it).
 fn load_themes(dir: &Option<PathBuf>) -> Result<Vec<mctl_gui::Theme>> {
-    match dir {
-        Some(d) => mctl_gui::themes_from_dir(d),
-        None => mctl_gui::embedded_themes(),
+    if let Some(d) = dir {
+        return mctl_gui::themes_from_dir(d).context("loading themes");
     }
-    .context("loading themes")
+    let mut themes = mctl_gui::embedded_themes().context("loading embedded themes")?;
+    let user_dir = config::user_config_path().and_then(|p| p.parent().map(|d| d.join("themes")));
+    if let Some(d) = user_dir.filter(|d| d.is_dir()) {
+        for t in mctl_gui::themes_from_dir(&d)
+            .with_context(|| format!("loading user themes from {}", d.display()))?
+        {
+            match themes
+                .iter()
+                .position(|e| e.name.eq_ignore_ascii_case(&t.name))
+            {
+                Some(i) => themes[i] = t,
+                None => themes.push(t),
+            }
+        }
+    }
+    Ok(themes)
 }
 
 fn run_isslive(
@@ -307,6 +324,13 @@ fn run_isslive(
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let log_path = init_logging()?;
+    if let Some(p) = config::user_config_path() {
+        match config::write_template_if_missing(&p) {
+            Ok(true) => eprintln!("created {} (all defaults, commented out)", p.display()),
+            Ok(false) => {}
+            Err(e) => eprintln!("warning: could not create {}: {e}", p.display()),
+        }
+    }
     let cfg = Config::load().context("loading configuration")?;
     tracing::info!(log = ?log_path, "mctl starting");
 
@@ -341,6 +365,21 @@ fn main() -> Result<()> {
             let to = match to.as_deref() {
                 Some(t) => parse(t)?,
                 None => mctl_core::time::Utc::now()?,
+            };
+            let Some(table) = table else {
+                let dir = out.context("exporting every table needs --out <directory>")?;
+                std::fs::create_dir_all(&dir)
+                    .with_context(|| format!("creating {}", dir.display()))?;
+                for t in mctl_store::TABLES {
+                    let p = dir.join(format!("{t}.csv"));
+                    let mut f = std::io::BufWriter::new(
+                        std::fs::File::create(&p)
+                            .with_context(|| format!("creating {}", p.display()))?,
+                    );
+                    let rows = store.export_csv(t, from, to, &mut f)?;
+                    eprintln!("{}: {rows} row(s)", p.display());
+                }
+                return Ok(());
             };
             let rows = match out {
                 Some(p) => {

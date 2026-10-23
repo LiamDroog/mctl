@@ -492,6 +492,38 @@ pub fn append_site(path: &Path, site: &SiteDef) -> Result<(), ConfigError> {
     std::fs::write(path, out).map_err(io)
 }
 
+/// Create the user configuration from the embedded defaults on first run (DESIGN.md §11). Every
+/// line is commented out, so the file overrides nothing and later changes to the defaults still
+/// apply; uncomment a line to override it. Returns whether a file was written.
+pub fn write_template_if_missing(path: &Path) -> Result<bool, ConfigError> {
+    if path.exists() {
+        return Ok(false);
+    }
+    if let Some(dir) = path.parent() {
+        ensure_dir(dir)?;
+    }
+    let mut out = String::from(
+        "# mctl user configuration.\n# Everything below is the built-in default, commented out. Uncomment and edit a line to\n# override it; invalid values are reported with their reason at start-up.\n# A [[vehicle]], [[rule]] or [[site]] list you uncomment REPLACES the built-in list.\n\n",
+    );
+    for line in DEFAULT_CONFIG.lines() {
+        if line.trim().is_empty() {
+            out.push('\n');
+        } else if line.starts_with('#') {
+            out.push_str(line);
+            out.push('\n');
+        } else {
+            out.push_str("# ");
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    std::fs::write(path, out).map_err(|source| ConfigError::Io {
+        path: path.to_owned(),
+        source,
+    })?;
+    Ok(true)
+}
+
 /// Create `dir` (and parents) if needed.
 pub fn ensure_dir(dir: &Path) -> Result<(), ConfigError> {
     std::fs::create_dir_all(dir).map_err(|source| ConfigError::Io {
@@ -591,5 +623,37 @@ mod tests {
                 .to_string()
                 .contains("only one vehicle")
         );
+    }
+
+    #[test]
+    fn the_first_run_template_overrides_nothing_and_is_written_once() {
+        let dir = std::env::temp_dir().join(format!("mctl-template-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("config.toml");
+        assert!(write_template_if_missing(&path).unwrap());
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains("# [fetch]") && text.contains("# theme = [\"t\"]"),
+            "defaults are present, commented out"
+        );
+        let layered = Config::from_layers(DEFAULT_CONFIG, Some(("template", &text))).unwrap();
+        let plain = Config::from_layers(DEFAULT_CONFIG, None).unwrap();
+        assert_eq!(layered.vehicles.len(), plain.vehicles.len());
+        assert_eq!(
+            layered.limits.residual_caution_km,
+            plain.limits.residual_caution_km
+        );
+        assert_eq!(layered.rules.len(), plain.rules.len());
+        std::fs::write(
+            &path,
+            "[limits]\nresidual_caution_km = 9.0\nresidual_warning_km = 30.0\n",
+        )
+        .unwrap();
+        assert!(
+            !write_template_if_missing(&path).unwrap(),
+            "an existing file is never touched"
+        );
+        assert!(std::fs::read_to_string(&path).unwrap().contains("30.0"));
+        std::fs::remove_dir_all(dir).ok();
     }
 }
