@@ -42,6 +42,9 @@ struct Cli {
     /// Prefer the low-power (integrated) adapter.
     #[arg(long, global = true)]
     low_power: bool,
+    /// Do not record to the database this run.
+    #[arg(long, global = true)]
+    no_record: bool,
     #[command(subcommand)]
     command: Option<Command>,
     #[command(flatten)]
@@ -105,7 +108,21 @@ enum Command {
         #[arg(long, default_value_t = DEFAULT_WAIT_S)]
         wait_s: f64,
     },
-    /// Print live ISS telemetry from ISSLIVE (the adapter behind the GNC/EPS pages arrives in M3).
+    /// Export recorded rows as CSV.
+    Export {
+        /// state, telemetry, elements, events or cw_log.
+        table: String,
+        /// Start (inclusive), e.g. 2026-10-23T00:00:00; default: the beginning of time.
+        #[arg(long)]
+        from: Option<String>,
+        /// End (exclusive); default: now.
+        #[arg(long)]
+        to: Option<String>,
+        /// Output file; default: stdout.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Print live ISS telemetry from ISSLIVE (the GNC/EPS/TCS/COMM pages show the same feed).
     Isslive {
         /// Use Lightstreamer's ticking DEMO feed to check the client itself.
         #[arg(long)]
@@ -152,11 +169,22 @@ fn init_logging() -> Result<Option<PathBuf>> {
 
 use tracing_subscriber::Layer;
 
+/// The recording database path: the configured one, else `$XDG_DATA_HOME/mctl/mctl.db`.
+fn db_path(cfg: &Config) -> Result<PathBuf> {
+    if !cfg.store.path.is_empty() {
+        return Ok(PathBuf::from(&cfg.store.path));
+    }
+    Ok(config::data_dir()
+        .context("cannot determine a data directory (no home directory?)")?
+        .join("mctl.db"))
+}
+
 /// Start sources and the engine; returns the handles that keep them alive.
 fn start_live(
     cfg: &Config,
     vehicle: Option<&str>,
     offline: bool,
+    record: bool,
 ) -> Result<(Live, mctl_sim::engine::Engine)> {
     let vehicle_id = match vehicle {
         Some(v) if cfg.vehicles.iter().any(|d| d.id == v) => v.to_owned(),
@@ -172,7 +200,20 @@ fn start_live(
     let cache =
         config::cache_dir().context("cannot determine a cache directory (no home directory?)")?;
     let sources = mctl_sources::tasks::start(cfg, cache, offline).context("starting sources")?;
-    let engine = mctl_sim::engine::start(cfg.clone(), sources);
+    let recorder = if record && cfg.store.enabled {
+        let path = db_path(cfg)?;
+        let store = mctl_store::Store::open(&path)
+            .with_context(|| format!("opening the recording database {}", path.display()))?;
+        tracing::info!(path = %path.display(), "recording");
+        Some(mctl_store::Recorder::start(
+            store,
+            cfg.store.retention_days * 86_400.0,
+            (cfg.store.max_size_mb * 1_048_576.0) as u64,
+        ))
+    } else {
+        None
+    };
+    let engine = mctl_sim::engine::start(cfg.clone(), sources, recorder);
     Ok((
         Live {
             bus: engine.bus.clone(),
@@ -269,6 +310,44 @@ fn main() -> Result<()> {
             duration_s,
             quiet,
         }) => run_isslive(demo, config, duration_s, quiet),
+        Some(Command::Export {
+            table,
+            from,
+            to,
+            out,
+        }) => {
+            let path = db_path(&cfg)?;
+            anyhow::ensure!(
+                path.exists(),
+                "no recording at {}; run mctl first",
+                path.display()
+            );
+            let store = mctl_store::Store::open(&path)
+                .with_context(|| format!("opening {}", path.display()))?;
+            let parse = |s: &str| {
+                mctl_core::time::Utc::parse(s.trim_end_matches('Z'))
+                    .with_context(|| format!("bad time {s:?}; expected 2026-10-23T00:00:00"))
+            };
+            let from = from
+                .as_deref()
+                .map_or(Ok(mctl_core::time::Utc(0.0)), parse)?;
+            let to = match to.as_deref() {
+                Some(t) => parse(t)?,
+                None => mctl_core::time::Utc::now()?,
+            };
+            let rows = match out {
+                Some(p) => {
+                    let mut f = std::io::BufWriter::new(
+                        std::fs::File::create(&p)
+                            .with_context(|| format!("creating {}", p.display()))?,
+                    );
+                    store.export_csv(&table, from, to, &mut f)?
+                }
+                None => store.export_csv(&table, from, to, &mut std::io::stdout().lock())?,
+            };
+            eprintln!("{rows} row(s) exported");
+            Ok(())
+        }
         Some(Command::Check) => {
             println!(
                 "configuration: {} vehicle(s): {}",
@@ -322,7 +401,7 @@ fn main() -> Result<()> {
             pages,
             wait_s,
         }) => {
-            let (live, _engine) = start_live(&cfg, cli.vehicle.as_deref(), cli.offline)?;
+            let (live, _engine) = start_live(&cfg, cli.vehicle.as_deref(), cli.offline, false)?;
             wait_for_data(&live.bus, &live.vehicle_id, wait_s);
             if !cli.offline
                 && cfg
@@ -362,7 +441,7 @@ fn main() -> Result<()> {
             out,
             wait_s,
         }) => {
-            let (live, _engine) = start_live(&cfg, cli.vehicle.as_deref(), cli.offline)?;
+            let (live, _engine) = start_live(&cfg, cli.vehicle.as_deref(), cli.offline, false)?;
             wait_for_data(&live.bus, &live.vehicle_id, wait_s);
             let sizes = sizes
                 .iter()
@@ -383,7 +462,8 @@ fn main() -> Result<()> {
             )
         }
         None => {
-            let (live, _engine) = start_live(&cfg, cli.vehicle.as_deref(), cli.offline)?;
+            let (live, _engine) =
+                start_live(&cfg, cli.vehicle.as_deref(), cli.offline, !cli.no_record)?;
             let g = cli.gui;
             mctl_gui::run(
                 load_themes(&cli.themes_dir)?,

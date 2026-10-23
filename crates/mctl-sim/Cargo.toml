@@ -11,5 +11,6 @@ workspace = true
 mctl-astro = { version = "0.0.0", path = "../mctl-astro" }
 mctl-core = { version = "0.0.0", path = "../mctl-core" }
 mctl-sources = { version = "0.0.0", path = "../mctl-sources" }
+mctl-store = { version = "0.0.0", path = "../mctl-store" }
 nalgebra = "0.35.0"
 tracing = "0.1.44"

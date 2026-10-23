@@ -26,6 +26,7 @@ use mctl_core::world::{
     SourceView, TelemetryItem, TelemetryView, Track, TrackPoint, VehicleView, World,
 };
 use mctl_sources::tasks::{DataInfo, Event, Payload, SourceKey, SourceSet, TelemetryMeta};
+use mctl_store::{Record, Recorder};
 
 use crate::clock::Clock;
 
@@ -69,6 +70,9 @@ pub struct Model {
     latch: Latch,
     prev_conditions: HashSet<String>,
     first_wall_s: Option<f64>,
+    recorder: Option<Sender<Record>>,
+    state_period_s: f64,
+    last_state_rec_s: f64,
     prev: HashMap<String, Observed>,
     prev_eop_loaded: Option<bool>,
 }
@@ -172,6 +176,7 @@ impl Model {
             .iter()
             .map(|r| (r.clone(), Tracker::default()))
             .collect();
+        let state_period_s = 1.0 / cfg.store.state_hz;
         Self {
             cfg,
             vehicles,
@@ -186,6 +191,9 @@ impl Model {
             latch: Latch::default(),
             prev_conditions: HashSet::new(),
             first_wall_s: None,
+            recorder: None,
+            state_period_s,
+            last_state_rec_s: f64::NEG_INFINITY,
             prev: HashMap::new(),
             prev_eop_loaded: None,
         }
@@ -193,13 +201,27 @@ impl Model {
 
     /// Record an event in the log (wall-clock timestamped).
     pub fn note(&mut self, at: Utc, text: impl Into<String>) {
+        let text = text.into();
+        self.record(Record::log_event(at, None, "log", &text));
         if self.log.len() == LOG_CAPACITY {
             self.log.pop_front();
         }
-        self.log.push_back(LogEntry {
-            at,
-            text: text.into(),
-        });
+        self.log.push_back(LogEntry { at, text });
+    }
+
+    /// Send a record to the recorder, if there is one. A recorder that has gone away is logged once
+    /// and then dropped, so a dead disk cannot slow the engine.
+    fn record(&mut self, r: Record) {
+        if let Some(tx) = &self.recorder
+            && tx.send(r).is_err()
+        {
+            tracing::error!("the recorder has stopped; recording is off");
+            self.recorder = None;
+        }
+    }
+
+    pub fn set_recorder(&mut self, tx: Sender<Record>) {
+        self.recorder = Some(tx);
     }
 
     /// Log every change since the previous snapshot: active source, feed health, source status, EOP.
@@ -276,6 +298,14 @@ impl Model {
     pub fn ack(&mut self, wall: Utc) {
         let was = (self.latch.caution, self.latch.warning);
         self.latch.ack(wall);
+        self.record(Record::CwLog {
+            t: wall,
+            rule: "MASTER".into(),
+            from_state: "LATCHED".into(),
+            to_state: "ACKNOWLEDGED".into(),
+            value: None,
+            acked_at: Some(wall),
+        });
         self.note(
             wall,
             format!(
@@ -315,6 +345,14 @@ impl Model {
         }
         for (def, tr, value) in events {
             let v = value.map_or(String::new(), |v| format!(" ({v:.2} {})", def.units));
+            self.record(Record::CwLog {
+                t: wall,
+                rule: def.id.clone(),
+                from_state: tr.from.label().into(),
+                to_state: tr.to.label().into(),
+                value,
+                acked_at: None,
+            });
             self.note(
                 wall,
                 format!(
@@ -366,6 +404,13 @@ impl Model {
     pub fn apply(&mut self, event: Event) {
         match event {
             Event::Telemetry { id, text, rx } => {
+                let value = text.as_deref().and_then(|t| t.trim().parse::<f64>().ok());
+                self.record(Record::Telemetry {
+                    item_id: id.clone(),
+                    t_rx: rx,
+                    value,
+                    text: text.clone().filter(|_| value.is_none()),
+                });
                 self.telemetry.insert(id, (text, rx));
             }
             Event::TelemetryHealth(h) => self.telemetry_health = Some(h),
@@ -376,9 +421,19 @@ impl Model {
                     DataInfo {
                         from_cache,
                         fetched_at,
+                        raw,
                     },
             } => match (key, payload) {
                 (SourceKey::Gp(id), Payload::Gp(m)) => {
+                    if let Some(raw) = raw {
+                        self.record(Record::Elements {
+                            vehicle: id.clone(),
+                            source: "GP".into(),
+                            epoch: Some(m.epoch),
+                            fetched_at,
+                            blob: raw.to_string(),
+                        });
+                    }
                     if let Some(v) = self.vehicles.iter_mut().find(|v| v.def.id == id) {
                         v.gp = Some(Loaded {
                             data: Arc::new(m),
@@ -389,6 +444,15 @@ impl Model {
                     }
                 }
                 (SourceKey::Oem(id), Payload::Oem(o)) => {
+                    if let Some(raw) = raw {
+                        self.record(Record::Elements {
+                            vehicle: id.clone(),
+                            source: "OEM".into(),
+                            epoch: Some(o.creation_date),
+                            fetched_at,
+                            blob: raw.to_string(),
+                        });
+                    }
                     if let Some(v) = self.vehicles.iter_mut().find(|v| v.def.id == id) {
                         v.oem = Some(Loaded {
                             data: Arc::new(*o),
@@ -498,6 +562,23 @@ impl Model {
         self.track_revision = revision;
         self.seq += 1;
         self.observe(&vehicles, &eop_view, wall);
+        // Only real time is recorded: a SIM state is a simulation, not an observation.
+        if clock.is_live() && wall.0 - self.last_state_rec_s >= self.state_period_s {
+            self.last_state_rec_s = wall.0;
+            for v in &vehicles {
+                if let Some(s) = &v.solution {
+                    self.record(Record::State {
+                        vehicle: v.id.clone(),
+                        source: s.source.label().into(),
+                        t,
+                        frame: "GCRF",
+                        r_km: [s.state_gcrf.r.x, s.state_gcrf.r.y, s.state_gcrf.r.z],
+                        v_km_s: [s.state_gcrf.v.x, s.state_gcrf.v.y, s.state_gcrf.v.z],
+                        quality: s.quality.label().into(),
+                    });
+                }
+            }
+        }
         let telemetry = self.telemetry_health.clone().map(|health| TelemetryView {
             health,
             subscribed: self.telemetry_meta.len(),
@@ -844,8 +925,19 @@ pub struct Engine {
     pub bus: Arc<Bus>,
     /// Commands for the simulation clock (the GUI never touches engine state directly).
     pub commands: Sender<Command>,
-    _stop: SyncSender<()>,
-    _thread: JoinHandle<()>,
+    stop: Option<SyncSender<()>>,
+    thread: Option<JoinHandle<()>>,
+    /// Dropped last, after the engine thread has stopped sending, so its queue is flushed.
+    _recorder: Option<Recorder>,
+}
+
+impl Drop for Engine {
+    fn drop(&mut self) {
+        self.stop = None;
+        if let Some(t) = self.thread.take() {
+            let _ = t.join();
+        }
+    }
 }
 
 /// Apply every queued command to the clock, logging the outcome.
@@ -863,7 +955,8 @@ fn drain_commands(rx: &Receiver<Command>, clock: &mut Clock, model: &mut Model, 
 }
 
 /// Start the engine thread. It owns `sources` and publishes to the returned bus.
-pub fn start(cfg: Config, sources: SourceSet) -> Engine {
+pub fn start(cfg: Config, sources: SourceSet, recorder: Option<Recorder>) -> Engine {
+    let record_tx = recorder.as_ref().map(Recorder::sender);
     let bus = Bus::new(World::empty(Utc::now().unwrap_or(Utc(0.0))));
     let (stop_tx, stop_rx) = sync_channel::<()>(1);
     let (cmd_tx, cmd_rx) = channel::<Command>();
@@ -878,6 +971,9 @@ pub fn start(cfg: Config, sources: SourceSet) -> Engine {
             // channels would tell every source thread to exit.
             let sources = sources;
             let mut model = Model::new(cfg);
+            if let Some(tx) = record_tx {
+                model.set_recorder(tx);
+            }
             model.set_telemetry(sources.telemetry.clone());
             let mut clock = Clock::live(Instant::now());
             let mut next = Instant::now();
@@ -918,8 +1014,9 @@ pub fn start(cfg: Config, sources: SourceSet) -> Engine {
     Engine {
         bus,
         commands: cmd_tx,
-        _stop: stop_tx,
-        _thread: thread,
+        stop: Some(stop_tx),
+        thread: Some(thread),
+        _recorder: recorder,
     }
 }
 
@@ -944,6 +1041,7 @@ mod tests {
                 info: DataInfo {
                     from_cache: false,
                     fetched_at: Utc(0.0),
+                    raw: None,
                 },
             });
         }
@@ -954,6 +1052,7 @@ mod tests {
                 info: DataInfo {
                     from_cache: true,
                     fetched_at: Utc(0.0),
+                    raw: None,
                 },
             });
         }
@@ -1050,6 +1149,7 @@ mod tests {
             info: DataInfo {
                 from_cache: false,
                 fetched_at: Utc(0.0),
+                raw: None,
             },
         });
         let mut without = model();
@@ -1097,7 +1197,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mctl-engine-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let set = mctl_sources::tasks::start(&cfg, dir.clone(), true).unwrap();
-        let eng = start(cfg, set);
+        let eng = start(cfg, set, None);
         let s0 = eng.bus.latest().seq;
         std::thread::sleep(Duration::from_millis(500));
         let advanced = eng.bus.latest().seq - s0;
@@ -1210,7 +1310,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mctl-engine-cmd-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let set = mctl_sources::tasks::start(&cfg, dir.clone(), true).unwrap();
-        let eng = start(cfg, set);
+        let eng = start(cfg, set, None);
         let target = Utc::parse("2026-10-25T00:00:00").unwrap();
         eng.commands.send(Command::Seek(target)).unwrap();
         eng.commands.send(Command::SetRate(1000.0)).unwrap();
@@ -1380,5 +1480,101 @@ mod tests {
                 .caution,
             "a persisting condition does not re-latch"
         );
+    }
+
+    #[test]
+    fn the_engine_records_state_telemetry_elements_events_and_cw_changes_but_not_sim_states() {
+        use mctl_core::command::Command as C;
+        let _ = C::Ack;
+        let mut m = model();
+        let (tx, rx) = std::sync::mpsc::channel();
+        m.set_recorder(tx);
+        m.set_telemetry(vec![meta("USLAB000058")]);
+        feed(&mut m, true, true);
+        // Network downloads are recorded with their raw body; cache loads are not (recorded when fetched).
+        m.apply(Event::Data {
+            key: SourceKey::Gp("iss".into()),
+            payload: Payload::Gp(GpModel::from_omm_json(OMM).unwrap()),
+            info: DataInfo {
+                from_cache: false,
+                fetched_at: Utc(1.0),
+                raw: Some(Arc::from(OMM)),
+            },
+        });
+        let t = t_in_oem();
+        m.apply(Event::Telemetry {
+            id: "USLAB000058".into(),
+            text: Some("749.5".into()),
+            rx: t,
+        });
+        m.apply(Event::Telemetry {
+            id: "USLAB000058".into(),
+            text: Some("ON".into()),
+            rx: t.plus(1.0),
+        });
+        m.world_at(t, ClockView::LIVE, t);
+        m.world_at(t.plus(0.5), ClockView::LIVE, t.plus(0.5));
+        m.world_at(t.plus(1.1), ClockView::LIVE, t.plus(1.1));
+        let sim = ClockView {
+            mode: mctl_core::world::ClockMode::Sim,
+            rate: 10.0,
+            paused: false,
+        };
+        m.world_at(t.plus(500.0), sim, t.plus(2.5));
+        m.world_at(t.plus(800.0), sim, t.plus(4.0));
+        let recs: Vec<Record> = rx.try_iter().collect();
+        let count = |f: fn(&Record) -> bool| recs.iter().filter(|r| f(r)).count();
+        assert_eq!(
+            count(|r| matches!(r, Record::Elements { source, .. } if source == "GP")),
+            1
+        );
+        assert_eq!(count(|r| matches!(r, Record::Telemetry { .. })), 2);
+        assert!(recs.iter().any(
+            |r| matches!(r, Record::Telemetry { value: Some(v), text: None, .. } if *v == 749.5)
+        ));
+        assert!(recs.iter().any(
+            |r| matches!(r, Record::Telemetry { value: None, text: Some(t), .. } if t == "ON")
+        ));
+        assert_eq!(
+            count(|r| matches!(r, Record::State { .. })),
+            2,
+            "1 Hz while live: t and t+1.1, not t+0.5; nothing in SIM"
+        );
+        assert!(
+            recs.iter()
+                .all(|r| !matches!(r, Record::State { t: st, .. } if st.0 > t.0 + 100.0)),
+            "no sim-time states"
+        );
+        assert!(
+            count(|r| matches!(r, Record::Event { .. })) >= 1,
+            "log entries are recorded as events"
+        );
+        // A rule transition lands in cw_log.
+        m.apply(Event::Telemetry {
+            id: "USLAB000058".into(),
+            text: Some("749".into()),
+            rx: t,
+        });
+        assert!(rx.try_iter().any(|r| matches!(r, Record::Telemetry { .. })));
+    }
+
+    #[test]
+    fn a_stopped_recorder_is_dropped_without_disturbing_the_engine() {
+        let mut m = model();
+        let (tx, rx) = std::sync::mpsc::channel();
+        m.set_recorder(tx);
+        drop(rx);
+        m.apply(Event::Telemetry {
+            id: "X".into(),
+            text: Some("1".into()),
+            rx: Utc(1.0),
+        });
+        m.apply(Event::Telemetry {
+            id: "X".into(),
+            text: Some("2".into()),
+            rx: Utc(2.0),
+        });
+        let t = t_in_oem();
+        assert!(m.world(t).seq > 0, "still publishing");
     }
 }

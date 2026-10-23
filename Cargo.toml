@@ -34,6 +34,7 @@ anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
 mctl-core = { version = "0.0.0", path = "crates/mctl-core" }
 mctl-gui = { version = "0.0.0", path = "crates/mctl-gui" }
+mctl-store = { path = "crates/mctl-store" }
 mctl-sim = { version = "0.0.0", path = "crates/mctl-sim" }
 mctl-sources = { version = "0.0.0", path = "crates/mctl-sources" }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "time", "signal"] }

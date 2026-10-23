@@ -43,6 +43,8 @@ pub enum Payload {
 pub struct DataInfo {
     pub from_cache: bool,
     pub fetched_at: Utc,
+    /// The downloaded body, present only for a fresh download (so each element set is recorded once).
+    pub raw: Option<Arc<str>>,
 }
 
 /// Static description of a subscribed telemetry item.
@@ -272,6 +274,7 @@ fn supervise(
                         info: DataInfo {
                             from_cache: true,
                             fetched_at: Utc(f.meta.fetched_at),
+                            raw: None,
                         },
                     },
                 ) || !health(Health::Ok)
@@ -326,6 +329,7 @@ fn supervise(
                                 info: DataInfo {
                                     from_cache: false,
                                     fetched_at: Utc(f.meta.fetched_at),
+                                    raw: Some(Arc::from(f.body.as_str())),
                                 },
                             },
                         ) {

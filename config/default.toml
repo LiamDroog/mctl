@@ -30,6 +30,14 @@ min_refresh_s = 86400
 residual_caution_km = 5.0
 residual_warning_km = 20.0
 
+[store]
+# Recording to SQLite (DESIGN.md 10). path = "" means $XDG_DATA_HOME/mctl/mctl.db.
+enabled = true
+path = ""
+state_hz = 1.0
+retention_days = 30.0
+max_size_mb = 2048.0
+
 [engine]
 tick_hz = 50
 # Orbit/ground-track window around now, in revolutions, and sample count.

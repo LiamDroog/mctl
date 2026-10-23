@@ -33,6 +33,8 @@ pub struct Config {
     pub sources: Sources,
     pub limits: Limits,
     pub engine: Engine,
+    #[serde(default)]
+    pub store: StoreConfig,
     #[serde(rename = "vehicle")]
     pub vehicles: Vec<VehicleDef>,
     /// Caution and warning threshold rules (FR-40).
@@ -85,6 +87,31 @@ pub struct EopSource {
 pub struct Limits {
     pub residual_caution_km: f64,
     pub residual_warning_km: f64,
+}
+
+/// Recording to SQLite (DESIGN.md §10).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct StoreConfig {
+    pub enabled: bool,
+    /// Database path; empty means `$XDG_DATA_HOME/mctl/mctl.db`.
+    pub path: String,
+    /// Rate at which the active solution is recorded, Hz.
+    pub state_hz: f64,
+    pub retention_days: f64,
+    pub max_size_mb: f64,
+}
+
+impl Default for StoreConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            path: String::new(),
+            state_hz: 1.0,
+            retention_days: 30.0,
+            max_size_mb: 2048.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -173,6 +200,16 @@ impl Config {
 
     fn validate(&self) -> Result<(), ConfigError> {
         let bad = |m: String| Err(ConfigError::Invalid(m));
+        let s = &self.store;
+        if !(s.state_hz > 0.0
+            && s.state_hz <= 50.0
+            && s.retention_days > 0.0
+            && s.max_size_mb > 0.0)
+        {
+            return bad(
+                "store: state_hz must be in (0, 50], retention_days and max_size_mb > 0".into(),
+            );
+        }
         for (i, r) in self.rules.iter().enumerate() {
             if let Err(m) = r.validate() {
                 return bad(m);
@@ -284,6 +321,11 @@ pub fn user_config_path() -> Option<PathBuf> {
 /// `$XDG_CACHE_HOME/mctl`, if a home directory can be determined.
 pub fn cache_dir() -> Option<PathBuf> {
     directories::ProjectDirs::from("", "", "mctl").map(|d| d.cache_dir().to_path_buf())
+}
+
+/// `$XDG_DATA_HOME/mctl` (the recording database).
+pub fn data_dir() -> Option<PathBuf> {
+    directories::ProjectDirs::from("", "", "mctl").map(|d| d.data_dir().to_path_buf())
 }
 
 /// `$XDG_STATE_HOME/mctl` (logs), falling back to the cache directory.
