@@ -1,0 +1,104 @@
+--- a/DESIGN.md
++++ b/DESIGN.md
+@@ -56,11 +56,11 @@
+ 
+ | Source | Provides | Frame / format | Update cadence | Auth | Status |
+ |---|---|---|---|---|---|
+-| **NASA ISS OEM** (`nasa-public-data.s3.amazonaws.com/iss-coords/current/ISS_OEM/ISS.OEM_J2K_EPH.{txt,xml}`) | ISS state vectors at 4-min spacing, ~15 days of prediction, planned maneuvers and post-maneuver vectors in the comment block, mass and drag data | CCSDS OEM, Mean of J2000 (EME2000) | Reposted by TOPO when the trajectory changes | None | Verified URL; parse comment block format in M1 |
++| **NASA ISS OEM** (`nasa-public-data.s3.amazonaws.com/iss-coords/current/ISS_OEM/ISS.OEM_J2K_EPH.{txt,xml}`) | ISS state vectors at 90–240 s spacing (not uniform; M0), ~15 days of prediction, planned maneuvers and post-maneuver vectors in the comment block (none present in the 2026-10-21 file), mass and drag data | CCSDS OEM, Mean of J2000 (EME2000) | Reposted by TOPO when the trajectory changes | None | Verified URL; parse comment block format in M1 |
+ | **CelesTrak GP** (`celestrak.org/NORAD/elements/gp.php`) | Mean elements for SGP4 | OMM JSON (preferred), TLE | ~Several per day per object | None | Verified; default format is CSV since 2026-05, so always request `FORMAT=JSON` explicitly |
+ | **CelesTrak SupGP** (`.../supplemental/sup-gp.php`) | Operator-derived elements fitted forward from current epoch (includes `ISS-E`, `SpaceX-E`) | OMM JSON | Varies | None | Evaluate in M1 as a better SGP4 source than standard GP for ISS and Dragon |
+ | **Space-Track** | GP history, decay, conjunction data | OMM | — | Account required | v2, optional |
+-| **ISSLIVE** (Lightstreamer, `push.lightstreamer.com`, adapter `ISSLIVE`) | Real-time public ISS telemetry: attitude, CMGs, power, thermal, ECLSS, comm, joint angles | Lightstreamer TLCP item/field updates | Push, per-item change | None | Community-sustained (ISS Mimic). Item IDs taken from ISS Mimic's published list; attitude item IDs and frame **to be verified in M3** |
++| **ISSLIVE** (Lightstreamer, `push.lightstreamer.com`, adapter `ISSLIVE`) | Real-time public ISS telemetry: attitude, CMGs, power, thermal, ECLSS, comm, joint angles | Lightstreamer TLCP item/field updates | Push, per-item change | None | Community-sustained (ISS Mimic). Server, adapter set, fields and ~380 item IDs confirmed from Mimic's source (M0, ADR 0002). Attitude = LVLH quaternion `USLAB000018`–`21` (unit norm verified, scalar-first inferred; axes and direction **to be verified in M3**). Attitude and joint items update at ~1 Hz, ~3–4 s old on arrival. Mimic's public spreadsheet labels rate and error units RAD; the data are consistent with degrees. The feed can sit connected but frozen for hours (observed 13 h on 2026-10-23); judge freshness by `TIME_000001`, not the socket |
+ | **JPL Horizons API** (`ssd.jpl.nasa.gov/api/horizons.api`) | Ephemeris vectors for JWST, Roman, Sun, Moon | `EPHEM_TYPE=VECTORS`, ICRF | On request (cache) | None | Verified |
+ | **Observer location** | Site lat/lon/alt | — | Startup | — | See §8 |
+ 
+@@ -159,12 +159,12 @@
+ 
+ | ID | Requirement |
+ |---|---|
+-| NFR-1 | Single executable. Runtime dependencies are limited to the system GPU stack (Vulkan or GL via wgpu) and libc. All assets (fonts, Earth textures, coastlines) are embedded. |
++| NFR-1 | Single executable. Runtime dependencies are limited to the system GPU stack (Vulkan or GL via wgpu) and libc. All assets (fonts, Earth textures, coastlines) are embedded; ephemeris data needed only by the optional numerical planner (JPL DE440, 97.5 MB) may be an on-demand cached download. |
+ | NFR-2 | 60 fps display at 2560×1440 on integrated graphics (Intel Xe-class) with all panels of the master page visible. |
+ | NFR-3 | Core state update ≥ 50 Hz per active vehicle. Rendering is decoupled from data. |
+ | NFR-4 | Cold start to first rendered frame from cache in under 2 s. |
+ | NFR-5 | Network loss never blocks the UI thread. Every source runs in its own supervised task. |
+-| NFR-6 | Primary platform: Kubuntu (current LTS), X11 and Wayland. Windows should build without code changes but is not tested in v1. |
++| NFR-6 | Primary platform: Kubuntu (current LTS), X11 and Wayland. Windows should build without code changes but is not tested in v1. wgpu offers only OpenGL (not Vulkan) on pre-Skylake Intel; the GL backend works (M0). |
+ | NFR-7 | No telemetry or analytics. The only outbound calls are to configured data sources, plus IP geolocation if explicitly enabled. |
+ | NFR-8 | All tunables (URLs, rates, thresholds, colours, keybindings) are in config, not hardcoded. |
+ | NFR-9 | Dependencies are pinned (`Cargo.lock` committed, minimal semver ranges in `Cargo.toml`). |
+@@ -263,11 +263,12 @@
+ 
+ | Need | Candidate | Decision point |
+ |---|---|---|
+-| SGP4 | `sgp4` crate (pure Rust, OMM support) | Adopt unless M0 evaluation picks a full astro library |
+-| Frames, numerical propagation, force models | `satkit` or `brahe` (both Rust astrodynamics libraries), versus in-house | **M0 evaluation:** feature coverage, accuracy against references, license, maintenance |
++| SGP4 | `sgp4` crate (pure Rust, OMM support) | **Adopt (ADR 0001).** Always use `Constants::from_elements_afspc_compatibility_mode` (WGS-72): the default constructor is WGS-84 and is ~68 m/24 h off for the ISS. Add a decay guard (the crate returns states inside the Earth) |
++| Frames, time, Sun/Moon | In-house on `nalgebra` (ADR 0001); `brahe` rejected | Decided in M0. In-house frames reach 1.4 m vs the full IAU 2006 chain; the residual is documented, not hidden |
++| Numerical propagation, force models | `satkit` behind an `mctl-astro` trait, in-house J2–J4 as fallback/cross-check | **M5 gate (ADR 0001):** DE440 (97.5 MB) must be an optional cached download, and the version pinned |
+ | Linear algebra | `nalgebra` | Adopt |
+ | HTTP | `reqwest` + `rustls` | Adopt (no OpenSSL, preserves NFR-1) |
+-| Lightstreamer TLCP | `lightstreamer-rs` (evaluate) / `lightstreamer-client` (GPL-3.0, partial implementation) / in-house minimal TLCP over WebSocket | License decides (see §14). In-house is the fallback: the protocol subset needed (create session, subscribe MERGE items, parse updates) is small |
++| Lightstreamer TLCP | In-house minimal TLCP over a rustls WebSocket | **Decided in M0 (ADR 0002).** `lightstreamer-client` is GPL-3.0; `lightstreamer-rs` 1.0.1 is MIT but hard-depends on OpenSSL (does not build here) |
+ | Windowing / GPU | `winit` + `wgpu` | Adopt |
+ | Immediate-mode UI | `egui` with `egui-winit` + `egui-wgpu` (not `eframe`) | Adopt. A custom loop is required so egui renders to an offscreen target for the CRT post-pass |
+ | SQLite | `rusqlite` with `bundled` | Adopt |
+@@ -286,14 +287,14 @@
+ | SGP4/SDP4 | GP elements; always-on fallback | Evaluated every tick |
+ | OEM interpolation | ISS primary | Lagrange (or Hermite, position and velocity), 8th order, as recommended in the OEM header. Segment boundaries at maneuvers must not be interpolated across. |
+ | Horizons interpolation | Deep-space vehicles | Cache vectors at 1 h spacing; Hermite interpolation |
+-| Numerical (Cowell) | Maneuver planner, sim extension beyond source spans | Adaptive Dormand–Prince 8(7) (or RKF7(8)). Forces: two-body, J2–J4 zonal, Sun and Moon third body (toggle), atmospheric drag (exponential or Harris–Priester; NRLMSISE-00 in v2), cannonball SRP (for HEO/L2, toggle). Ballistic coefficient defaults from OEM header (ISS) or config. |
++| Numerical (Cowell) | Maneuver planner, sim extension beyond source spans | Adaptive Dormand–Prince 8(7) (or RKF7(8)). Forces: two-body, geopotential of degree/order **≥ 20** (J2–J4 alone leaves ~2 km/24 h; M0), Sun and Moon third body (toggle), atmospheric drag (exponential or Harris–Priester; NRLMSISE-00 in v2), cannonball SRP (for HEO/L2, toggle). Ballistic coefficient defaults from OEM header (ISS) or config. |
+ 
+ ### 7.2 Accuracy budget (indicative, displayed in the UI)
+ 
+ | Source | Typical position error | Displayed as |
+ |---|---|---|
+ | ISS OEM, near term, no unmodelled maneuver | Sub-km to a few km over days (drag-dominated) | `PRED (OEM)` with age |
+-| SGP4 from fresh GP, LEO | ~1 km at epoch, growing a few km per day | `PRED (SGP4)` with TLE age |
++| SGP4 from fresh GP, LEO | ~1 km at epoch, growing a few km per day. Measured (M0): 1.2 km RMS, 2.35 km max over 24 h against the OEM, from a 16 h old element set, almost all along-track | `PRED (SGP4)` with TLE age |
+ | SGP4 after an unpublished maneuver | Unbounded until a new element set | Caught by the residual caution |
+ | Horizons (JWST) | Depends on JPL's predict | `PRED (HZN)` with fetch age |
+ | Numerical (planner) | Dominated by drag-model uncertainty | `SIM` |
+@@ -348,7 +349,7 @@
+ 
+ Themes are TOML files (palette, font, effect parameters). Users can add their own. Every theme must encode limit states with something other than hue alone (inverse video, a label, or blink).
+ 
+-Fonts (embedded, OFL or public domain, licenses checked in M0): a crisp monospace for Modern and a CRT-style bitmap-look monospace for the retro themes.
++Fonts (embedded, licenses checked in M0, `assets/LICENSES.md`): JetBrains Mono (OFL 1.1) for Modern; Unscii-16 (public domain; never the GPL `unscii-16-full`) for the retro themes. VT323 was rejected: it has no box-drawing glyphs. Theme cell sizes are physical pixels; a HiDPI scaling policy is needed before M2.
+ 
+ ### 9.3 Global chrome
+ 
+@@ -489,8 +490,8 @@
+ |---|---|---|
+ | SGP4 | Vallado verification test vectors | Matches reference within published tolerance |
+ | Frames | Reference conversions (Vallado examples) for TEME→GCRF→ITRF | < 1 m, or document residual source |
+-| OEM interpolation | Hold out every other vector, interpolate, compare | < 10 m |
+-| Numerical propagator | Propagate ISS from an OEM vector for 24 h without maneuvers, compare with OEM | Residual reported; target < 1 km/24 h with drag tuned to OEM header values |
++| OEM interpolation | Hold out every other vector, interpolate, compare | < 10 m (M0 measured 4.1 m with 8th-order Lagrange, on non-uniform 90–240 s spacing) |
++| Numerical propagator | Propagate ISS from an OEM vector for 24 h without maneuvers, compare with OEM | Residual reported; target < 1 km/24 h with the OEM header's drag parameters. **Needs ≥ 20×20 gravity + Sun/Moon + a real density model; M0 measured 805 m untuned, 91 m with one fitted density factor; J2–J4 + drag alone is ~2 km** |
+ | Maneuver Δv application | Analytic Hohmann case (circular to elliptic) | Ha/Hp match analytic within 1 m |
+ | Passes | Compare 20 passes with NASA Spot the Station / an independent tool | AOS/LOS within 10 s, max elevation within 0.5° |
+ | Eclipse | Compare with eclipse events computed from OEM vectors with an independent tool | Within 5 s |
+@@ -521,14 +522,15 @@
+ 
+ | # | Item | Impact | Mitigation / decision needed |
+ |---|---|---|---|
+-| R1 | ISSLIVE is community-sustained and undocumented; it could change or stop | Subsystem pages and ADI go dark | Feed health is shown prominently; pages degrade to `NO DATA`; trajectory views do not depend on it |
+-| R2 | Lightstreamer crate licensing (`lightstreamer-client` is GPL-3.0) | Forces the project license, or in-house work | **Decide the project license.** If not GPL-compatible, implement minimal TLCP in-house (est. 1–2 days for the subset needed) |
++| R1 | ISSLIVE is community-sustained and undocumented; it could change or stop, **or freeze while connected** (observed 13 h, 2026-10-23) | Subsystem pages and ADI go dark or show stale values | Feed health from `TIME_000001` status and timestamps, not the socket; per-item staleness policy (rarely-changing items legitimately have old timestamps); pages degrade to `NO DATA`; trajectory views do not depend on it |
++| R2 | Lightstreamer crate licensing (`lightstreamer-client` is GPL-3.0) | Forces the project license, or in-house work | **Closed in M0 (ADR 0002):** minimal TLCP implemented in-house |
+ | R3 | OEM comment-block maneuver format is not formally specified | FR-33 may be fragile | Parse defensively; fall back to showing raw comment text in the event log |
+-| R4 | Attitude item IDs and reference frame in ISSLIVE unverified | ADI could be wrong | M3 verification against a known attitude mode before the ADI is enabled |
+-| R5 | Integrated GPU performance with bloom and persistence at 1440p | NFR-2 | Effects at reduced internal resolution; per-effect toggles |
++| R4 | Attitude reference frame and quaternion convention in ISSLIVE unverified (item IDs and unit norm are now confirmed) | ADI could be wrong | M3 verification against a known attitude mode before the ADI is enabled |
++| R5 | Integrated GPU performance with bloom and persistence at 1440p | NFR-2 | M0: persistence costs 2.1 / 3.7 ms at 1080p / 1440p on an old discrete GPU, bloom 1.2 / 2.1 ms; all effects on measured 7.8 / 13.9 ms. Not measured on Xe-class hardware. Effects at reduced internal resolution; per-effect toggles; fuse persistence into the final pass if needed |
+ | R6 | Roman Horizons ID and ephemeris availability | Roman support | Confirm in M6; vehicle definition is data-only |
+ | R7 | GeoClue unreliability | Wrong default site | Source and uncertainty always displayed; one-key save of a configured site |
+ | R8 | Provider rate limits or blocking (CelesTrak) | Data loss | Conservative refresh, caching, conditional requests |
++| R9 | `satkit` is pre-1.0 with one dominant maintainer and a fast release cadence (five releases in 11 days, Sep–Oct 2026) | API churn at M5 | Behind an `mctl-astro` trait, exact version pin, in-house J2–J4 fallback (ADR 0001) |
+ 
+ Open questions:
+ 1. Project license (drives R2).
