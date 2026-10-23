@@ -7,6 +7,7 @@ use mctl_core::world::{ClockMode, EopView, SourceStatus, SourceView};
 
 use crate::commands::COMMANDS;
 use crate::grid::{CellRect, Grid, Limit, Role, Style};
+use crate::keys::{KeyAction, KeyMap};
 use crate::page::{
     Layout, Lines, MIN_COLS, MIN_ROWS, PageInput, quality_text, source_row, upcoming_events,
 };
@@ -108,15 +109,22 @@ fn header(grid: &mut Grid, inp: &PageInput<'_>) {
     );
 }
 
-/// Page-specific key hints for the footer's left side.
-fn page_hints(page: Page, sub: usize) -> &'static str {
+/// Page-specific key hints for the footer's left side, with the user's actual bindings.
+fn page_hints(page: Page, sub: usize, k: &KeyMap) -> String {
+    let l = |a| k.label(a);
     match (page, sub) {
-        (Page::Master | Page::Traj, 0) | (Page::Master, _) => {
-            "ARROWS/DRAG ORBIT +/- ZOOM Z ALT F CAM C FOCUS X FRAME"
-        }
-        (Page::Traj, 1) => "X FRAME  TAB SUBPAGE",
-        (Page::Sys, _) => "TAB SUBPAGE",
-        _ => "TAB SUBPAGE",
+        (Page::Master | Page::Traj, 0) | (Page::Master, _) => format!(
+            "ARROWS/DRAG ORBIT {}/{} ZOOM {} ALT {} CAM {} FOCUS {} FRAME",
+            l(KeyAction::ZoomIn).replace(' ', ""),
+            l(KeyAction::ZoomOut).replace(' ', ""),
+            l(KeyAction::Altitude),
+            l(KeyAction::CameraFrame),
+            l(KeyAction::Focus),
+            l(KeyAction::Frame)
+        ),
+        (Page::Traj, 1) => format!("{} FRAME  TAB SUBPAGE", l(KeyAction::Frame)),
+        (Page::Traj, 2) => format!("{} WINDOW  TAB SUBPAGE", l(KeyAction::TrendWindow)),
+        _ => "TAB SUBPAGE".to_owned(),
     }
 }
 
@@ -162,8 +170,20 @@ fn footer(grid: &mut Grid, inp: &PageInput<'_>) {
             Style::limit(Limit::Caution),
         )
     } else {
-        let common = "SPACE PAUSE [ ] WARP 0 LIVE T THEME V VEHICLE";
-        (format!("{}  {common}", page_hints(inp.page, inp.sub)), dim)
+        let k = inp.keys;
+        let common = format!(
+            "{} PAUSE {} {} WARP {} LIVE {} THEME {} VEHICLE",
+            k.label(KeyAction::Pause),
+            k.label(KeyAction::WarpDown),
+            k.label(KeyAction::WarpUp),
+            k.label(KeyAction::Live),
+            k.label(KeyAction::Theme),
+            k.label(KeyAction::Vehicle)
+        );
+        (
+            format!("{}  {common}", page_hints(inp.page, inp.sub, k)),
+            dim,
+        )
     };
     grid.put(
         1,
@@ -1501,20 +1521,23 @@ fn no_source(grid: &mut Grid, inp: &PageInput<'_>, reason: &str) -> Layout {
     Layout::default()
 }
 
-fn help_overlay(grid: &mut Grid) {
+fn help_overlay(grid: &mut Grid, k: &KeyMap) {
     let (cols, rows) = (grid.cols, grid.rows);
-    let keys: &[&str] = &[
-        "F1..F10        pages: MASTER TRAJ GNC EPS TCS COMM PASS PROX VIEW SYS",
-        "TAB / SHIFT-TAB  next / previous sub-page",
-        "V              next vehicle              T   next theme",
-        "SPACE          pause / resume            [ ]  halve / double warp",
-        "0              return to LIVE            :   command line      A   acknowledge C&W",
-        "ARROWS         orbit camera              +/-  zoom",
-        "MOUSE          drag inside the ORBIT MAP to orbit; wheel there to zoom",
-        "Z alt x1/2/5/10  F inertial/Earth-fixed  C focus Earth/vehicle  X GCRF/ITRF",
-        "1 2 3 4        scanlines bloom persistence CRT      E  all effects",
-        "?              close this help           Q   quit",
+    let mut keys: Vec<String> = vec![
+        "F1..F10        pages: MASTER TRAJ GNC EPS TCS COMM PASS PROX VIEW SYS".into(),
+        "TAB / SHIFT-TAB  next / previous sub-page".into(),
+        "ARROWS         orbit camera".into(),
+        "MOUSE          drag inside the ORBIT MAP to orbit; wheel there to zoom".into(),
     ];
+    keys.extend(
+        crate::keys::ACTIONS
+            .iter()
+            .map(|(a, _, text)| format!("{:<14} {text}", k.label(*a))),
+    );
+    keys.push(
+        "(keys are remappable under [keys] in the config; F-keys, Tab, arrows are fixed)".into(),
+    );
+    let keys: Vec<&str> = keys.iter().map(String::as_str).collect();
     let w = 100.min(cols.saturating_sub(4));
     let h = (keys.len() + COMMANDS.len() + 7).min(rows.saturating_sub(4));
     if w < 20 || h < 6 {
@@ -1597,7 +1620,7 @@ pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     };
     footer(grid, inp);
     if inp.help {
-        help_overlay(grid);
+        help_overlay(grid, inp.keys);
     }
     layout
 }

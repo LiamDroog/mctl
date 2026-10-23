@@ -38,6 +38,8 @@ pub struct Config {
     pub observer: ObserverConfig,
     #[serde(rename = "site", default)]
     pub sites: Vec<SiteDef>,
+    /// Key bindings by action name (validated by the front end that owns the actions).
+    pub keys: std::collections::BTreeMap<String, Vec<String>>,
     #[serde(rename = "vehicle")]
     pub vehicles: Vec<VehicleDef>,
     /// Caution and warning threshold rules (FR-40).

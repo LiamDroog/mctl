@@ -62,6 +62,8 @@ pub struct Live {
     pub vehicle_id: String,
     pub commands: std::sync::mpsc::Sender<mctl_core::command::Command>,
     pub settings: Vec<(String, String)>,
+    /// The `[keys]` table from the configuration.
+    pub keys: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 struct Offline {
@@ -92,6 +94,7 @@ impl Offline {
             live.vehicle_id.clone(),
         )?;
         let mut console = console;
+        console.set_keys(crate::keys::KeyMap::from_config(&live.keys).map_err(anyhow::Error::msg)?);
         console.connect(Some(live.commands.clone()), live.settings.clone());
         let globe = build_globe(&gpu, console.theme())?;
         let renderer = Renderer::new(gpu.clone(), SCENE_FORMAT, size, globe);

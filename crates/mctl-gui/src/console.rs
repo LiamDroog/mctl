@@ -17,6 +17,7 @@ use crate::commands::{self, Action, Effect, Names, UiAction};
 use crate::fonts;
 use crate::globe::{Camera, GlobeScene, build_scene, orbit_vertices};
 use crate::grid::Grid;
+use crate::keys::{KeyAction, KeyMap};
 use crate::page::{self, CommandView, PageInput, StatusMsg};
 use crate::pages::Page;
 use crate::render::EffectToggles;
@@ -93,6 +94,7 @@ pub struct Console {
     pub help: bool,
     /// Index into [`crate::trendplot::WINDOWS`] when no custom window is set.
     pub trend_window_s: f64,
+    keys: KeyMap,
     trend_asked: Option<(String, f64, f64)>,
     cmd: Option<CommandLine>,
     history: Vec<String>,
@@ -168,6 +170,7 @@ impl Console {
             help: false,
             trend_window_s: crate::trendplot::WINDOWS[1].1,
             trend_asked: None,
+            keys: KeyMap::embedded_default(),
             cmd: None,
             history: Vec::new(),
             status: None,
@@ -180,6 +183,11 @@ impl Console {
             orbit_cache: None,
             pending_textures,
         })
+    }
+
+    /// Replace the key bindings (from the user's configuration).
+    pub fn set_keys(&mut self, keys: KeyMap) {
+        self.keys = keys;
     }
 
     /// Connect the clock-command channel and the read-only settings rows for the SYS page.
@@ -366,10 +374,14 @@ impl Console {
             return Outcome::Continue;
         }
         if self.help {
-            if matches!(key, KeyInput::Escape | KeyInput::Char('?')) {
+            let action = match &key {
+                KeyInput::Char(c) => self.keys.action(*c),
+                _ => None,
+            };
+            if key == KeyInput::Escape || action == Some(KeyAction::Help) {
                 self.help = false;
             }
-            if key != KeyInput::Char('q') {
+            if action != Some(KeyAction::Quit) {
                 return Outcome::Continue;
             }
         }
@@ -393,29 +405,33 @@ impl Console {
     }
 
     fn handle_char(&mut self, c: char, world: &World) -> Outcome {
-        match c {
-            ':' | ';' => {
+        let Some(action) = self.keys.action(c) else {
+            return Outcome::Continue;
+        };
+        match action {
+            KeyAction::CommandLine => {
                 self.cmd = Some(CommandLine {
                     text: String::new(),
                     candidates: Vec::new(),
                     history_pos: None,
                 })
             }
-            '?' => self.help = !self.help,
-            'q' => return Outcome::Quit,
-            't' => self.cycle_theme(),
-            'v' => self.next_vehicle(world),
-            'x' => self.show_ecef = !self.show_ecef,
-            'z' => self.camera.cycle_exaggeration(),
-            'f' => self.camera.earth_fixed = !self.camera.earth_fixed,
-            'c' => self.camera.focus_vehicle = !self.camera.focus_vehicle,
-            '+' | '=' => self.camera.zoom_by(1.0 / ZOOM_STEP),
-            '-' | '_' => self.camera.zoom_by(ZOOM_STEP),
-            '1' => self.toggles.scanlines = !self.toggles.scanlines,
-            '2' => self.toggles.bloom = !self.toggles.bloom,
-            '3' => self.toggles.persistence = !self.toggles.persistence,
-            '4' => self.toggles.curvature = !self.toggles.curvature,
-            'w' if self.page == Page::Traj && self.sub == 2 => {
+            KeyAction::Help => self.help = !self.help,
+            KeyAction::Quit => return Outcome::Quit,
+            KeyAction::Theme => self.cycle_theme(),
+            KeyAction::Vehicle => self.next_vehicle(world),
+            KeyAction::Frame => self.show_ecef = !self.show_ecef,
+            KeyAction::Altitude => self.camera.cycle_exaggeration(),
+            KeyAction::CameraFrame => self.camera.earth_fixed = !self.camera.earth_fixed,
+            KeyAction::Focus => self.camera.focus_vehicle = !self.camera.focus_vehicle,
+            KeyAction::ZoomIn => self.camera.zoom_by(1.0 / ZOOM_STEP),
+            KeyAction::ZoomOut => self.camera.zoom_by(ZOOM_STEP),
+            KeyAction::Scanlines => self.toggles.scanlines = !self.toggles.scanlines,
+            KeyAction::Bloom => self.toggles.bloom = !self.toggles.bloom,
+            KeyAction::Persistence => self.toggles.persistence = !self.toggles.persistence,
+            KeyAction::Crt => self.toggles.curvature = !self.toggles.curvature,
+            KeyAction::AllEffects => self.toggles = EffectToggles::all(!self.toggles.any()),
+            KeyAction::TrendWindow if self.page == Page::Traj && self.sub == 2 => {
                 let w = &crate::trendplot::WINDOWS;
                 let next = w
                     .iter()
@@ -424,21 +440,20 @@ impl Console {
                 self.trend_window_s = w[next].1;
                 self.trend_asked = None;
             }
-            'e' => self.toggles = EffectToggles::all(!self.toggles.any()),
-            '0' => self.send(Command::Live),
-            'a' => self.send(Command::Ack),
-            ' ' => {
+            KeyAction::TrendWindow => {}
+            KeyAction::Live => self.send(Command::Live),
+            KeyAction::Ack => self.send(Command::Ack),
+            KeyAction::Pause => {
+                // A LIVE clock has nothing to resume; the key on LIVE pauses it.
                 let c = if world.clock.paused {
                     Command::Resume
                 } else {
                     Command::Pause
                 };
-                // A LIVE clock has nothing to resume; Space on LIVE pauses it.
                 self.send(c);
             }
-            '[' => self.send(Command::SetRate(warp_step(world, false))),
-            ']' => self.send(Command::SetRate(warp_step(world, true))),
-            _ => {}
+            KeyAction::WarpDown => self.send(Command::SetRate(warp_step(world, false))),
+            KeyAction::WarpUp => self.send(Command::SetRate(warp_step(world, true))),
         }
         Outcome::Continue
     }
@@ -536,6 +551,7 @@ impl Console {
                 status: self.status.as_ref().map(|(m, _)| m),
                 help: self.help,
                 trend_window_s: self.trend_window_s,
+                keys: &self.keys,
                 settings: &self.settings,
             },
         );
@@ -721,6 +737,10 @@ mod tests {
         (c, rx)
     }
 
+    fn press(c: &mut Console, w: &World, text: &str) -> Outcome {
+        keys(c, w, text)
+    }
+
     fn world() -> World {
         World::empty(Utc(1.0e9))
     }
@@ -898,5 +918,21 @@ mod tests {
         c.connect(None, vec![]);
         keys(&mut c, &world(), "a");
         assert!(c.status.as_ref().unwrap().0.text.contains("no engine"));
+    }
+
+    #[test]
+    fn a_remapped_key_works_and_the_old_one_does_nothing() {
+        let (mut c, rx) = console();
+        let mut keys =
+            mctl_core::config::Config::from_layers(mctl_core::config::DEFAULT_CONFIG, None)
+                .unwrap()
+                .keys;
+        keys.insert("ack".into(), vec!["k".into()]);
+        c.set_keys(KeyMap::from_config(&keys).unwrap());
+        let w = world();
+        press(&mut c, &w, "a");
+        assert!(rx.try_recv().is_err(), "a is free now");
+        press(&mut c, &w, "K");
+        assert_eq!(rx.try_recv(), Ok(Command::Ack));
     }
 }

@@ -177,3 +177,31 @@ warning = 2.0
 persist_s = 10.0
 units = ""
 basis = "illustrative, not a flight rule"
+
+# ---- Key bindings (DESIGN.md 9.7) ------------------------------------------------------------------
+# Single characters, case-insensitive; an action may have several. Function keys, Tab, arrows, Enter
+# and Escape are fixed. A user config replaces individual actions; every action must stay bound and no
+# character may be used twice.
+[keys]
+pause = [" "]
+warp_down = ["["]
+warp_up = ["]"]
+live = ["0"]
+ack = ["a"]
+command_line = [":", ";"]
+help = ["?"]
+quit = ["q"]
+theme = ["t"]
+vehicle = ["v"]
+frame = ["x"]
+altitude = ["z"]
+camera_frame = ["f"]
+focus = ["c"]
+zoom_in = ["+", "="]
+zoom_out = ["-", "_"]
+scanlines = ["1"]
+bloom = ["2"]
+persistence = ["3"]
+crt = ["4"]
+all_effects = ["e"]
+trend_window = ["w"]

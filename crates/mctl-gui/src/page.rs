@@ -38,6 +38,7 @@ pub struct PageInput<'a> {
     pub status: Option<&'a StatusMsg>,
     pub help: bool,
     pub trend_window_s: f64,
+    pub keys: &'a crate::keys::KeyMap,
     /// Static key/value rows for the SETTINGS page (configuration echoes).
     pub settings: &'a [(String, String)],
 }
@@ -686,6 +687,7 @@ mod tests {
                 status: None,
                 help: false,
                 trend_window_s: 86_400.0,
+                keys: &crate::keys::KeyMap::embedded_default(),
                 settings: &settings,
             },
         );
@@ -858,11 +860,14 @@ mod tests {
                 status: None,
                 help: true,
                 trend_window_s: 86_400.0,
+                keys: &crate::keys::KeyMap::embedded_default(),
                 settings: &[],
             },
         );
         let t = grid.text();
-        assert!(t.contains("KEYS") && t.contains("COMMANDS") && t.contains("acknowledge C&W"));
+        assert!(
+            t.contains("KEYS") && t.contains("COMMANDS") && t.contains("acknowledge the master")
+        );
         assert!(
             t.contains("warp <rate>"),
             "every command is documented in the help"

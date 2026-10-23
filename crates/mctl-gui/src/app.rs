@@ -159,6 +159,9 @@ impl App {
             self.opts.live.vehicle_id.clone(),
         )?;
         let mut console = console;
+        console.set_keys(
+            crate::keys::KeyMap::from_config(&self.opts.live.keys).map_err(anyhow::Error::msg)?,
+        );
         console.connect(
             Some(self.opts.live.commands.clone()),
             self.opts.live.settings.clone(),

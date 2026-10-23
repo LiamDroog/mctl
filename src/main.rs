@@ -186,6 +186,7 @@ fn start_live(
     offline: bool,
     record: bool,
 ) -> Result<(Live, mctl_sim::engine::Engine)> {
+    mctl_gui::check_keys(&cfg.keys).map_err(|e| anyhow::anyhow!(e))?;
     let vehicle_id = match vehicle {
         Some(v) if cfg.vehicles.iter().any(|d| d.id == v) => v.to_owned(),
         Some(v) => bail!(
@@ -225,6 +226,7 @@ fn start_live(
             limits: cfg.limits.clone(),
             vehicle_id,
             commands: engine.commands.clone(),
+            keys: cfg.keys.clone(),
             settings: vec![
                 (
                     "CONFIG FILE".into(),
