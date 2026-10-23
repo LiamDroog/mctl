@@ -6,3 +6,10 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+mctl-astro = { version = "0.0.0", path = "../mctl-astro" }
+mctl-core = { version = "0.0.0", path = "../mctl-core" }
+mctl-sources = { version = "0.0.0", path = "../mctl-sources" }
+nalgebra = "0.35.0"
+tracing = "0.1.44"
