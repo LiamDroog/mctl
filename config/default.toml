@@ -1,0 +1,50 @@
+# mctl default configuration, embedded in the binary. A user file at
+# $XDG_CONFIG_HOME/mctl/config.toml overrides any key (tables merge, arrays replace).
+# Invalid values fail loudly with the file and reason; there are no silent defaults.
+
+[fetch]
+user_agent = "mctl/0.0 (mission control display; github.com/liam/mctl)"
+timeout_s = 30
+# Exponential backoff after a failed fetch, with jitter, capped (DESIGN.md §3.3).
+backoff_initial_s = 30
+backoff_max_s = 1800
+
+[sources.celestrak_gp]
+# One request per vehicle. FORMAT=JSON is explicit: CelesTrak's default is CSV.
+url_template = "https://celestrak.org/NORAD/elements/gp.php?CATNR={norad}&FORMAT=JSON"
+min_refresh_s = 7200      # polite default: once per 2 h per object
+stale_after_s = 259200    # an element set older than this is STALE (assumption: 3 days)
+
+[sources.nasa_oem]
+url = "https://nasa-public-data.s3.amazonaws.com/iss-coords/current/ISS_OEM/ISS.OEM_J2K_EPH.txt"
+min_refresh_s = 1800
+stale_after_s = 604800    # OEM older than this is STALE (assumption: 7 days; the file spans ~15)
+
+[sources.iers_eop]
+# finals2000A: UT1-UTC and polar motion. Tried in order.
+urls = ["https://maia.usno.navy.mil/ser7/finals2000A.all", "https://datacenter.iers.org/data/9/finals2000A.all"]
+min_refresh_s = 86400
+
+[limits]
+# Inter-source residual (|dr|) that raises a caution on the sources panel. Assumption, not a published limit.
+residual_caution_km = 5.0
+residual_warning_km = 20.0
+
+[engine]
+tick_hz = 50
+# Orbit/ground-track window around now, in revolutions, and sample count.
+track_past_rev = 0.6
+track_future_rev = 1.4
+track_samples = 400
+
+[[vehicle]]
+id = "iss"
+name = "ISS"
+norad = 25544
+sources = ["oem", "gp"]
+
+[[vehicle]]
+id = "hubble"
+name = "HUBBLE"
+norad = 20580
+sources = ["gp"]

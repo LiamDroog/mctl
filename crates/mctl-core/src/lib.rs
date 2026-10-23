@@ -1,1 +1,9 @@
-//! Time, frames, state types, state bus, arbiter and C&W engine; no UI, network or async-runtime dependency.
+//! Time, state types, configuration, the published world snapshot, the bus and the arbiter.
+//! No UI, network or async-runtime dependency, so it is unit-testable in isolation (DESIGN.md §6.1).
+
+pub mod arbiter;
+pub mod bus;
+pub mod config;
+pub mod state;
+pub mod time;
+pub mod world;

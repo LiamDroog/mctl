@@ -191,6 +191,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arc-swap"
+version = "1.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "380962b3d93b99642e50b9febf72c071e97e8b32d86eae9cf4ef582bb960ae6e"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "argminmax"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1092,6 +1101,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2de63d600bc7fab91180bc17385f29b342468dc8ef2af09dceba450a293de3da"
 dependencies = [
  "digest 0.11.3",
+]
+
+[[package]]
+name = "directories"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16f5094c54661b38d03bd7e50df373292118db60b585c08a411c6d840017fe7d"
+dependencies = [
+ "dirs-sys",
 ]
 
 [[package]]
@@ -2545,26 +2563,101 @@ dependencies = [
 [[package]]
 name = "mctl"
 version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap 4.6.7",
+ "mctl-core",
+ "mctl-gui",
+ "mctl-sim",
+ "mctl-sources",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "mctl-astro"
 version = "0.0.0"
+dependencies = [
+ "mctl-core",
+ "nalgebra",
+ "serde",
+ "serde_json",
+ "sgp4",
+ "thiserror 2.0.21",
+ "tracing",
+]
 
 [[package]]
 name = "mctl-core"
 version = "0.0.0"
+dependencies = [
+ "arc-swap",
+ "directories",
+ "nalgebra",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "toml",
+ "tracing",
+]
 
 [[package]]
 name = "mctl-gui"
 version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "egui",
+ "egui-wgpu",
+ "egui-winit",
+ "glam 0.34.1",
+ "image",
+ "mctl-astro",
+ "mctl-core",
+ "mctl-sim",
+ "mctl-sources",
+ "pollster",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "toml",
+ "tracing",
+ "wgpu",
+ "winit",
+]
 
 [[package]]
 name = "mctl-sim"
 version = "0.0.0"
+dependencies = [
+ "mctl-astro",
+ "mctl-core",
+ "mctl-sources",
+ "nalgebra",
+ "tracing",
+]
 
 [[package]]
 name = "mctl-sources"
 version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "futures-util",
+ "mctl-astro",
+ "mctl-core",
+ "rustls",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-tungstenite",
+ "toml",
+ "tracing",
+ "ureq",
+ "webpki-roots 0.26.11",
+]
 
 [[package]]
 name = "mctl-store"

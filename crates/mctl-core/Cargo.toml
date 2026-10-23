@@ -6,3 +6,13 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+arc-swap = "1.9.3"
+directories = "6.0.0"
+nalgebra = { version = "0.35.0", features = ["serde-serialize"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+toml = "1.1.8"
+tracing = "0.1.44"
