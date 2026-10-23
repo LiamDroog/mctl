@@ -37,6 +37,19 @@ active = ""
 mask_deg = 10.0
 pass_days = 7.0
 step_s = 20.0
+# GeoClue2 over D-Bus (design step 2). It only answers applications it allows; if it refuses, the
+# reason is written to the event log and the fallback is used.
+geoclue = true
+geoclue_timeout_s = 3.0
+
+[observer.ip]
+# IP geolocation (design step 3) is OFF by default: it sends this machine's public address to the
+# service. To enable, give an HTTPS endpoint that returns JSON with numeric latitude/longitude fields.
+enabled = false
+url = ""
+lat_key = "latitude"
+lon_key = "longitude"
+accuracy_km = 25.0
 
 [observer.fallback]
 # NASA Headquarters, per DESIGN.md 8. The design says to verify these coordinates against a survey

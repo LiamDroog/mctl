@@ -33,6 +33,8 @@ pub enum Command {
         lon_deg: f64,
         alt_m: f64,
     },
+    /// Save the active site into the user configuration, under `name` if given.
+    SaveSite(Option<String>),
     /// Acknowledge the master caution and warning latches (not a clock command).
     Ack,
 }

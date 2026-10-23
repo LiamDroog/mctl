@@ -258,6 +258,7 @@ pub fn paint_ground_track(
     rect_px: [u32; 4],
     coast: &[crate::coast::Line],
     v: &VehicleView,
+    observer: &mctl_core::world::ObserverView,
 ) {
     let [px0, py0, pw, ph] = rect_px;
     if pw < 8 || ph < 8 {
@@ -337,6 +338,56 @@ pub fn paint_ground_track(
             painter.add(egui::Shape::line(run, coast_stroke));
         }
     }
+    // Observer sites with the circle inside which the vehicle is above the elevation mask.
+    let alt_km = v.solution.as_ref().map(|s| s.geodetic.alt_km);
+    for (i, site) in observer.sites.iter().enumerate() {
+        let active = i == observer.active;
+        let colour = if active {
+            theme.palette.bright.to_egui()
+        } else {
+            theme.palette.dim.to_egui()
+        };
+        if let Some(alt) = alt_km {
+            let angle = visibility_central_angle_deg(alt, observer.mask_deg);
+            let ring = circle_on_sphere(site.lat_deg, site.lon_deg, angle, 72);
+            let mut run: Vec<Pos2> = Vec::new();
+            let mut prev: Option<f64> = None;
+            for (lon, lat) in ring {
+                if prev.is_some_and(|p| (p - lon).abs() > 180.0) && run.len() > 1 {
+                    painter.extend(egui::Shape::dashed_line(
+                        &std::mem::take(&mut run),
+                        Stroke::new(1.0, colour),
+                        5.0,
+                        4.0,
+                    ));
+                }
+                run.push(to_screen(lon, lat));
+                prev = Some(lon);
+            }
+            if run.len() > 1 {
+                painter.extend(egui::Shape::dashed_line(
+                    &run,
+                    Stroke::new(1.0, colour),
+                    5.0,
+                    4.0,
+                ));
+            }
+        }
+        let at = to_screen(site.lon_deg, site.lat_deg);
+        let r = egui::Rect::from_center_size(at, egui::vec2(8.0, 8.0));
+        if active {
+            painter.rect_filled(r, 0.0, colour);
+        } else {
+            painter.rect_stroke(r, 0.0, Stroke::new(1.5, colour), egui::StrokeKind::Middle);
+        }
+        painter.text(
+            at + egui::vec2(7.0, -7.0),
+            egui::Align2::LEFT_BOTTOM,
+            &site.name,
+            crate::fonts::font_id(theme),
+            colour,
+        );
+    }
     let Some(track) = &v.track else { return };
     let (past_stroke, future_stroke) = (
         Stroke::new(2.0, theme.palette.foreground.to_egui()),
@@ -385,6 +436,37 @@ pub fn paint_ground_track(
             theme.palette.bright.to_egui(),
         );
     }
+}
+
+/// Earth-central angle (degrees) from a site to the edge of the region where a vehicle at `alt_km`
+/// is above elevation `mask_deg`: acos(Re cos(el) / (Re + h)) - el.
+pub fn visibility_central_angle_deg(alt_km: f64, mask_deg: f64) -> f64 {
+    let el = mask_deg.to_radians();
+    let re = mctl_astro::sun::EARTH_RADIUS_KM;
+    ((re * el.cos() / (re + alt_km)).acos() - el)
+        .to_degrees()
+        .max(0.0)
+}
+
+/// Points `(lon, lat)` in degrees on the small circle of angular radius `angle_deg` around a point.
+pub fn circle_on_sphere(lat_deg: f64, lon_deg: f64, angle_deg: f64, n: usize) -> Vec<(f64, f64)> {
+    let (lat0, lon0, d) = (
+        lat_deg.to_radians(),
+        lon_deg.to_radians(),
+        angle_deg.to_radians(),
+    );
+    (0..=n)
+        .map(|k| {
+            let brg = std::f64::consts::TAU * k as f64 / n as f64;
+            let lat = (lat0.sin() * d.cos() + lat0.cos() * d.sin() * brg.cos()).asin();
+            let lon =
+                lon0 + (brg.sin() * d.sin() * lat0.cos()).atan2(d.cos() - lat0.sin() * lat.sin());
+            (
+                ((lon.to_degrees() + 540.0) % 360.0) - 180.0,
+                lat.to_degrees(),
+            )
+        })
+        .collect()
 }
 
 /// Beta angle over +-30 days as a line, with zero and the present marked.
@@ -955,8 +1037,8 @@ mod tests {
             "{t}"
         );
         assert!(
-            t.contains("GEOCLUE2 AND OPTIONAL IP GEOLOCATION") && t.contains("NOT IMPLEMENTED"),
-            "unimplemented parts are stated"
+            t.contains("RESOLUTION ORDER") && t.contains(":site save"),
+            "{t}"
         );
     }
 
@@ -970,5 +1052,38 @@ mod tests {
             g.text().contains("NO PREDICTION YET"),
             "no passes for a site that has none, and no invented ones"
         );
+    }
+
+    #[test]
+    fn the_visibility_circle_matches_known_geometry() {
+        // At 400 km and a 0 degree mask the horizon is ~19.8 degrees of arc away; a higher mask shrinks it.
+        let a0 = visibility_central_angle_deg(400.0, 0.0);
+        assert!((a0 - 19.74).abs() < 0.1, "{a0}");
+        let a10 = visibility_central_angle_deg(400.0, 10.0);
+        assert!(a10 < a0 && (a10 - 12.2).abs() < 0.4, "{a10}");
+        assert!(
+            visibility_central_angle_deg(0.0, 0.0).abs() < 1e-9,
+            "on the ground you see only your own point"
+        );
+    }
+
+    #[test]
+    fn circles_on_the_sphere_stay_at_the_requested_distance() {
+        let hav = |lat1: f64, lon1: f64, lat2: f64, lon2: f64| {
+            let (p1, p2) = (lat1.to_radians(), lat2.to_radians());
+            let dl = (lon2 - lon1).to_radians();
+            (p1.sin() * p2.sin() + p1.cos() * p2.cos() * dl.cos())
+                .clamp(-1.0, 1.0)
+                .acos()
+                .to_degrees()
+        };
+        for (lat, lon) in [(51.0, -114.0), (0.0, 179.0), (-80.0, 10.0)] {
+            let ring = circle_on_sphere(lat, lon, 15.0, 36);
+            assert_eq!(ring.len(), 37);
+            for (rl, rb) in ring {
+                assert!((hav(lat, lon, rb, rl) - 15.0).abs() < 1e-6, "{lat},{lon}");
+                assert!((-180.0..=180.0).contains(&rl));
+            }
+        }
     }
 }

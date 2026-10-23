@@ -11,6 +11,7 @@ use crate::page::{
     Layout, Lines, MIN_COLS, MIN_ROWS, PageInput, quality_text, source_row, upcoming_events,
 };
 use crate::pages::{ALL_PAGES, Availability, Page, availability};
+use crate::telemetry_view;
 
 /// `DDDD:HH:MM:SS` mission elapsed time; negative (before the epoch) is shown as `--`.
 pub fn fmt_met(secs: f64) -> String {
@@ -620,40 +621,6 @@ fn telemetry_banner(l: &mut Lines<'_>, inp: &PageInput<'_>) {
     }
 }
 
-/// One table row per received item of the group, with value, units and age.
-fn telemetry_rows(l: &mut Lines<'_>, inp: &PageInput<'_>, group: &str) {
-    let Some(t) = inp.world.telemetry.as_ref() else {
-        return;
-    };
-    for i in t.items.iter().filter(|i| i.group == group) {
-        let stale = i.age_s > TELEMETRY_STALE_S;
-        let val = i.value.map_or_else(
-            || i.text.clone().unwrap_or_else(|| "--".into()),
-            |v| format!("{v:>12.4}"),
-        );
-        let style = if stale {
-            Style::limit(Limit::Stale)
-        } else {
-            Style::new(Role::Fg)
-        };
-        let desc: String = i
-            .label
-            .chars()
-            .take(l.rect.cols.saturating_sub(44))
-            .collect();
-        l.line(
-            &format!(
-                "{:<12} {val:>13} {:<6} {:>6}{} {desc}",
-                i.id,
-                i.units,
-                fmt_dur(i.age_s.max(0.0)),
-                if stale { "!" } else { " " }
-            ),
-            style,
-        );
-    }
-}
-
 fn gnc_adi(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     let (cols, rows) = (grid.cols, grid.rows);
     let (top, h) = body(rows);
@@ -702,14 +669,21 @@ fn gnc_adi(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
         ),
     }
     let right = CellRect::new(lw, top, cols - lw, h);
-    boxed(grid, right, "ATTITUDE ERRORS AND RATES");
-    let mut l = Lines::new(grid, right);
-    telemetry_banner(&mut l, inp);
-    l.line(
-        "ITEM         VALUE          UNITS  AGE",
-        Style::new(Role::Dim),
-    );
-    telemetry_rows(&mut l, inp, "attitude");
+    let items = inp
+        .world
+        .telemetry
+        .as_ref()
+        .map_or(&[][..], |t| &t.items[..]);
+    let secs = telemetry_view::sections(items, "attitude", TELEMETRY_STALE_S);
+    for (idx, rect) in telemetry_view::pack(&secs, right, 1) {
+        telemetry_view::render(grid, rect, &secs[idx]);
+    }
+    if secs.is_empty() {
+        boxed(grid, right, "ATTITUDE");
+        let mut l = Lines::new(grid, right);
+        telemetry_banner(&mut l, inp);
+        l.no_data("NO ATTITUDE ITEMS RECEIVED");
+    }
     Layout {
         adi: Some(inner),
         ..Layout::default()
@@ -726,7 +700,8 @@ const TELEMETRY_GROUPS: &[(&str, &str)] = &[
     ("comm", "COMM"),
 ];
 
-/// A full-page table of one telemetry group.
+/// A telemetry group as titled sections (matrices where items share rows and columns), packed into
+/// one or two columns, under a one-line status.
 fn group_table(
     grid: &mut Grid,
     inp: &PageInput<'_>,
@@ -734,29 +709,89 @@ fn group_table(
     group: &str,
     note: &str,
 ) -> Layout {
-    let (top, h) = body(grid.rows);
-    let rect = CellRect::new(0, top, grid.cols, h);
-    let counts = inp.world.telemetry.as_ref().map_or((0, 0), |t| {
+    group_table_reserved(grid, inp, title, group, note, 0)
+}
+
+/// As [`group_table`], leaving `reserve` rows free at the bottom of the body for another panel.
+fn group_table_reserved(
+    grid: &mut Grid,
+    inp: &PageInput<'_>,
+    title: &str,
+    group: &str,
+    note: &str,
+    reserve: usize,
+) -> Layout {
+    let (cols, rows) = (grid.cols, grid.rows);
+    let (top, h) = body(rows);
+    let h = h.saturating_sub(reserve);
+    let t = inp.world.telemetry.as_ref();
+    let (got, total) = t.map_or((0, 0), |t| {
         (
             t.items.iter().filter(|i| i.group == group).count(),
             t.total_in(group),
         )
     });
-    boxed(
-        grid,
-        rect,
-        &format!("{title}  {}/{} ITEMS RECEIVED", counts.0, counts.1),
-    );
-    let mut l = Lines::new(grid, rect);
-    telemetry_banner(&mut l, inp);
-    l.line(
-        "ITEM         VALUE          UNITS  AGE    LABEL (AS PUBLISHED BY ISS MIMIC; UNVERIFIED)",
-        Style::new(Role::Dim),
-    );
-    telemetry_rows(&mut l, inp, group);
+    let feed = match t.map(|t| &t.health) {
+        None => ("NO TELEMETRY FEED".to_owned(), Style::limit(Limit::Caution)),
+        Some(mctl_core::world::Health::Ok) => ("FEED OK".to_owned(), Style::new(Role::Nominal)),
+        Some(h) => (
+            format!("FEED {h:?}").to_uppercase(),
+            Style::limit(Limit::Caution),
+        ),
+    };
+    let ages: Vec<f64> = t
+        .map(|t| {
+            t.items
+                .iter()
+                .filter(|i| i.group == group)
+                .map(|i| i.age_s.max(0.0))
+                .collect()
+        })
+        .unwrap_or_default();
+    let fresh = match (
+        ages.iter().cloned().reduce(f64::min),
+        ages.iter().cloned().reduce(f64::max),
+    ) {
+        (Some(lo), Some(hi)) => format!("UPDATED {} .. {} AGO", fmt_dur(lo), fmt_dur(hi)),
+        _ => "NOTHING RECEIVED".to_owned(),
+    };
+    let live = if inp.world.clock.is_live() {
+        String::new()
+    } else {
+        "  NOT LIVE: TELEMETRY IS CURRENT, NOT AT SIM TIME".to_owned()
+    };
+    let line = format!("{title}   {got}/{total} ITEMS   {fresh}{live}");
+    grid.put(1, top, &line, Style::new(Role::Bright));
+    grid.put(1 + line.chars().count() + 3, top, &feed.0, feed.1);
+    let items = t.map_or(&[][..], |t| &t.items[..]);
+    let secs = telemetry_view::sections(items, group, TELEMETRY_STALE_S);
+    let region = CellRect::new(0, top + 1, cols, h.saturating_sub(2));
+    let columns = if cols >= 120 { 2 } else { 1 };
+    let placed = telemetry_view::pack(&secs, region, columns);
+    for (idx, rect) in &placed {
+        telemetry_view::render(grid, *rect, &secs[*idx]);
+    }
+    if placed.len() < secs.len() {
+        grid.put(
+            1,
+            top + h - 2,
+            &format!(
+                "{} MORE SECTION(S) DO NOT FIT AT THIS WINDOW SIZE",
+                secs.len() - placed.len()
+            ),
+            Style::limit(Limit::Caution),
+        );
+    }
+    if secs.is_empty() {
+        grid.put(
+            1,
+            top + 2,
+            "NO DATA: NOTHING RECEIVED FOR THIS PAGE YET",
+            Style::new(Role::Dim),
+        );
+    }
     if !note.is_empty() {
-        l.row = l.rect.rows.saturating_sub(1);
-        l.line(note, Style::new(Role::Dim));
+        grid.put(1, top + h - 1, note, Style::new(Role::Dim));
     }
     Layout::default()
 }
@@ -1041,14 +1076,72 @@ fn pass_sites(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     }
     l.row += 1;
     for t in [
-        "`:site <name>` SELECTS A SITE; `:site add <name> <lat> <lon> [alt_m]` ADDS ONE FOR THIS SESSION.",
-        "PERMANENT SITES GO IN ~/.config/mctl/config.toml AS [[site]] ENTRIES; `:site save` IS NOT IMPLEMENTED.",
-        "DESIGN.md 8 ALSO CALLS FOR GEOCLUE2 AND OPTIONAL IP GEOLOCATION BEFORE THE FALLBACK: NOT IMPLEMENTED YET.",
+        "`:site <name>` SELECTS A SITE; `:site add <name> <lat> <lon> [alt_m]` ADDS ONE; `:site save [name]` KEEPS THE ACTIVE ONE IN THE CONFIG.",
+        "SITES LIVE IN ~/.config/mctl/config.toml AS [[site]] ENTRIES. RESOLUTION ORDER: CONFIGURED ACTIVE SITE, GEOCLUE2, IP LOOKUP (OFF BY DEFAULT), FALLBACK.",
         "THE DEFAULT SITE (NASA HQ) COORDINATES ARE FROM DESIGN.md AND ARE NOT VERIFIED AGAINST A SURVEY SOURCE.",
     ] {
         l.line(t, Style::new(Role::Dim));
     }
     Layout::default()
+}
+
+/// COMM links: the telemetry sections above, and below them the observer site's next AOS and LOS
+/// (the vehicle's own link schedule is not published; TDRS coverage is a v2 feature).
+fn comm_links(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
+    const AOS_PANEL_ROWS: usize = 6;
+    let layout = group_table_reserved(
+        grid,
+        inp,
+        "COMM  S-BAND, KU-BAND, UHF",
+        "comm",
+        "",
+        AOS_PANEL_ROWS,
+    );
+    let (cols, rows) = (grid.cols, grid.rows);
+    let (_, h) = body(rows);
+    let rect = CellRect::new(
+        0,
+        1 + h.saturating_sub(AOS_PANEL_ROWS),
+        cols,
+        AOS_PANEL_ROWS,
+    );
+    let site = inp
+        .world
+        .observer
+        .active_site()
+        .map_or("--", |s| s.name.as_str());
+    boxed(
+        grid,
+        rect,
+        &format!("AOS / LOS  OBSERVER SITE {site}  (NOT A GROUND-STATION OR TDRS SCHEDULE)"),
+    );
+    let mut l = Lines::new(grid, rect);
+    let now = inp.world.t;
+    match active_pass_set(inp).and_then(|set| current_or_next_pass(set, now)) {
+        None => l.line("NO PASS PREDICTED YET", Style::new(Role::Dim)),
+        Some(p) => {
+            let state = if p.aos.0 <= now.0 {
+                format!("IN PROGRESS, LOS IN {}", fmt_dur(p.los.minus(now)))
+            } else {
+                format!("AOS IN {}", fmt_dur(p.aos.minus(now)))
+            };
+            l.line(&state, Style::new(Role::Bright));
+            l.line(
+                &format!("AOS {}  AZ {:.0}", p.aos.gmt_doy(), p.aos_az_deg),
+                Style::new(Role::Fg),
+            );
+            l.line(
+                &format!(
+                    "LOS {}  AZ {:.0}  MAX EL {:.1}",
+                    p.los.gmt_doy(),
+                    p.los_az_deg,
+                    p.max_el_deg
+                ),
+                Style::new(Role::Fg),
+            );
+        }
+    }
+    layout
 }
 
 fn sys_events(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
@@ -1441,7 +1534,7 @@ pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
                 inp,
                 "EPS  ARRAYS, SARJ, BGA",
                 "eps",
-                "PVCU ARRAY NAMES ARE AS THE SPREADSHEET PUBLISHES THEM (SOME REPEAT, E.g. 3B); NOT CORRECTED.",
+                "PVCU ARRAY NAMES ARE AS THE SPREADSHEET PUBLISHES THEM; A REPEATED NAME SHOWS AS #2, NOT CORRECTED.",
             ),
             (Page::Tcs, 0) => group_table(grid, inp, "TCS  LOOPS AND COOLING", "tcs", ""),
             (Page::Tcs, _) => group_table(
@@ -1449,9 +1542,9 @@ pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
                 inp,
                 "ECLSS  ATMOSPHERE, WATER, O2",
                 "eclss",
-                "PRESSURE AND TEMPERATURE UNITS ARE AS PUBLISHED (OFTEN 'CNT'); SEE THE LABEL.",
+                "UNITS: THE SPREADSHEET SAYS PSI/CNT; THE VALUES ARE mmHg AND degC (docs/step3/attitude-verification.md).",
             ),
-            (Page::Comm, _) => group_table(grid, inp, "COMM  S-BAND, KU-BAND, UHF", "comm", ""),
+            (Page::Comm, _) => comm_links(grid, inp),
             (Page::Sys, 0) => sys_events(grid, inp),
             (Page::Sys, 1) => sys_sources(grid, inp),
             (Page::Sys, 2) => sys_settings(grid, inp),

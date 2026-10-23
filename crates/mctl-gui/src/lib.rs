@@ -19,6 +19,7 @@ mod pages;
 mod render;
 mod screens;
 mod sky;
+mod telemetry_view;
 mod theme;
 
 pub use app::{Options, Present, run};

@@ -2,5 +2,7 @@
 //! the ISSLIVE Lightstreamer client. Observer geolocation and Horizons arrive with their milestones.
 
 pub mod cache;
+pub mod geoclue;
 pub mod isslive;
+pub mod observer;
 pub mod tasks;

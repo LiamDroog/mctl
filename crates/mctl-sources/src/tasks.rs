@@ -54,10 +54,17 @@ pub struct TelemetryMeta {
     pub group: String,
     pub description: String,
     pub label: String,
+    pub section: String,
+    pub row: String,
+    pub col: String,
     pub units: String,
 }
 
 pub enum Event {
+    /// A location resolved for the observer (GeoClue or IP).
+    Observer(crate::observer::Resolved),
+    /// A line for the event log about observer resolution.
+    ObserverNote(String),
     /// A telemetry item changed. `text` is the raw `Value` field.
     Telemetry {
         id: String,
@@ -191,6 +198,13 @@ pub fn start(
         );
         stops.push(stop_tx);
     }
+    if cfg.observer.active.is_empty() {
+        let (cfg, tx) = (cfg.clone(), tx.clone());
+        std::thread::Builder::new()
+            .name("src-observer".into())
+            .spawn(move || crate::observer::run(&cfg, offline, &tx))
+            .expect("spawn observer thread");
+    }
     let mut telemetry = Vec::new();
     if cfg
         .vehicles
@@ -202,17 +216,22 @@ pub fn start(
             crate::isslive::config::DEFAULT_CONFIG,
         )
         .expect("embedded ISSLIVE config is valid (checked by tests)");
-        telemetry = icfg
-            .items
-            .iter()
-            .map(|i| TelemetryMeta {
-                id: i.id.clone(),
-                group: i.group.clone(),
-                description: i.description.clone(),
-                label: i.label.clone().unwrap_or_else(|| i.description.clone()),
-                units: i.units.clone(),
-            })
-            .collect();
+        telemetry =
+            icfg.items
+                .iter()
+                .map(|i| TelemetryMeta {
+                    id: i.id.clone(),
+                    group: i.group.clone(),
+                    description: i.description.clone(),
+                    label: i.label.clone().unwrap_or_else(|| i.description.clone()),
+                    section: i.section.clone().unwrap_or_else(|| i.group.clone()),
+                    row: i.row.clone().unwrap_or_else(|| {
+                        i.label.clone().unwrap_or_else(|| i.description.clone())
+                    }),
+                    col: i.col.clone().unwrap_or_default(),
+                    units: i.units.clone(),
+                })
+                .collect();
         let (stop_tx, stop_rx) = sync_channel::<()>(1);
         let (tx, fetch) = (tx.clone(), cfg.fetch.clone());
         threads.push(
@@ -480,7 +499,8 @@ mod tests {
 
     #[test]
     fn offline_with_empty_cache_reports_offline_and_no_data() {
-        let cfg = Config::from_layers(mctl_core::config::DEFAULT_CONFIG, None).unwrap();
+        let mut cfg = Config::from_layers(mctl_core::config::DEFAULT_CONFIG, None).unwrap();
+        cfg.observer.geoclue = false; // tests must not depend on the machine's GeoClue
         let dir = std::env::temp_dir().join(format!("mctl-offline-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let set = start(&cfg, dir.clone(), true).unwrap();
@@ -494,7 +514,10 @@ mod tests {
                 Event::Data { .. } => {
                     panic!("no data can exist with an empty cache and no network")
                 }
-                Event::Health { .. } | Event::Telemetry { .. } => {}
+                Event::Health { .. }
+                | Event::Telemetry { .. }
+                | Event::Observer(_)
+                | Event::ObserverNote(_) => {}
                 Event::TelemetryHealth(h) => assert_eq!(h, Health::Offline),
             }
             if offline == specs(&cfg).len() {
@@ -507,7 +530,8 @@ mod tests {
 
     #[test]
     fn cached_data_is_published_before_any_network_use() {
-        let cfg = Config::from_layers(mctl_core::config::DEFAULT_CONFIG, None).unwrap();
+        let mut cfg = Config::from_layers(mctl_core::config::DEFAULT_CONFIG, None).unwrap();
+        cfg.observer.geoclue = false; // tests must not depend on the machine's GeoClue
         let dir = std::env::temp_dir().join(format!("mctl-cachefirst-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();

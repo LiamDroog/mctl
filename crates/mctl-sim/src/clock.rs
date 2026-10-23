@@ -147,9 +147,10 @@ impl Clock {
                 *self = Self::live(wall);
                 Ok("clock: LIVE".into())
             }
-            Command::Ack | Command::SelectSite(_) | Command::AddSite { .. } => {
-                Err("not a clock command".into())
-            }
+            Command::Ack
+            | Command::SelectSite(_)
+            | Command::AddSite { .. }
+            | Command::SaveSite(_) => Err("not a clock command".into()),
         }
     }
 }

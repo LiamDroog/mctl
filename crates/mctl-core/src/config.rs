@@ -118,6 +118,19 @@ impl SiteDef {
     }
 }
 
+/// IP geolocation (DESIGN.md §8 step 3): disabled by default; queries the configured HTTPS endpoint
+/// once per session. The endpoint, its JSON field names and its accuracy are all configuration.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct IpLookup {
+    pub enabled: bool,
+    pub url: String,
+    pub lat_key: String,
+    pub lon_key: String,
+    /// Typical accuracy of the service, km, shown as the site's uncertainty.
+    pub accuracy_km: f64,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObserverConfig {
@@ -127,6 +140,10 @@ pub struct ObserverConfig {
     pub pass_days: f64,
     /// Elevation sampling step of the pass search, seconds.
     pub step_s: f64,
+    /// Ask GeoClue2 when no site is configured as active (DESIGN.md §8 step 2).
+    pub geoclue: bool,
+    pub geoclue_timeout_s: f64,
+    pub ip: IpLookup,
     /// Used when no site is configured as active (DESIGN.md §8 step 4).
     pub fallback: SiteDef,
 }
@@ -250,6 +267,15 @@ impl Config {
             return bad(
                 "observer: mask_deg must be 0..89, pass_days in (0, 14], step_s 1..120".into(),
             );
+        }
+        if o.geoclue_timeout_s <= 0.0
+            || (o.ip.enabled
+                && (!o.ip.url.starts_with("https://")
+                    || o.ip.lat_key.is_empty()
+                    || o.ip.lon_key.is_empty()
+                    || o.ip.accuracy_km <= 0.0))
+        {
+            return bad("observer: geoclue_timeout_s > 0; an enabled ip lookup needs an https:// url, lat_key, lon_key and accuracy_km > 0".into());
         }
         if let Err(m) = o.fallback.validate() {
             return bad(m);
@@ -408,6 +434,51 @@ pub fn data_dir() -> Option<PathBuf> {
 pub fn state_dir() -> Option<PathBuf> {
     directories::ProjectDirs::from("", "", "mctl")
         .map(|d| d.state_dir().unwrap_or_else(|| d.cache_dir()).to_path_buf())
+}
+
+/// Append a `[[site]]` entry to the user configuration file, creating it if needed. Refuses a name
+/// already present there, and never rewrites existing text.
+pub fn append_site(path: &Path, site: &SiteDef) -> Result<(), ConfigError> {
+    site.validate().map_err(ConfigError::Invalid)?;
+    let io = |source| ConfigError::Io {
+        path: path.to_owned(),
+        source,
+    };
+    let existing = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(io(e)),
+    };
+    if let Ok(v) = existing.parse::<toml::Table>()
+        && v.get("site")
+            .and_then(toml::Value::as_array)
+            .is_some_and(|a| {
+                a.iter().any(|s| {
+                    s.get("name")
+                        .and_then(toml::Value::as_str)
+                        .is_some_and(|n| n.eq_ignore_ascii_case(&site.name))
+                })
+            })
+    {
+        return Err(ConfigError::Invalid(format!(
+            "site {:?} is already in {}",
+            site.name,
+            path.display()
+        )));
+    }
+    if let Some(dir) = path.parent() {
+        ensure_dir(dir)?;
+    }
+    let mut out = existing;
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    let name = site.name.replace('\\', "\\\\").replace('"', "\\\"");
+    out += &format!(
+        "\n[[site]]\nname = \"{name}\"\nlat_deg = {}\nlon_deg = {}\nalt_m = {}\n",
+        site.lat_deg, site.lon_deg, site.alt_m
+    );
+    std::fs::write(path, out).map_err(io)
 }
 
 /// Create `dir` (and parents) if needed.

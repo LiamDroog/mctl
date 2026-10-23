@@ -71,7 +71,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("vehicle", "vehicle <id>       switch vehicle"),
     (
         "site",
-        "site <name>        active observer site; `site add <name> <lat> <lon> [alt_m]` adds one",
+        "site <name>        active observer site; `site add <name> <lat> <lon> [alt_m]` adds one; `site save [name]` keeps the active site",
     ),
     ("theme", "theme <name>       switch theme"),
     (
@@ -172,6 +172,10 @@ pub fn parse(line: &str, names: &Names<'_>) -> Result<Action, String> {
         "ack" => eng(Command::Ack),
         "site" => match args {
             [] => Err("site: missing name (or: site add <name> <lat> <lon> [alt_m])".into()),
+            [a] if a.eq_ignore_ascii_case("save") => eng(Command::SaveSite(None)),
+            [a, name] if a.eq_ignore_ascii_case("save") => {
+                eng(Command::SaveSite(Some((*name).to_owned())))
+            }
             [a, name, rest @ ..] if a.eq_ignore_ascii_case("add") => {
                 let num = |what: &str, s: &str| {
                     s.parse::<f64>()
@@ -369,7 +373,7 @@ pub fn complete(line: &str, names: &Names<'_>) -> Completion {
                     .sites
                     .iter()
                     .cloned()
-                    .chain(["add".to_owned()])
+                    .chain(["add".to_owned(), "save".to_owned()])
                     .collect(),
                 (Some("page"), 1) => crate::pages::ALL_PAGES.map(|p| p.key().to_owned()).to_vec(),
                 (Some("page"), 2) => Page::from_name(words[1]).map_or(vec![], |p| {

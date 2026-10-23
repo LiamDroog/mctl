@@ -245,6 +245,10 @@ pub struct TelemetryItem {
     /// Documentation text from the item list; not verified against the vehicle.
     pub description: String,
     pub label: String,
+    pub section: String,
+    pub row: String,
+    /// Column heading when the section is a matrix; empty for a plain list.
+    pub col: String,
     pub units: String,
     /// The numeric value, when the feed's text parses as one.
     pub value: Option<f64>,

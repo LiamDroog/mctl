@@ -77,8 +77,10 @@ pub struct Model {
     last_state_rec_s: f64,
     prev: HashMap<String, Observed>,
     prev_eop_loaded: Option<bool>,
-    sites: Vec<(Site, &'static str)>,
+    sites: Vec<(Site, String)>,
     active_site: usize,
+    /// The user picked or added a site, so a late location lookup must not replace it.
+    site_pinned: bool,
     pass_worker: Option<crate::passes::Worker>,
     pass_entries: HashMap<String, PassEntry>,
     job_counter: u64,
@@ -144,17 +146,20 @@ fn rule_sample(
 }
 
 /// The configured sites plus, when no site is active in the configuration, the fallback.
-fn initial_sites(cfg: &Config) -> (Vec<(Site, &'static str)>, usize) {
+fn initial_sites(cfg: &Config) -> (Vec<(Site, String)>, usize) {
     let site = |d: &mctl_core::config::SiteDef| Site {
         name: d.name.clone(),
         lat_deg: d.lat_deg,
         lon_deg: d.lon_deg,
         alt_m: d.alt_m,
     };
-    let mut sites: Vec<(Site, &'static str)> =
-        cfg.sites.iter().map(|d| (site(d), "CONFIGURED")).collect();
+    let mut sites: Vec<(Site, String)> = cfg
+        .sites
+        .iter()
+        .map(|d| (site(d), "CONFIGURED".to_owned()))
+        .collect();
     let active = if cfg.observer.active.is_empty() {
-        sites.push((site(&cfg.observer.fallback), "DEFAULT"));
+        sites.push((site(&cfg.observer.fallback), "DEFAULT".to_owned()));
         sites.len() - 1
     } else {
         sites
@@ -238,6 +243,7 @@ impl Model {
             prev_eop_loaded: None,
             sites,
             active_site,
+            site_pinned: false,
             pass_worker: None,
             pass_entries: HashMap::new(),
             job_counter: 0,
@@ -360,8 +366,76 @@ impl Model {
                 )
             })?;
         self.active_site = i;
+        self.site_pinned = true;
         let n = self.sites[i].0.name.clone();
         self.note(wall, format!("observer site: {n}"));
+        Ok(())
+    }
+
+    /// A site found by GeoClue or IP lookup. It replaces an earlier lookup of the same name and becomes
+    /// active unless the user has already chosen a site themselves.
+    pub fn adopt_resolved_site(&mut self, site: Site, origin: String, wall: Utc) {
+        let active_is_fallback = !self.site_pinned
+            && self
+                .sites
+                .get(self.active_site)
+                .is_some_and(|(_, o)| o == "DEFAULT");
+        self.sites
+            .retain(|(s, o)| !(s.name == site.name && o != "CONFIGURED"));
+        self.note(
+            wall,
+            format!(
+                "observer site {} resolved: {:.4}, {:.4} ({origin})",
+                site.name, site.lat_deg, site.lon_deg
+            ),
+        );
+        self.sites.push((site, origin));
+        if active_is_fallback {
+            self.active_site = self.sites.len() - 1;
+        } else {
+            self.active_site = self.active_site.min(self.sites.len() - 1);
+        }
+    }
+
+    /// Persist the active site to the user configuration (`:site save [name]`).
+    pub fn save_site(&mut self, name: Option<&str>, wall: Utc) -> Result<(), String> {
+        let path = mctl_core::config::user_config_path()
+            .ok_or("no home directory for the user configuration")?;
+        self.save_site_at(name, &path, wall)
+    }
+
+    fn save_site_at(
+        &mut self,
+        name: Option<&str>,
+        path: &std::path::Path,
+        wall: Utc,
+    ) -> Result<(), String> {
+        let (site, origin) = self
+            .sites
+            .get(self.active_site)
+            .cloned()
+            .ok_or("no active site")?;
+        let name = match (name, origin.as_str()) {
+            (Some(n), _) => n.to_owned(),
+            (None, "DEFAULT") => {
+                return Err(
+                    "the default site is not your location; give a name: site save <name>".into(),
+                );
+            }
+            (None, _) => site.name.clone(),
+        };
+        let def = mctl_core::config::SiteDef {
+            name: name.clone(),
+            lat_deg: site.lat_deg,
+            lon_deg: site.lon_deg,
+            alt_m: site.alt_m,
+        };
+        mctl_core::config::append_site(path, &def).map_err(|e| e.to_string())?;
+        if let Some((s, o)) = self.sites.get_mut(self.active_site) {
+            s.name = name.clone();
+            *o = "CONFIGURED".into();
+        }
+        self.note(wall, format!("site saved to {}: {name}", path.display()));
         Ok(())
     }
 
@@ -387,8 +461,9 @@ impl Model {
                 site.name, site.lat_deg, site.lon_deg, site.alt_m
             ),
         );
-        self.sites.push((site, "ADDED"));
+        self.sites.push((site, "ADDED".to_owned()));
         self.active_site = self.sites.len() - 1;
+        self.site_pinned = true;
         Ok(())
     }
 
@@ -411,7 +486,7 @@ impl Model {
                     lat_deg: s.lat_deg,
                     lon_deg: s.lon_deg,
                     alt_m: s.alt_m,
-                    origin: (*origin).into(),
+                    origin: origin.clone(),
                     sun_az_deg: sun_look.map(|x| x.0),
                     sun_el_deg: sun_look.map(|x| x.1),
                 }
@@ -656,6 +731,23 @@ impl Model {
                 self.telemetry.insert(id, (text, rx));
             }
             Event::TelemetryHealth(h) => self.telemetry_health = Some(h),
+            Event::ObserverNote(text) => {
+                let now = Utc::now().unwrap_or(Utc(0.0));
+                self.note(now, text);
+            }
+            Event::Observer(r) => {
+                let now = Utc::now().unwrap_or(Utc(0.0));
+                self.adopt_resolved_site(
+                    Site {
+                        name: r.name,
+                        lat_deg: r.lat_deg,
+                        lon_deg: r.lon_deg,
+                        alt_m: r.alt_m,
+                    },
+                    r.origin,
+                    now,
+                );
+            }
             Event::Data {
                 key,
                 payload,
@@ -835,6 +927,9 @@ impl Model {
                         group: m.group.clone(),
                         description: m.description.clone(),
                         label: m.label.clone(),
+                        section: m.section.clone(),
+                        row: m.row.clone(),
+                        col: m.col.clone(),
                         units: m.units.clone(),
                         value: text.as_deref().and_then(|t| t.trim().parse().ok()),
                         text: text.clone(),
@@ -1201,6 +1296,12 @@ fn drain_commands(rx: &Receiver<Command>, clock: &mut Clock, model: &mut Model, 
             }
             Command::SelectSite(n) => {
                 if let Err(e) = model.select_site(n, wall_utc) {
+                    model.note(wall_utc, format!("command rejected: {e}"));
+                }
+                continue;
+            }
+            Command::SaveSite(n) => {
+                if let Err(e) = model.save_site(n.as_deref(), wall_utc) {
                     model.note(wall_utc, format!("command rejected: {e}"));
                 }
                 continue;
@@ -1584,7 +1685,8 @@ mod tests {
 
     #[test]
     fn commands_reach_the_clock_through_the_engine_thread() {
-        let cfg = Config::from_layers(mctl_core::config::DEFAULT_CONFIG, None).unwrap();
+        let mut cfg = Config::from_layers(mctl_core::config::DEFAULT_CONFIG, None).unwrap();
+        cfg.observer.geoclue = false; // tests must not depend on the machine's GeoClue
         let dir = std::env::temp_dir().join(format!("mctl-engine-cmd-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let set = mctl_sources::tasks::start(&cfg, dir.clone(), true).unwrap();
@@ -1623,6 +1725,9 @@ mod tests {
             group: "eclss".into(),
             description: id.into(),
             label: id.into(),
+            section: "s".into(),
+            row: id.into(),
+            col: String::new(),
             units: "mmHg".into(),
         }
     }
@@ -1957,5 +2062,98 @@ mod tests {
                 .iter()
                 .any(|e| e.text.contains("site added for this session: Home"))
         );
+    }
+
+    #[test]
+    fn a_resolved_site_becomes_active_only_while_the_fallback_is() {
+        let mut m = model();
+        let t = t_in_oem();
+        m.adopt_resolved_site(
+            Site {
+                name: "GeoClue".into(),
+                lat_deg: 51.0,
+                lon_deg: -114.0,
+                alt_m: 0.0,
+            },
+            "GEOCLUE +-26 km".into(),
+            t,
+        );
+        let w = m.world(t);
+        assert_eq!(
+            w.observer.active_site().unwrap().origin,
+            "GEOCLUE +-26 km",
+            "the lookup replaces the fallback as the active site"
+        );
+        assert_eq!(w.observer.sites.len(), 2, "the fallback stays available");
+        // A second lookup replaces the first rather than piling up.
+        m.adopt_resolved_site(
+            Site {
+                name: "GeoClue".into(),
+                lat_deg: 51.1,
+                lon_deg: -114.1,
+                alt_m: 0.0,
+            },
+            "GEOCLUE +-5 km".into(),
+            t,
+        );
+        assert_eq!(m.world(t).observer.sites.len(), 2);
+        // Once the user picks a site, a late lookup does not take over.
+        m.select_site("NASA HQ", t).unwrap();
+        m.adopt_resolved_site(
+            Site {
+                name: "IP".into(),
+                lat_deg: 40.0,
+                lon_deg: -100.0,
+                alt_m: 0.0,
+            },
+            "IP +-25 km".into(),
+            t,
+        );
+        assert_eq!(m.world(t).observer.active_site().unwrap().name, "NASA HQ");
+    }
+
+    #[test]
+    fn saving_a_site_writes_the_user_config_once_and_marks_it_configured() {
+        let dir = std::env::temp_dir().join(format!("mctl-save-site-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("config.toml");
+        let mut m = model();
+        let t = t_in_oem();
+        let e = m.save_site_at(None, &path, t).unwrap_err();
+        assert!(e.contains("default site is not your location"), "{e}");
+        assert!(!path.exists(), "nothing written on refusal");
+        m.adopt_resolved_site(
+            Site {
+                name: "GeoClue".into(),
+                lat_deg: 51.0,
+                lon_deg: -114.0,
+                alt_m: 12.0,
+            },
+            "GEOCLUE +-26 km".into(),
+            t,
+        );
+        m.save_site_at(Some("Home"), &path, t).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains("name = \"Home\"")
+                && text.contains("lat_deg = 51")
+                && text.contains("alt_m = 12"),
+            "{text}"
+        );
+        assert_eq!(
+            m.world(t).observer.active_site().unwrap().origin,
+            "CONFIGURED"
+        );
+        // The written file is valid configuration that selects the saved site.
+        let layered = format!("{text}\n[observer]\nactive = \"Home\"\n");
+        let cfg = Config::from_layers(mctl_core::config::DEFAULT_CONFIG, Some(("saved", &layered)));
+        assert!(cfg.is_ok(), "{cfg:?}");
+        assert!(
+            m.save_site_at(Some("Home"), &path, t)
+                .unwrap_err()
+                .contains("already in"),
+            "no duplicate entries"
+        );
+        std::fs::remove_dir_all(dir).ok();
     }
 }

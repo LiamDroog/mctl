@@ -381,4 +381,21 @@ mod tests {
         assert!(!visible(-12.0, 0.0), "vehicle in shadow");
         assert!(!visible(-3.0, 1.0), "twilight is too bright");
     }
+
+    /// Prints the passes for the fixture so they can be compared with an independent implementation:
+    /// `cargo test -p mctl-astro print_fixture_passes -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "diagnostic output for an external cross-check"]
+    fn print_fixture_passes() {
+        let gp = GpModel::from_omm_json(OMM).unwrap();
+        let s = site(51.05, -114.07, 1045.0);
+        let look = |t: Utc| look_at(&gp, &s, t, Orientation::ASSUMED_ZERO);
+        println!("EPOCH {}", gp.epoch.iso());
+        for p in find_passes(&look, gp.epoch, gp.epoch.plus(86_400.0), 5.0, 10.0) {
+            println!(
+                "PASS {} {} {} {:.3}",
+                p.aos.0, p.tca.0, p.los.0, p.max_el_deg
+            );
+        }
+    }
 }

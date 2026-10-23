@@ -550,7 +550,7 @@ impl Console {
             }
             if let Some(v) = vehicle {
                 if let Some(px) = ground_px {
-                    page::paint_ground_track(&painter, &theme, px, coast, v);
+                    page::paint_ground_track(&painter, &theme, px, coast, v, &world.observer);
                 }
                 if let Some(px) = eclipse_px {
                     page::paint_eclipse_ring(&painter, &theme, px, v, now);

@@ -66,6 +66,13 @@ pub struct Item {
     /// Short display name; the description when absent.
     #[serde(default)]
     pub label: Option<String>,
+    /// Display layout: a titled section, and a row (and column, for matrices) within it.
+    #[serde(default)]
+    pub section: Option<String>,
+    #[serde(default)]
+    pub row: Option<String>,
+    #[serde(default)]
+    pub col: Option<String>,
     pub units: String,
 }
 
