@@ -58,8 +58,26 @@ pub struct OemState {
     pub state: State,
 }
 
+/// Comments the parser recognises as routine header text (never reported as notes).
+const ROUTINE_COMMENT_PREFIXES: [&str; 9] = [
+    "Source:",
+    "Units",
+    "MASS",
+    "DRAG_AREA",
+    "DRAG_COEFF",
+    "SOLAR_RAD",
+    "Orbits start",
+    "ISS first asc",
+    "ISS last asc",
+];
+/// Words that mark a comment as possibly describing a maneuver. The comment-block format is not
+/// formally specified (DESIGN.md R3), so these are shown as raw text rather than parsed.
+const MANEUVER_WORDS: [&str; 6] = ["maneuver", "manoeuvre", "reboost", "burn", "delta-v", "dv"];
+
 #[derive(Debug, Clone)]
 pub struct Oem {
+    /// Comments the parser did not recognise as routine header text, verbatim.
+    pub notes: Vec<String>,
     pub states: Vec<OemState>,
     pub drag: DragParams,
     /// `CREATION_DATE` from the header: when NASA produced the file, the basis for its age.
@@ -76,6 +94,7 @@ impl Oem {
         let (mut frame, mut tsys, mut creation) = (None, None, None);
         let (mut mass, mut area, mut cd) = (None, None, None);
         let mut states: Vec<OemState> = Vec::new();
+        let mut notes: Vec<String> = Vec::new();
         for (idx, raw) in text.lines().enumerate() {
             let line = idx + 1;
             let l = raw.trim();
@@ -84,6 +103,9 @@ impl Oem {
             }
             if let Some(c) = l.strip_prefix("COMMENT") {
                 let c = c.trim();
+                if !c.is_empty() && !ROUTINE_COMMENT_PREFIXES.iter().any(|p| c.starts_with(p)) {
+                    notes.push(c.to_owned());
+                }
                 for (key, slot) in [
                     ("MASS", &mut mass),
                     ("DRAG_AREA", &mut area),
@@ -170,6 +192,7 @@ impl Oem {
             return Err(OemError::TooFewStates(states.len()));
         }
         Ok(Self {
+            notes,
             creation_date: creation.ok_or(OemError::MissingKey("CREATION_DATE"))?,
             states,
             drag: DragParams {
@@ -178,6 +201,22 @@ impl Oem {
                 drag_coeff: cd.ok_or(OemError::MissingKey("COMMENT DRAG_COEFF"))?,
             },
         })
+    }
+
+    /// Notes that mention a maneuver, reboost or burn, as raw text for the operator.
+    pub fn maneuver_notes(&self) -> Vec<&str> {
+        self.notes
+            .iter()
+            .filter(|n| {
+                let l = n.to_ascii_lowercase();
+                MANEUVER_WORDS.iter().any(|w| {
+                    l.split(|c: char| !c.is_alphanumeric() && c != '-')
+                        .any(|t| t == *w)
+                        || (w.len() > 3 && l.contains(w))
+                })
+            })
+            .map(String::as_str)
+            .collect()
     }
 
     pub fn span(&self) -> (Utc, Utc) {
@@ -385,5 +424,37 @@ mod tests {
             Oem::parse(&synthetic(5)),
             Err(OemError::TooFewStates(5))
         ));
+    }
+
+    #[test]
+    fn unrecognised_comments_are_kept_verbatim_and_maneuver_ones_are_picked_out() {
+        let text = format!(
+            "CREATION_DATE = 2026-01-01T00:00:00.000\nMETA_START\nREF_FRAME = EME2000\nTIME_SYSTEM = UTC\nMETA_STOP\nCOMMENT Source: TOPO\nCOMMENT MASS=1000.0\nCOMMENT DRAG_AREA=10.0\nCOMMENT DRAG_COEFF=2.0\nCOMMENT Reboost planned 2026-11-02T10:00:00 $ DV = 1.2 m/s\nCOMMENT Something else entirely\n{}",
+            (0..12)
+                .map(|i| format!(
+                    "2026-01-01T00:{:02}:00.000 7000.0 0.0 0.0 0.0 7.5 0.0\n",
+                    i * 4
+                ))
+                .collect::<String>()
+        );
+        let o = Oem::parse(&text).unwrap();
+        assert_eq!(
+            o.notes,
+            vec![
+                "Reboost planned 2026-11-02T10:00:00 $ DV = 1.2 m/s",
+                "Something else entirely"
+            ]
+        );
+        assert_eq!(
+            o.maneuver_notes(),
+            vec!["Reboost planned 2026-11-02T10:00:00 $ DV = 1.2 m/s"]
+        );
+    }
+
+    #[test]
+    fn the_real_routine_header_produces_no_notes() {
+        let o = Oem::parse(include_str!("../fixtures/iss-oem-sample.txt")).unwrap();
+        assert!(o.notes.is_empty(), "{:?}", o.notes);
+        assert!(o.maneuver_notes().is_empty());
     }
 }

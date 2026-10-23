@@ -818,6 +818,15 @@ impl Model {
                     }
                 }
                 (SourceKey::Oem(id), Payload::Oem(o)) => {
+                    let notes: Vec<String> = o
+                        .maneuver_notes()
+                        .into_iter()
+                        .map(|n| format!("OEM comment (possible maneuver, raw): {n}"))
+                        .collect();
+                    let now = Utc::now().unwrap_or(Utc(0.0));
+                    for n in notes {
+                        self.note(now, n);
+                    }
                     if let Some(raw) = raw {
                         self.record(Record::Elements {
                             vehicle: id.clone(),
@@ -1066,11 +1075,10 @@ fn sample<T: Trajectory>(
 }
 
 fn rtn_residual(reference: &State, other: &State) -> ([f64; 3], f64) {
-    let rhat = reference.r.normalize();
-    let nhat = reference.r.cross(&reference.v).normalize();
-    let that = nhat.cross(&rhat);
+    use mctl_astro::local_frames::{LocalFrame, to_local};
     let d = other.r - reference.r;
-    ([d.dot(&rhat), d.dot(&that), d.dot(&nhat)], d.norm())
+    let rtn = to_local(LocalFrame::Rtn, reference, &d).unwrap_or(d);
+    ([rtn.x, rtn.y, rtn.z], d.norm())
 }
 
 #[allow(clippy::too_many_arguments)]
