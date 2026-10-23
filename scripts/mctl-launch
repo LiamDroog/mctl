@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Launcher for mctl: rebuilds the release binary if any source changed, then runs it.
+# Installed as symlinks `mctl` and `mctl-gfx` (the latter is `mctl` with the console GUI, the default).
+# Set MCTL_NO_BUILD=1 to skip the build step.
+set -euo pipefail
+
+self="$(readlink -f "${BASH_SOURCE[0]}")"
+repo="$(dirname "$(dirname "$self")")"
+
+# cargo is not on PATH in a fresh shell on this machine.
+if ! command -v cargo >/dev/null 2>&1 && [ -r "$HOME/.cargo/env" ]; then
+    . "$HOME/.cargo/env"
+fi
+command -v cargo >/dev/null 2>&1 || { echo "mctl: cargo not found (looked on PATH and in ~/.cargo/env)" >&2; exit 127; }
+
+if [ -z "${MCTL_NO_BUILD:-}" ]; then
+    if ! out="$(cd "$repo" && cargo build --release --locked -q -p mctl 2>&1)"; then
+        printf '%s\n' "$out" >&2
+        echo "mctl: build failed; not running a stale binary" >&2
+        exit 1
+    fi
+    # `-q` hides cargo's own chatter but still prints compiler warnings; show them only if there are any.
+    [ -n "$out" ] && printf '%s\n' "$out" >&2
+fi
+
+exec "$repo/target/release/mctl" "$@"
