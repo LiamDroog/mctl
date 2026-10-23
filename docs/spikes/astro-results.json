@@ -1,0 +1,2571 @@
+{
+  "omm_epoch": "2026-10-22T23:36:04.393",
+  "oem_span": [
+    "2026-10-21T12:00:00.000",
+    "2026-11-05T12:00:00.000"
+  ],
+  "oem_spacing_s": [
+    90.0,
+    240.0
+  ],
+  "oem_hold_out": {
+    "max_position_error_m": 4.08614288085482,
+    "max_velocity_error_mm_s": 33.81766678119198
+  },
+  "t1_sgp4_from_omm": [
+    {
+      "candidate": "in-house (design: no polar motion)",
+      "result": {
+        "Ok": {
+          "samples": 1441,
+          "max_position_diff_vs_reference_m": 0.0,
+          "max_velocity_diff_vs_reference_mm_s": 0.0,
+          "radius_range_km": [
+            6794.09892274907,
+            6801.135320595766
+          ]
+        }
+      }
+    },
+    {
+      "candidate": "in-house (with polar motion)",
+      "result": {
+        "Ok": {
+          "samples": 1441,
+          "max_position_diff_vs_reference_m": 0.0,
+          "max_velocity_diff_vs_reference_mm_s": 0.0,
+          "radius_range_km": [
+            6794.09892274907,
+            6801.135320595766
+          ]
+        }
+      }
+    },
+    {
+      "candidate": "satkit 0.24.1",
+      "result": {
+        "Ok": {
+          "samples": 1441,
+          "max_position_diff_vs_reference_m": 2.9001911162133843e-7,
+          "max_velocity_diff_vs_reference_mm_s": 3.256861524707209e-7,
+          "radius_range_km": [
+            6794.09892274907,
+            6801.135320595764
+          ]
+        }
+      }
+    },
+    {
+      "candidate": "brahe 1.8.0",
+      "result": {
+        "Ok": {
+          "samples": 1441,
+          "max_position_diff_vs_reference_m": 67.89325802377411,
+          "max_velocity_diff_vs_reference_mm_s": 58.54981987987327,
+          "radius_range_km": [
+            6794.111477159361,
+            6801.129578250948
+          ]
+        }
+      }
+    }
+  ],
+  "t2_sgp4_vs_oem": [
+    {
+      "candidate": "in-house (design: no polar motion)",
+      "result": {
+        "Ok": {
+          "stats": {
+            "samples": 1441,
+            "rms_3d_m": 1198.0084180734032,
+            "max_3d_m": 2349.4211979948795,
+            "max_abs_r_m": 241.91126892243275,
+            "max_abs_t_m": 2348.1522959368604,
+            "max_abs_n_m": 399.60587445295613,
+            "final_r_m": -170.9712866225415,
+            "final_t_m": 1888.3651836051247,
+            "final_n_m": -284.9117145622146
+          },
+          "rtn_m_at_6h": [
+            [
+              101.58756885418411,
+              1179.0122962602034,
+              34.444440459083566
+            ],
+            [
+              -4.495967108184631,
+              634.2581767801412,
+              -319.23001957348765
+            ],
+            [
+              24.27920028914164,
+              713.133916314374,
+              178.6492996517434
+            ],
+            [
+              -182.24517916672377,
+              416.0203912582084,
+              -216.23332688530743
+            ],
+            [
+              -170.9712866225415,
+              1888.3651836051247,
+              -284.9117145622146
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "candidate": "in-house (with polar motion)",
+      "result": {
+        "Ok": {
+          "stats": {
+            "samples": 1441,
+            "rms_3d_m": 1198.0084180734032,
+            "max_3d_m": 2349.4211979948795,
+            "max_abs_r_m": 241.91126892243275,
+            "max_abs_t_m": 2348.1522959368604,
+            "max_abs_n_m": 399.60587445295613,
+            "final_r_m": -170.9712866225415,
+            "final_t_m": 1888.3651836051247,
+            "final_n_m": -284.9117145622146
+          },
+          "rtn_m_at_6h": [
+            [
+              101.58756885418411,
+              1179.0122962602034,
+              34.444440459083566
+            ],
+            [
+              -4.495967108184631,
+              634.2581767801412,
+              -319.23001957348765
+            ],
+            [
+              24.27920028914164,
+              713.133916314374,
+              178.6492996517434
+            ],
+            [
+              -182.24517916672377,
+              416.0203912582084,
+              -216.23332688530743
+            ],
+            [
+              -170.9712866225415,
+              1888.3651836051247,
+              -284.9117145622146
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "candidate": "satkit 0.24.1",
+      "result": {
+        "Ok": {
+          "stats": {
+            "samples": 1441,
+            "rms_3d_m": 1198.8885698803858,
+            "max_3d_m": 2350.4446632692493,
+            "max_abs_r_m": 241.91144746767017,
+            "max_abs_t_m": 2349.1449510511275,
+            "max_abs_n_m": 398.65884658749656,
+            "final_r_m": -170.971595832535,
+            "final_t_m": 1889.3601758582267,
+            "final_n_m": -285.69506821223155
+          },
+          "rtn_m_at_6h": [
+            [
+              101.58739443272255,
+              1179.9944294615418,
+              35.21960917097877
+            ],
+            [
+              -4.496014941876708,
+              635.2390465445725,
+              -318.29679898972654
+            ],
+            [
+              24.279082877835464,
+              714.1160341688344,
+              179.19323473456078
+            ],
+            [
+              -182.24524494878665,
+              417.00742248577683,
+              -216.40089400228666
+            ],
+            [
+              -170.971595832535,
+              1889.3601758582267,
+              -285.69506821223155
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "candidate": "brahe 1.8.0",
+      "result": {
+        "Ok": {
+          "stats": {
+            "samples": 1441,
+            "rms_3d_m": 1219.6839013066394,
+            "max_3d_m": 2402.1707036443613,
+            "max_abs_r_m": 249.88490364268355,
+            "max_abs_t_m": 2400.072578907113,
+            "max_abs_n_m": 395.8618719013761,
+            "final_r_m": -172.68672010213498,
+            "final_t_m": 1896.0542202918807,
+            "final_n_m": -295.35554443551473
+          },
+          "rtn_m_at_6h": [
+            [
+              99.88738630118169,
+              1210.8870920476056,
+              35.19807515209161
+            ],
+            [
+              -17.12514343899475,
+              666.4182048396538,
+              -316.5799641133382
+            ],
+            [
+              7.107918901173682,
+              732.8363231839256,
+              179.23032642976898
+            ],
+            [
+              -194.88393966151966,
+              423.3244529955643,
+              -221.48782983060116
+            ],
+            [
+              -172.68672010213498,
+              1896.0542202918807,
+              -295.35554443551473
+            ]
+          ]
+        }
+      }
+    }
+  ],
+  "t3_vallado": [
+    {
+      "candidate": "in-house (design: no polar motion)",
+      "result": {
+        "Ok": {
+          "cases": 33,
+          "cases_within_tolerance": 33,
+          "worst_pos_err_km": 1.4974281003521155e-7,
+          "worst_vel_err_km_s": 8.528706133278369e-10,
+          "unexpected_errors": 0,
+          "missed_errors": 3,
+          "init_failures": 0,
+          "repaired_cases": 4,
+          "detail": [
+            {
+              "satnum": 5,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.819678884831341e-9,
+              "max_vel_err_km_s": 7.704656996212427e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 4632,
+              "rows_compared": 4,
+              "max_pos_err_km": 5.9285890530002265e-9,
+              "max_vel_err_km_s": 6.52030630210209e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 6251,
+              "rows_compared": 25,
+              "max_pos_err_km": 7.266753116701772e-9,
+              "max_vel_err_km_s": 6.89306695607483e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 8195,
+              "rows_compared": 25,
+              "max_pos_err_km": 6.280768317631749e-9,
+              "max_vel_err_km_s": 6.700892380014717e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 9880,
+              "rows_compared": 25,
+              "max_pos_err_km": 7.010332299931716e-9,
+              "max_vel_err_km_s": 8.528706133278369e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 9998,
+              "rows_compared": 14,
+              "max_pos_err_km": 7.828215696884049e-9,
+              "max_vel_err_km_s": 7.539643699348287e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 11801,
+              "rows_compared": 5,
+              "max_pos_err_km": 6.838809909193079e-9,
+              "max_vel_err_km_s": 5.387520890769532e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": true,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 14128,
+              "rows_compared": 25,
+              "max_pos_err_km": 6.943178398689176e-9,
+              "max_vel_err_km_s": 6.782373830232908e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 16925,
+              "rows_compared": 13,
+              "max_pos_err_km": 8.096310647838341e-9,
+              "max_vel_err_km_s": 6.661194110284559e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 20413,
+              "rows_compared": 26,
+              "max_pos_err_km": 7.796909238899614e-9,
+              "max_vel_err_km_s": 7.35320265624612e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 21897,
+              "rows_compared": 25,
+              "max_pos_err_km": 7.588232553405816e-9,
+              "max_vel_err_km_s": 6.628226278958032e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 22312,
+              "rows_compared": 23,
+              "max_pos_err_km": 6.469873266902578e-9,
+              "max_vel_err_km_s": 6.752295842771309e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 22674,
+              "rows_compared": 25,
+              "max_pos_err_km": 7.218174661964667e-9,
+              "max_vel_err_km_s": 7.649634141069428e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 23177,
+              "rows_compared": 13,
+              "max_pos_err_km": 7.118343732320022e-9,
+              "max_vel_err_km_s": 7.496064622371892e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 23333,
+              "rows_compared": 14,
+              "max_pos_err_km": 7.100757787091832e-9,
+              "max_vel_err_km_s": 6.865462838858868e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 23599,
+              "rows_compared": 37,
+              "max_pos_err_km": 7.690992920437181e-9,
+              "max_vel_err_km_s": 7.111033452337313e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 24208,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.491073371511462e-9,
+              "max_vel_err_km_s": 6.549922384633233e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 25954,
+              "rows_compared": 26,
+              "max_pos_err_km": 7.546219735931401e-9,
+              "max_vel_err_km_s": 7.373498379654928e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 26900,
+              "rows_compared": 3,
+              "max_pos_err_km": 5.645057216946773e-9,
+              "max_vel_err_km_s": 4.556080953956975e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 26975,
+              "rows_compared": 25,
+              "max_pos_err_km": 7.64523349555347e-9,
+              "max_vel_err_km_s": 8.02090443553538e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 28057,
+              "rows_compared": 25,
+              "max_pos_err_km": 6.760112067089884e-9,
+              "max_vel_err_km_s": 6.893864078696653e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 28129,
+              "rows_compared": 13,
+              "max_pos_err_km": 7.3607215736421176e-9,
+              "max_vel_err_km_s": 6.581252439961819e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 28350,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.336639166845449e-9,
+              "max_vel_err_km_s": 6.852747158807757e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 28623,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.1611375692138014e-9,
+              "max_vel_err_km_s": 6.284161954363001e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 28626,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.9605519336808115e-9,
+              "max_vel_err_km_s": 7.093295694708515e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 28872,
+              "rows_compared": 11,
+              "max_pos_err_km": 7.316713619269943e-9,
+              "max_vel_err_km_s": 6.705872974579744e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": false,
+              "radius_where_reference_errors_km": 6353.63919891819,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 29141,
+              "rows_compared": 22,
+              "max_pos_err_km": 6.674133660701004e-9,
+              "max_vel_err_km_s": 7.775896118202275e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": false,
+              "radius_where_reference_errors_km": 6354.226667373255,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 29238,
+              "rows_compared": 13,
+              "max_pos_err_km": 7.086371176734123e-9,
+              "max_vel_err_km_s": 7.702238062585642e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 88888,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.3921846837319386e-9,
+              "max_vel_err_km_s": 7.083165632663448e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 33333,
+              "rows_compared": 5,
+              "max_pos_err_km": 7.089853456711454e-9,
+              "max_vel_err_km_s": 6.641001552321903e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": true,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 33334,
+              "rows_compared": 0,
+              "max_pos_err_km": 0.0,
+              "max_vel_err_km_s": 0.0,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": true,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 33335,
+              "rows_compared": 73,
+              "max_pos_err_km": 8.118604696139405e-9,
+              "max_vel_err_km_s": 7.669091317428715e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": true,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 20413,
+              "rows_compared": 70,
+              "max_pos_err_km": 1.4974281003521155e-7,
+              "max_vel_err_km_s": 7.616472423435703e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": false,
+              "radius_where_reference_errors_km": 5297.260194115922,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "candidate": "in-house (with polar motion)",
+      "result": {
+        "Ok": {
+          "cases": 33,
+          "cases_within_tolerance": 33,
+          "worst_pos_err_km": 1.4974281003521155e-7,
+          "worst_vel_err_km_s": 8.528706133278369e-10,
+          "unexpected_errors": 0,
+          "missed_errors": 3,
+          "init_failures": 0,
+          "repaired_cases": 4,
+          "detail": [
+            {
+              "satnum": 5,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.819678884831341e-9,
+              "max_vel_err_km_s": 7.704656996212427e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 4632,
+              "rows_compared": 4,
+              "max_pos_err_km": 5.9285890530002265e-9,
+              "max_vel_err_km_s": 6.52030630210209e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 6251,
+              "rows_compared": 25,
+              "max_pos_err_km": 7.266753116701772e-9,
+              "max_vel_err_km_s": 6.89306695607483e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 8195,
+              "rows_compared": 25,
+              "max_pos_err_km": 6.280768317631749e-9,
+              "max_vel_err_km_s": 6.700892380014717e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 9880,
+              "rows_compared": 25,
+              "max_pos_err_km": 7.010332299931716e-9,
+              "max_vel_err_km_s": 8.528706133278369e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 9998,
+              "rows_compared": 14,
+              "max_pos_err_km": 7.828215696884049e-9,
+              "max_vel_err_km_s": 7.539643699348287e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 11801,
+              "rows_compared": 5,
+              "max_pos_err_km": 6.838809909193079e-9,
+              "max_vel_err_km_s": 5.387520890769532e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": true,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 14128,
+              "rows_compared": 25,
+              "max_pos_err_km": 6.943178398689176e-9,
+              "max_vel_err_km_s": 6.782373830232908e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 16925,
+              "rows_compared": 13,
+              "max_pos_err_km": 8.096310647838341e-9,
+              "max_vel_err_km_s": 6.661194110284559e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 20413,
+              "rows_compared": 26,
+              "max_pos_err_km": 7.796909238899614e-9,
+              "max_vel_err_km_s": 7.35320265624612e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 21897,
+              "rows_compared": 25,
+              "max_pos_err_km": 7.588232553405816e-9,
+              "max_vel_err_km_s": 6.628226278958032e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 22312,
+              "rows_compared": 23,
+              "max_pos_err_km": 6.469873266902578e-9,
+              "max_vel_err_km_s": 6.752295842771309e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 22674,
+              "rows_compared": 25,
+              "max_pos_err_km": 7.218174661964667e-9,
+              "max_vel_err_km_s": 7.649634141069428e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 23177,
+              "rows_compared": 13,
+              "max_pos_err_km": 7.118343732320022e-9,
+              "max_vel_err_km_s": 7.496064622371892e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 23333,
+              "rows_compared": 14,
+              "max_pos_err_km": 7.100757787091832e-9,
+              "max_vel_err_km_s": 6.865462838858868e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 23599,
+              "rows_compared": 37,
+              "max_pos_err_km": 7.690992920437181e-9,
+              "max_vel_err_km_s": 7.111033452337313e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 24208,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.491073371511462e-9,
+              "max_vel_err_km_s": 6.549922384633233e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 25954,
+              "rows_compared": 26,
+              "max_pos_err_km": 7.546219735931401e-9,
+              "max_vel_err_km_s": 7.373498379654928e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 26900,
+              "rows_compared": 3,
+              "max_pos_err_km": 5.645057216946773e-9,
+              "max_vel_err_km_s": 4.556080953956975e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 26975,
+              "rows_compared": 25,
+              "max_pos_err_km": 7.64523349555347e-9,
+              "max_vel_err_km_s": 8.02090443553538e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 28057,
+              "rows_compared": 25,
+              "max_pos_err_km": 6.760112067089884e-9,
+              "max_vel_err_km_s": 6.893864078696653e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 28129,
+              "rows_compared": 13,
+              "max_pos_err_km": 7.3607215736421176e-9,
+              "max_vel_err_km_s": 6.581252439961819e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 28350,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.336639166845449e-9,
+              "max_vel_err_km_s": 6.852747158807757e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 28623,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.1611375692138014e-9,
+              "max_vel_err_km_s": 6.284161954363001e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 28626,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.9605519336808115e-9,
+              "max_vel_err_km_s": 7.093295694708515e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 28872,
+              "rows_compared": 11,
+              "max_pos_err_km": 7.316713619269943e-9,
+              "max_vel_err_km_s": 6.705872974579744e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": false,
+              "radius_where_reference_errors_km": 6353.63919891819,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 29141,
+              "rows_compared": 22,
+              "max_pos_err_km": 6.674133660701004e-9,
+              "max_vel_err_km_s": 7.775896118202275e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": false,
+              "radius_where_reference_errors_km": 6354.226667373255,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 29238,
+              "rows_compared": 13,
+              "max_pos_err_km": 7.086371176734123e-9,
+              "max_vel_err_km_s": 7.702238062585642e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 88888,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.3921846837319386e-9,
+              "max_vel_err_km_s": 7.083165632663448e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 33333,
+              "rows_compared": 5,
+              "max_pos_err_km": 7.089853456711454e-9,
+              "max_vel_err_km_s": 6.641001552321903e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": true,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 33334,
+              "rows_compared": 0,
+              "max_pos_err_km": 0.0,
+              "max_vel_err_km_s": 0.0,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": true,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 33335,
+              "rows_compared": 73,
+              "max_pos_err_km": 8.118604696139405e-9,
+              "max_vel_err_km_s": 7.669091317428715e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": true,
+              "max_pos_diff_vs_first_km": 0.0
+            },
+            {
+              "satnum": 20413,
+              "rows_compared": 70,
+              "max_pos_err_km": 1.4974281003521155e-7,
+              "max_vel_err_km_s": 7.616472423435703e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": false,
+              "radius_where_reference_errors_km": 5297.260194115922,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "candidate": "satkit 0.24.1",
+      "result": {
+        "Ok": {
+          "cases": 33,
+          "cases_within_tolerance": 33,
+          "worst_pos_err_km": 4.076441456314316e-6,
+          "worst_vel_err_km_s": 1.830780069592708e-9,
+          "unexpected_errors": 0,
+          "missed_errors": 0,
+          "init_failures": 0,
+          "repaired_cases": 0,
+          "detail": [
+            {
+              "satnum": 5,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.818004853675124e-9,
+              "max_vel_err_km_s": 7.704566204178344e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 4.3698854344946203e-10
+            },
+            {
+              "satnum": 4632,
+              "rows_compared": 4,
+              "max_pos_err_km": 5.8195790797290424e-9,
+              "max_vel_err_km_s": 6.520122414471086e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 3.920204925177189e-10
+            },
+            {
+              "satnum": 6251,
+              "rows_compared": 25,
+              "max_pos_err_km": 7.2664658657912765e-9,
+              "max_vel_err_km_s": 6.895788608208255e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 2.667429503194544e-10
+            },
+            {
+              "satnum": 8195,
+              "rows_compared": 25,
+              "max_pos_err_km": 6.890699885572137e-9,
+              "max_vel_err_km_s": 6.702823884241836e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 9.793007165684758e-10
+            },
+            {
+              "satnum": 9880,
+              "rows_compared": 25,
+              "max_pos_err_km": 7.546978561841787e-9,
+              "max_vel_err_km_s": 8.528838435463848e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 1.3686859133017056e-9
+            },
+            {
+              "satnum": 9998,
+              "rows_compared": 14,
+              "max_pos_err_km": 8.176915996100362e-9,
+              "max_vel_err_km_s": 7.539407821602356e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 6.229648674397352e-10
+            },
+            {
+              "satnum": 11801,
+              "rows_compared": 5,
+              "max_pos_err_km": 6.880462729714761e-9,
+              "max_vel_err_km_s": 5.387437302202751e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 1.831316760021323e-10
+            },
+            {
+              "satnum": 14128,
+              "rows_compared": 25,
+              "max_pos_err_km": 6.9587575147168435e-9,
+              "max_vel_err_km_s": 6.782384559865134e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 1.6710340549265256e-10
+            },
+            {
+              "satnum": 16925,
+              "rows_compared": 13,
+              "max_pos_err_km": 8.144945310320825e-9,
+              "max_vel_err_km_s": 6.661229987819117e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 2.697679186021866e-10
+            },
+            {
+              "satnum": 20413,
+              "rows_compared": 26,
+              "max_pos_err_km": 1.6385870103603597e-7,
+              "max_vel_err_km_s": 7.354766416465831e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 1.6815665896799266e-7
+            },
+            {
+              "satnum": 21897,
+              "rows_compared": 25,
+              "max_pos_err_km": 7.579736483716097e-9,
+              "max_vel_err_km_s": 6.6282640281255e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 5.275571036599184e-10
+            },
+            {
+              "satnum": 22312,
+              "rows_compared": 23,
+              "max_pos_err_km": 6.4700022634121224e-9,
+              "max_vel_err_km_s": 6.752300067053632e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 6.08618639363004e-11
+            },
+            {
+              "satnum": 22674,
+              "rows_compared": 25,
+              "max_pos_err_km": 6.870687054384495e-9,
+              "max_vel_err_km_s": 7.649406267584525e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 2.2854443621241774e-9
+            },
+            {
+              "satnum": 23177,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.789283597487189e-9,
+              "max_vel_err_km_s": 7.495949662568067e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 1.1590973026619342e-9
+            },
+            {
+              "satnum": 23333,
+              "rows_compared": 14,
+              "max_pos_err_km": 4.076441456314316e-6,
+              "max_vel_err_km_s": 1.830780069592708e-9,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 4.073045941832704e-6
+            },
+            {
+              "satnum": 23599,
+              "rows_compared": 37,
+              "max_pos_err_km": 7.633650454403252e-9,
+              "max_vel_err_km_s": 7.110961571570154e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 1.3369262760543614e-10
+            },
+            {
+              "satnum": 24208,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.572046708742906e-9,
+              "max_vel_err_km_s": 6.55009132335503e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 2.9272769054318446e-10
+            },
+            {
+              "satnum": 25954,
+              "rows_compared": 26,
+              "max_pos_err_km": 7.490397361238514e-9,
+              "max_vel_err_km_s": 7.373497872692614e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 3.397488578429951e-10
+            },
+            {
+              "satnum": 26900,
+              "rows_compared": 3,
+              "max_pos_err_km": 5.17923069032831e-9,
+              "max_vel_err_km_s": 4.5559796095151363e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 2.2569311789424217e-9
+            },
+            {
+              "satnum": 26975,
+              "rows_compared": 25,
+              "max_pos_err_km": 8.010448512624853e-9,
+              "max_vel_err_km_s": 8.020414810515901e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 1.1265251179701364e-9
+            },
+            {
+              "satnum": 28057,
+              "rows_compared": 25,
+              "max_pos_err_km": 6.795426607511274e-9,
+              "max_vel_err_km_s": 6.893965788785699e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 2.7811211832170024e-10
+            },
+            {
+              "satnum": 28129,
+              "rows_compared": 13,
+              "max_pos_err_km": 7.3712645358663795e-9,
+              "max_vel_err_km_s": 6.581196971067121e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 2.398209223274007e-10
+            },
+            {
+              "satnum": 28350,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.341733602743029e-9,
+              "max_vel_err_km_s": 6.852803612569734e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 1.5927862720964681e-10
+            },
+            {
+              "satnum": 28623,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.163074600194066e-9,
+              "max_vel_err_km_s": 6.284105594550032e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 4.4042838505951817e-10
+            },
+            {
+              "satnum": 28626,
+              "rows_compared": 13,
+              "max_pos_err_km": 7.037246532338327e-9,
+              "max_vel_err_km_s": 7.093348727544684e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 1.4047327862526663e-10
+            },
+            {
+              "satnum": 28872,
+              "rows_compared": 11,
+              "max_pos_err_km": 7.324734821418862e-9,
+              "max_vel_err_km_s": 6.705853504399134e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 1.734758330732118e-11
+            },
+            {
+              "satnum": 29141,
+              "rows_compared": 22,
+              "max_pos_err_km": 6.6718254214570054e-9,
+              "max_vel_err_km_s": 7.775851289712372e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 4.6553892465369823e-11
+            },
+            {
+              "satnum": 29238,
+              "rows_compared": 13,
+              "max_pos_err_km": 7.0911030748663464e-9,
+              "max_vel_err_km_s": 7.702206077837535e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 1.461463202376487e-10
+            },
+            {
+              "satnum": 88888,
+              "rows_compared": 13,
+              "max_pos_err_km": 6.393466376391798e-9,
+              "max_vel_err_km_s": 7.08338282717429e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 8.833342922253563e-11
+            },
+            {
+              "satnum": 33333,
+              "rows_compared": 5,
+              "max_pos_err_km": 7.177798526215816e-9,
+              "max_vel_err_km_s": 6.641186478682505e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 8.053463989299244e-9
+            },
+            {
+              "satnum": 33334,
+              "rows_compared": 0,
+              "max_pos_err_km": 0.0,
+              "max_vel_err_km_s": 0.0,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 33335,
+              "rows_compared": 73,
+              "max_pos_err_km": 8.10649516205984e-9,
+              "max_vel_err_km_s": 7.669055789101446e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 1.361467346497299e-10
+            },
+            {
+              "satnum": 20413,
+              "rows_compared": 70,
+              "max_pos_err_km": 3.706034024511207e-7,
+              "max_vel_err_km_s": 7.612817083051016e-10,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 2.798147624150587e-7
+            }
+          ]
+        }
+      }
+    },
+    {
+      "candidate": "brahe 1.8.0",
+      "result": {
+        "Ok": {
+          "cases": 33,
+          "cases_within_tolerance": 1,
+          "worst_pos_err_km": 13068.211725793231,
+          "worst_vel_err_km_s": 0.11543235145501608,
+          "unexpected_errors": 0,
+          "missed_errors": 3,
+          "init_failures": 0,
+          "repaired_cases": 3,
+          "detail": [
+            {
+              "satnum": 5,
+              "rows_compared": 13,
+              "max_pos_err_km": 0.03587106104226899,
+              "max_vel_err_km_s": 0.000027698929975337418,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.035871063585162274
+            },
+            {
+              "satnum": 4632,
+              "rows_compared": 4,
+              "max_pos_err_km": 0.013608805592557886,
+              "max_vel_err_km_s": 7.967242028570321e-7,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.013608807435063215
+            },
+            {
+              "satnum": 6251,
+              "rows_compared": 25,
+              "max_pos_err_km": 0.0834959996952161,
+              "max_vel_err_km_s": 0.0000834549141242426,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.08349600054079823
+            },
+            {
+              "satnum": 8195,
+              "rows_compared": 25,
+              "max_pos_err_km": 0.07317938513152242,
+              "max_vel_err_km_s": 0.000014999700087890198,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.07317938528729818
+            },
+            {
+              "satnum": 9880,
+              "rows_compared": 25,
+              "max_pos_err_km": 0.07963194962696507,
+              "max_vel_err_km_s": 0.000018164486455639348,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.07963195017667468
+            },
+            {
+              "satnum": 9998,
+              "rows_compared": 14,
+              "max_pos_err_km": 0.012566135996503833,
+              "max_vel_err_km_s": 1.0698781198796366e-6,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.012566137891274054
+            },
+            {
+              "satnum": 11801,
+              "rows_compared": 5,
+              "max_pos_err_km": 0.2958359653732647,
+              "max_vel_err_km_s": 0.000034739752172346754,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": true,
+              "max_pos_diff_vs_first_km": 0.2958359674110019
+            },
+            {
+              "satnum": 14128,
+              "rows_compared": 25,
+              "max_pos_err_km": 0.014653655822499558,
+              "max_vel_err_km_s": 1.0484826095463501e-6,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.014653657404492438
+            },
+            {
+              "satnum": 16925,
+              "rows_compared": 13,
+              "max_pos_err_km": 0.7857212167935018,
+              "max_vel_err_km_s": 0.0005970412366718644,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.7857212180987938
+            },
+            {
+              "satnum": 20413,
+              "rows_compared": 26,
+              "max_pos_err_km": 0.050212160607769375,
+              "max_vel_err_km_s": 1.1319587534378622e-6,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0502121598447716
+            },
+            {
+              "satnum": 21897,
+              "rows_compared": 25,
+              "max_pos_err_km": 0.0967191853848165,
+              "max_vel_err_km_s": 0.000019530847485509204,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.09671918872024046
+            },
+            {
+              "satnum": 22312,
+              "rows_compared": 23,
+              "max_pos_err_km": 1.0319828450368447,
+              "max_vel_err_km_s": 0.0012715752896595737,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 1.0319828431072147
+            },
+            {
+              "satnum": 22674,
+              "rows_compared": 25,
+              "max_pos_err_km": 0.10294220638567118,
+              "max_vel_err_km_s": 0.000039228869833655114,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.10294220612333362
+            },
+            {
+              "satnum": 23177,
+              "rows_compared": 13,
+              "max_pos_err_km": 0.014933343494278,
+              "max_vel_err_km_s": 4.932261335611085e-6,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.014933341109059153
+            },
+            {
+              "satnum": 23333,
+              "rows_compared": 14,
+              "max_pos_err_km": 3.3219232605111277,
+              "max_vel_err_km_s": 0.0014637704527389827,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 3.321923263122807
+            },
+            {
+              "satnum": 23599,
+              "rows_compared": 37,
+              "max_pos_err_km": 0.9606530828265836,
+              "max_vel_err_km_s": 0.0003908714360490143,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.96065307890125
+            },
+            {
+              "satnum": 24208,
+              "rows_compared": 13,
+              "max_pos_err_km": 0.011858189685499558,
+              "max_vel_err_km_s": 8.674633294436207e-7,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.011858192583176717
+            },
+            {
+              "satnum": 25954,
+              "rows_compared": 26,
+              "max_pos_err_km": 0.010591906627114851,
+              "max_vel_err_km_s": 7.711713063892929e-7,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.010591905788052601
+            },
+            {
+              "satnum": 26900,
+              "rows_compared": 3,
+              "max_pos_err_km": 0.010604403281287342,
+              "max_vel_err_km_s": 7.72863195782289e-7,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.010604406196494815
+            },
+            {
+              "satnum": 26975,
+              "rows_compared": 25,
+              "max_pos_err_km": 0.06550574239413055,
+              "max_vel_err_km_s": 0.00001144392264146756,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.06550574793037642
+            },
+            {
+              "satnum": 28057,
+              "rows_compared": 25,
+              "max_pos_err_km": 0.09038309233314984,
+              "max_vel_err_km_s": 0.00007237976747383009,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.09038309502255172
+            },
+            {
+              "satnum": 28129,
+              "rows_compared": 13,
+              "max_pos_err_km": 0.03285981980169489,
+              "max_vel_err_km_s": 3.2188890937273437e-6,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.03285981855007156
+            },
+            {
+              "satnum": 28350,
+              "rows_compared": 13,
+              "max_pos_err_km": 1.3263003251379648,
+              "max_vel_err_km_s": 0.0016323107187614016,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 1.3263003247652403
+            },
+            {
+              "satnum": 28623,
+              "rows_compared": 13,
+              "max_pos_err_km": 0.18430395631728175,
+              "max_vel_err_km_s": 0.0000876152374956938,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.18430395900889862
+            },
+            {
+              "satnum": 28626,
+              "rows_compared": 13,
+              "max_pos_err_km": 0.010587095338886911,
+              "max_vel_err_km_s": 7.707495089765513e-7,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.010587100563429616
+            },
+            {
+              "satnum": 28872,
+              "rows_compared": 11,
+              "max_pos_err_km": 0.04369369374489207,
+              "max_vel_err_km_s": 0.000028943347887787046,
+              "unexpected_errors": 0,
+              "expected_error_detected": false,
+              "radius_where_reference_errors_km": 6353.624992860968,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.04369369260598022
+            },
+            {
+              "satnum": 29141,
+              "rows_compared": 22,
+              "max_pos_err_km": 0.6173193925218672,
+              "max_vel_err_km_s": 0.000762802037749239,
+              "unexpected_errors": 0,
+              "expected_error_detected": false,
+              "radius_where_reference_errors_km": 6354.1577445220055,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.7799283198111355
+            },
+            {
+              "satnum": 29238,
+              "rows_compared": 13,
+              "max_pos_err_km": 0.07564786090775719,
+              "max_vel_err_km_s": 0.00008168210554871287,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.0756478623001125
+            },
+            {
+              "satnum": 88888,
+              "rows_compared": 13,
+              "max_pos_err_km": 0.05190686471281236,
+              "max_vel_err_km_s": 0.0000332989951637106,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.05190686471515809
+            },
+            {
+              "satnum": 33333,
+              "rows_compared": 5,
+              "max_pos_err_km": 13068.211725793231,
+              "max_vel_err_km_s": 0.11543235145501608,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": true,
+              "max_pos_diff_vs_first_km": 13068.211725789752
+            },
+            {
+              "satnum": 33334,
+              "rows_compared": 0,
+              "max_pos_err_km": 0.0,
+              "max_vel_err_km_s": 0.0,
+              "unexpected_errors": 0,
+              "expected_error_detected": true,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": null
+            },
+            {
+              "satnum": 33335,
+              "rows_compared": 73,
+              "max_pos_err_km": 0.010587392535662042,
+              "max_vel_err_km_s": 7.710203704939467e-7,
+              "unexpected_errors": 0,
+              "expected_error_detected": null,
+              "radius_where_reference_errors_km": null,
+              "init_error": null,
+              "repaired": true,
+              "max_pos_diff_vs_first_km": 0.010587389529011766
+            },
+            {
+              "satnum": 20413,
+              "rows_compared": 70,
+              "max_pos_err_km": 0.2891774897028272,
+              "max_vel_err_km_s": 0.00020893586181995193,
+              "unexpected_errors": 0,
+              "expected_error_detected": false,
+              "radius_where_reference_errors_km": 5297.334718104067,
+              "init_error": null,
+              "repaired": false,
+              "max_pos_diff_vs_first_km": 0.2959981943800235
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "t4_frames_vs_satkit": [
+    {
+      "candidate": "in-house (design: no polar motion)",
+      "result": {
+        "Ok": {
+          "against": "satkit 0.24.1",
+          "teme_to_gcrf_max_m": 1.3724582995257057,
+          "gcrf_to_itrf_max_m": 12.825084827720081
+        }
+      }
+    },
+    {
+      "candidate": "in-house (with polar motion)",
+      "result": {
+        "Ok": {
+          "against": "satkit 0.24.1",
+          "teme_to_gcrf_max_m": 1.3724582995257057,
+          "gcrf_to_itrf_max_m": 1.3729143397074826
+        }
+      }
+    },
+    {
+      "candidate": "brahe 1.8.0",
+      "result": {
+        "Ok": {
+          "against": "satkit 0.24.1",
+          "teme_to_gcrf_max_m": 0.00014098785812749343,
+          "gcrf_to_itrf_max_m": 0.0003116746124225793
+        }
+      }
+    }
+  ],
+  "t5_sun_vs_horizons_geometric": [
+    {
+      "candidate": "in-house (design: no polar motion)",
+      "result": {
+        "Ok": {
+          "epochs": 13,
+          "max_arcsec": 36.38203809529306,
+          "mean_arcsec": 22.670532520616213,
+          "max_distance_error_km": 8908.769873380661
+        }
+      }
+    },
+    {
+      "candidate": "in-house (with polar motion)",
+      "result": {
+        "Ok": {
+          "epochs": 13,
+          "max_arcsec": 36.38203809529306,
+          "mean_arcsec": 22.670532520616213,
+          "max_distance_error_km": 8908.769873380661
+        }
+      }
+    },
+    {
+      "candidate": "satkit 0.24.1",
+      "result": {
+        "Ok": {
+          "epochs": 13,
+          "max_arcsec": 21.908668298270708,
+          "mean_arcsec": 20.990652391169654,
+          "max_distance_error_km": 617.8441090881824
+        }
+      }
+    },
+    {
+      "candidate": "brahe 1.8.0",
+      "result": {
+        "Ok": {
+          "epochs": 13,
+          "max_arcsec": 326.4804286776044,
+          "mean_arcsec": 314.851322899222,
+          "max_distance_error_km": 8299.56103360653
+        }
+      }
+    }
+  ],
+  "t5_sun_vs_horizons_apparent": [
+    {
+      "candidate": "in-house (design: no polar motion)",
+      "result": {
+        "Ok": {
+          "epochs": 13,
+          "max_arcsec": 15.800361877266663,
+          "mean_arcsec": 6.048333674155538,
+          "max_distance_error_km": 8912.359406590462
+        }
+      }
+    },
+    {
+      "candidate": "in-house (with polar motion)",
+      "result": {
+        "Ok": {
+          "epochs": 13,
+          "max_arcsec": 15.800361877266663,
+          "mean_arcsec": 6.048333674155538,
+          "max_distance_error_km": 8912.359406590462
+        }
+      }
+    },
+    {
+      "candidate": "satkit 0.24.1",
+      "result": {
+        "Ok": {
+          "epochs": 13,
+          "max_arcsec": 1.3264576434796964,
+          "mean_arcsec": 0.5676936523649063,
+          "max_distance_error_km": 623.1956987380981
+        }
+      }
+    },
+    {
+      "candidate": "brahe 1.8.0",
+      "result": {
+        "Ok": {
+          "epochs": 13,
+          "max_arcsec": 305.90245354021556,
+          "mean_arcsec": 294.1093286270773,
+          "max_distance_error_km": 8303.15056681633
+        }
+      }
+    }
+  ],
+  "t6_numerical_vs_oem": [
+    {
+      "candidate": "in-house (design: no polar motion)",
+      "result": {
+        "Ok": {
+          "cases": [
+            {
+              "label": "J2..J4 only, no drag",
+              "density_scale": 0.0,
+              "stats": {
+                "samples": 24,
+                "rms_3d_m": 4025.7622012248603,
+                "max_3d_m": 7684.825910015731,
+                "max_abs_r_m": 420.235828481221,
+                "max_abs_t_m": 7677.868046390847,
+                "max_abs_n_m": 413.16439296368503,
+                "final_r_m": 245.7796602369225,
+                "final_t_m": -7677.868046390847,
+                "final_n_m": 215.6012246563792
+              },
+              "runtime_ms": 4
+            },
+            {
+              "label": "plus drag with OEM header Cd*A/m, library density as shipped",
+              "density_scale": 1.0,
+              "stats": {
+                "samples": 24,
+                "rms_3d_m": 2096.554095776912,
+                "max_3d_m": 3409.2769076985664,
+                "max_abs_r_m": 406.46653709253553,
+                "max_abs_t_m": 3404.0680515978834,
+                "max_abs_n_m": 414.26713003069824,
+                "final_r_m": 189.60220613967908,
+                "final_t_m": -3325.2991661478504,
+                "final_n_m": 219.55098624035264
+              },
+              "runtime_ms": 6
+            },
+            {
+              "label": "plus drag, density scale fitted to the OEM at 24 h",
+              "density_scale": 2.2134321067896794,
+              "stats": {
+                "samples": 24,
+                "rms_3d_m": 1145.5846833967937,
+                "max_3d_m": 1997.4019357228397,
+                "max_abs_r_m": 457.1661489783258,
+                "max_abs_t_m": 1994.6320565271337,
+                "max_abs_n_m": 415.60504847084,
+                "final_r_m": 117.60710777439701,
+                "final_t_m": 1960.2232506122448,
+                "final_n_m": 224.34523174725916
+              },
+              "runtime_ms": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "candidate": "in-house (with polar motion)",
+      "result": {
+        "Ok": {
+          "cases": [
+            {
+              "label": "J2..J4 only, no drag",
+              "density_scale": 0.0,
+              "stats": {
+                "samples": 24,
+                "rms_3d_m": 4025.7622012248603,
+                "max_3d_m": 7684.825910015731,
+                "max_abs_r_m": 420.235828481221,
+                "max_abs_t_m": 7677.868046390847,
+                "max_abs_n_m": 413.16439296368503,
+                "final_r_m": 245.7796602369225,
+                "final_t_m": -7677.868046390847,
+                "final_n_m": 215.6012246563792
+              },
+              "runtime_ms": 4
+            },
+            {
+              "label": "plus drag with OEM header Cd*A/m, library density as shipped",
+              "density_scale": 1.0,
+              "stats": {
+                "samples": 24,
+                "rms_3d_m": 2096.554095776912,
+                "max_3d_m": 3409.2769076985664,
+                "max_abs_r_m": 406.46653709253553,
+                "max_abs_t_m": 3404.0680515978834,
+                "max_abs_n_m": 414.26713003069824,
+                "final_r_m": 189.60220613967908,
+                "final_t_m": -3325.2991661478504,
+                "final_n_m": 219.55098624035264
+              },
+              "runtime_ms": 5
+            },
+            {
+              "label": "plus drag, density scale fitted to the OEM at 24 h",
+              "density_scale": 2.2134321067896794,
+              "stats": {
+                "samples": 24,
+                "rms_3d_m": 1145.5846833967937,
+                "max_3d_m": 1997.4019357228397,
+                "max_abs_r_m": 457.1661489783258,
+                "max_abs_t_m": 1994.6320565271337,
+                "max_abs_n_m": 415.60504847084,
+                "final_r_m": 117.60710777439701,
+                "final_t_m": 1960.2232506122448,
+                "final_n_m": 224.34523174725916
+              },
+              "runtime_ms": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "candidate": "satkit 0.24.1",
+      "result": {
+        "Ok": {
+          "cases": [
+            {
+              "label": "J2..J4 only, no drag",
+              "density_scale": 0.0,
+              "stats": {
+                "samples": 24,
+                "rms_3d_m": 4027.6366857505172,
+                "max_3d_m": 7687.284417985645,
+                "max_abs_r_m": 420.2717867171222,
+                "max_abs_t_m": 7680.329353017763,
+                "max_abs_n_m": 413.0465681277511,
+                "final_r_m": 245.76385353363534,
+                "final_t_m": -7680.329353017763,
+                "final_n_m": 215.59888792600023
+              },
+              "runtime_ms": 107
+            },
+            {
+              "label": "plus drag with OEM header Cd*A/m, library density as shipped",
+              "density_scale": 1.0,
+              "stats": {
+                "samples": 24,
+                "rms_3d_m": 1850.4438551933708,
+                "max_3d_m": 3164.9934728419325,
+                "max_abs_r_m": 403.22124124399085,
+                "max_abs_t_m": 3160.077729247664,
+                "max_abs_n_m": 414.3248344125241,
+                "final_r_m": 168.74419718889376,
+                "final_t_m": -2758.0894012176414,
+                "final_n_m": 220.116988334661
+              },
+              "runtime_ms": 28
+            },
+            {
+              "label": "plus drag, density scale fitted to the OEM at 24 h",
+              "density_scale": 1.9527051066132497,
+              "stats": {
+                "samples": 24,
+                "rms_3d_m": 1136.5224722442756,
+                "max_3d_m": 1970.2268148461026,
+                "max_abs_r_m": 440.0569660495068,
+                "max_abs_t_m": 1967.5202675578607,
+                "max_abs_n_m": 415.54243271777,
+                "final_r_m": 91.96774775377442,
+                "final_t_m": 1934.594317507916,
+                "final_n_m": 224.42241958748266
+              },
+              "runtime_ms": 28
+            },
+            {
+              "label": "high fidelity (20x20 gravity + Sun + Moon) plus drag, density as shipped",
+              "density_scale": 1.0,
+              "stats": {
+                "samples": 24,
+                "rms_3d_m": 333.17180968434695,
+                "max_3d_m": 805.0779039352481,
+                "max_abs_r_m": 49.241172656338826,
+                "max_abs_t_m": 805.0778087048814,
+                "max_abs_n_m": 8.48946033211266,
+                "final_r_m": 0.21498065011859788,
+                "final_t_m": 805.0778087048814,
+                "final_n_m": -0.327290450675255
+              },
+              "runtime_ms": 39
+            },
+            {
+              "label": "high fidelity (20x20 gravity + Sun + Moon) plus drag, density fitted",
+              "density_scale": 0.8546908079404638,
+              "stats": {
+                "samples": 24,
+                "rms_3d_m": 50.81478547909195,
+                "max_3d_m": 90.64540703266938,
+                "max_abs_r_m": 41.56757550381959,
+                "max_abs_t_m": 89.91212164262981,
+                "max_abs_n_m": 8.698652441418194,
+                "final_r_m": 11.98009043460552,
+                "final_t_m": 89.84470393859385,
+                "final_n_m": -0.9982101398999452
+              },
+              "runtime_ms": 39
+            }
+          ]
+        }
+      }
+    },
+    {
+      "candidate": "brahe 1.8.0",
+      "result": {
+        "Ok": {
+          "cases": [
+            {
+              "label": "J2..J4 only, no drag",
+              "density_scale": 0.0,
+              "stats": {
+                "samples": 24,
+                "rms_3d_m": 4027.7664347198734,
+                "max_3d_m": 7687.605757279849,
+                "max_abs_r_m": 420.27375230887196,
+                "max_abs_t_m": 7680.6508236373975,
+                "max_abs_n_m": 413.04649707355725,
+                "final_r_m": 245.76911314948643,
+                "final_t_m": -7680.6508236373975,
+                "final_n_m": 215.59858010239319
+              },
+              "runtime_ms": 1004
+            },
+            {
+              "label": "plus drag with OEM header Cd*A/m, library density as shipped",
+              "density_scale": 1.0,
+              "stats": {
+                "samples": 24,
+                "rms_3d_m": 2185.6614082309507,
+                "max_3d_m": 3584.8281985936073,
+                "max_abs_r_m": 392.3032209016467,
+                "max_abs_t_m": 3573.8084122139626,
+                "max_abs_n_m": 414.13851029528934,
+                "final_r_m": 175.33550505863002,
+                "final_t_m": -3573.8084122139626,
+                "final_n_m": 219.41765399902957
+              },
+              "runtime_ms": 1018
+            },
+            {
+              "label": "plus drag, density scale fitted to the OEM at 24 h",
+              "density_scale": 2.3426644581846676,
+              "stats": {
+                "samples": 24,
+                "rms_3d_m": 1135.0631757774909,
+                "max_3d_m": 1958.0962843948853,
+                "max_abs_r_m": 429.3588735811863,
+                "max_abs_t_m": 1955.494301010646,
+                "max_abs_n_m": 415.60439515460666,
+                "final_r_m": 76.77403966077765,
+                "final_t_m": 1943.6629724338381,
+                "final_n_m": 224.54613098592503
+              },
+              "runtime_ms": 1018
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "t7_time": [
+    [
+      "in-house (design: no polar motion)",
+      [
+        {
+          "label": "2016-12-31T23:59:59 (before leap second)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 36.0,
+              "tt_minus_utc": 68.184,
+              "ut1_minus_utc": null,
+              "ut1_note": "no EOP data for MJD 57754.0: table covers 60000.0 .. 61707.0"
+            }
+          }
+        },
+        {
+          "label": "2017-01-01T00:00:00 (after leap second)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 37.0,
+              "tt_minus_utc": 69.184,
+              "ut1_minus_utc": null,
+              "ut1_note": "no EOP data for MJD 57754.0: table covers 60000.0 .. 61707.0"
+            }
+          }
+        },
+        {
+          "label": "2026-10-22T00:00:00 (EOP observed row)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 37.0,
+              "tt_minus_utc": 69.184,
+              "ut1_minus_utc": -0.0428601,
+              "ut1_note": null
+            }
+          }
+        },
+        {
+          "label": "2026-10-22T12:00:00 (EOP between rows)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 37.0,
+              "tt_minus_utc": 69.184,
+              "ut1_minus_utc": -0.0436701,
+              "ut1_note": null
+            }
+          }
+        },
+        {
+          "label": "2040-01-01T00:00:00 (beyond EOP table)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 37.0,
+              "tt_minus_utc": 69.184,
+              "ut1_minus_utc": null,
+              "ut1_note": "no EOP data for MJD 66154.0: table covers 60000.0 .. 61707.0"
+            }
+          }
+        },
+        {
+          "label": "1971-06-01T00:00:00 (before leap seconds)",
+          "result": {
+            "Err": "no leap-second data before 1972-01-01 (UTC was not yet defined by leap seconds)"
+          }
+        }
+      ]
+    ],
+    [
+      "in-house (with polar motion)",
+      [
+        {
+          "label": "2016-12-31T23:59:59 (before leap second)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 36.0,
+              "tt_minus_utc": 68.184,
+              "ut1_minus_utc": null,
+              "ut1_note": "no EOP data for MJD 57754.0: table covers 60000.0 .. 61707.0"
+            }
+          }
+        },
+        {
+          "label": "2017-01-01T00:00:00 (after leap second)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 37.0,
+              "tt_minus_utc": 69.184,
+              "ut1_minus_utc": null,
+              "ut1_note": "no EOP data for MJD 57754.0: table covers 60000.0 .. 61707.0"
+            }
+          }
+        },
+        {
+          "label": "2026-10-22T00:00:00 (EOP observed row)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 37.0,
+              "tt_minus_utc": 69.184,
+              "ut1_minus_utc": -0.0428601,
+              "ut1_note": null
+            }
+          }
+        },
+        {
+          "label": "2026-10-22T12:00:00 (EOP between rows)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 37.0,
+              "tt_minus_utc": 69.184,
+              "ut1_minus_utc": -0.0436701,
+              "ut1_note": null
+            }
+          }
+        },
+        {
+          "label": "2040-01-01T00:00:00 (beyond EOP table)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 37.0,
+              "tt_minus_utc": 69.184,
+              "ut1_minus_utc": null,
+              "ut1_note": "no EOP data for MJD 66154.0: table covers 60000.0 .. 61707.0"
+            }
+          }
+        },
+        {
+          "label": "1971-06-01T00:00:00 (before leap seconds)",
+          "result": {
+            "Err": "no leap-second data before 1972-01-01 (UTC was not yet defined by leap seconds)"
+          }
+        }
+      ]
+    ],
+    [
+      "satkit 0.24.1",
+      [
+        {
+          "label": "2016-12-31T23:59:59 (before leap second)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 36.00000024307519,
+              "tt_minus_utc": 68.18400013726205,
+              "ut1_minus_utc": 0.0,
+              "ut1_note": null
+            }
+          }
+        },
+        {
+          "label": "2017-01-01T00:00:00 (after leap second)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 36.99999984819442,
+              "tt_minus_utc": 69.18399974238127,
+              "ut1_minus_utc": 0.0,
+              "ut1_note": null
+            }
+          }
+        },
+        {
+          "label": "2026-10-22T00:00:00 (EOP observed row)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 36.99999984819442,
+              "tt_minus_utc": 69.18399974238127,
+              "ut1_minus_utc": -0.04286023322492838,
+              "ut1_note": null
+            }
+          }
+        },
+        {
+          "label": "2026-10-22T12:00:00 (EOP between rows)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 36.99999984819442,
+              "tt_minus_utc": 69.18399974238127,
+              "ut1_minus_utc": -0.043669925071299076,
+              "ut1_note": null
+            }
+          }
+        },
+        {
+          "label": "2040-01-01T00:00:00 (beyond EOP table)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 37.00000047683716,
+              "tt_minus_utc": 69.18400037102401,
+              "ut1_minus_utc": -0.20814361050724983,
+              "ut1_note": null
+            }
+          }
+        },
+        {
+          "label": "1971-06-01T00:00:00 (before leap seconds)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 9.337553707882762,
+              "tt_minus_utc": 41.521554230712354,
+              "ut1_minus_utc": 0.0,
+              "ut1_note": null
+            }
+          }
+        }
+      ]
+    ],
+    [
+      "brahe 1.8.0",
+      [
+        {
+          "label": "2016-12-31T23:59:59 (before leap second)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 36.00000024307519,
+              "tt_minus_utc": 68.18400013726205,
+              "ut1_minus_utc": -0.015146518126130104,
+              "ut1_note": null
+            }
+          }
+        },
+        {
+          "label": "2017-01-01T00:00:00 (after leap second)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 36.99999984819442,
+              "tt_minus_utc": 69.18399974238127,
+              "ut1_minus_utc": -0.01514714676886797,
+              "ut1_note": null
+            }
+          }
+        },
+        {
+          "label": "2026-10-22T00:00:00 (EOP observed row)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 36.99999984819442,
+              "tt_minus_utc": 69.18399974238127,
+              "ut1_minus_utc": -0.04286023322492838,
+              "ut1_note": null
+            }
+          }
+        },
+        {
+          "label": "2026-10-22T12:00:00 (EOP between rows)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 36.99999984819442,
+              "tt_minus_utc": 69.18399974238127,
+              "ut1_minus_utc": -0.043669925071299076,
+              "ut1_note": null
+            }
+          }
+        },
+        {
+          "label": "2040-01-01T00:00:00 (beyond EOP table)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 37.00000047683716,
+              "tt_minus_utc": 69.18400037102401,
+              "ut1_minus_utc": -0.20814361050724983,
+              "ut1_note": null
+            }
+          }
+        },
+        {
+          "label": "1971-06-01T00:00:00 (before leap seconds)",
+          "result": {
+            "Ok": {
+              "tai_minus_utc": 9.337553707882762,
+              "tt_minus_utc": 41.521554230712354,
+              "ut1_minus_utc": -0.01514714676886797,
+              "ut1_note": null
+            }
+          }
+        }
+      ]
+    ]
+  ]
+}
