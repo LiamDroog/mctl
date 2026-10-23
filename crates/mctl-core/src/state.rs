@@ -24,6 +24,9 @@ impl State {
 #[serde(rename_all = "lowercase")]
 pub enum SourceKind {
     Oem,
+    /// CelesTrak supplemental GP: operator-derived element segments fitted forward in time.
+    #[serde(rename = "supgp")]
+    SupGp,
     Gp,
 }
 
@@ -31,6 +34,7 @@ impl SourceKind {
     pub fn label(self) -> &'static str {
         match self {
             Self::Oem => "OEM",
+            Self::SupGp => "SUP-GP",
             Self::Gp => "GP/SGP4",
         }
     }

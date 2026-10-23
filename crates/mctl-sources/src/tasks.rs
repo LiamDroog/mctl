@@ -29,6 +29,8 @@ const OFFLINE_POLL_S: f64 = 3600.0;
 pub enum SourceKey {
     /// CelesTrak GP for the vehicle with this id.
     Gp(String),
+    /// CelesTrak supplemental GP for the vehicle with this id.
+    SupGp(String),
     /// The NASA ISS OEM, used by the one vehicle that lists the `oem` source.
     Oem(String),
     Eop,
@@ -36,6 +38,7 @@ pub enum SourceKey {
 
 pub enum Payload {
     Gp(GpModel),
+    SupGp(Box<mctl_astro::supgp::SupGp>),
     Oem(Box<Oem>),
     Eop(EopTable),
 }
@@ -126,6 +129,30 @@ pub fn specs(cfg: &Config) -> Vec<Spec> {
                         ));
                     }
                     Ok(Payload::Gp(m))
+                }),
+            });
+        }
+        if v.sources.contains(&SourceKind::SupGp) {
+            let (id, norad) = (v.id.clone(), v.norad);
+            out.push(Spec {
+                key: SourceKey::SupGp(v.id.clone()),
+                cache_key: format!("supgp-{}.json", v.norad),
+                urls: vec![
+                    cfg.sources
+                        .celestrak_supgp
+                        .url_template
+                        .replace("{norad}", &v.norad.to_string()),
+                ],
+                min_refresh_s: cfg.sources.celestrak_supgp.min_refresh_s,
+                parse: Arc::new(move |body| {
+                    let s = mctl_astro::supgp::SupGp::parse(body).map_err(|e| e.to_string())?;
+                    if s.norad != norad {
+                        return Err(format!(
+                            "response is for NORAD {} but vehicle {id} is {norad}",
+                            s.norad
+                        ));
+                    }
+                    Ok(Payload::SupGp(Box::new(s)))
                 }),
             });
         }
@@ -446,6 +473,12 @@ pub fn check(cfg: &Config, cache_dir: std::path::PathBuf) -> Result<Vec<CheckLin
 fn summarise(p: &Payload) -> String {
     match p {
         Payload::Gp(m) => format!("{} (NORAD {}), epoch {}", m.name, m.norad, m.epoch.iso()),
+        Payload::SupGp(s) => format!(
+            "{} segments (NORAD {}), newest epoch {}",
+            s.len(),
+            s.norad,
+            s.newest_epoch().iso()
+        ),
         Payload::Oem(o) => format!(
             "{} states, {} .. {}, created {}",
             o.states.len(),

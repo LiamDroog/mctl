@@ -58,6 +58,7 @@ pub struct Fetch {
 #[serde(deny_unknown_fields)]
 pub struct Sources {
     pub celestrak_gp: GpSource,
+    pub celestrak_supgp: GpSource,
     pub nasa_oem: OemSource,
     pub iers_eop: EopSource,
 }
@@ -336,6 +337,14 @@ impl Config {
             return bad("fetch: timeout_s and backoff_initial_s must be > 0 and backoff_max_s >= backoff_initial_s".into());
         }
         let s = &self.sources;
+        if !s.celestrak_supgp.url_template.contains("{norad}")
+            || s.celestrak_supgp.min_refresh_s < 60.0
+        {
+            return bad(
+                "sources.celestrak_supgp: url_template must contain {norad}; min_refresh_s >= 60"
+                    .into(),
+            );
+        }
         if !s.celestrak_gp.url_template.contains("{norad}")
             || s.celestrak_gp.url_template.contains("FORMAT=CSV")
         {
@@ -497,7 +506,7 @@ mod tests {
     fn embedded_defaults_are_valid() {
         let c = Config::from_layers(DEFAULT_CONFIG, None).unwrap();
         assert_eq!(c.vehicles[0].id, "iss");
-        assert!(c.vehicles[0].sources == [SourceKind::Oem, SourceKind::Gp]);
+        assert!(c.vehicles[0].sources == [SourceKind::Oem, SourceKind::SupGp, SourceKind::Gp]);
     }
 
     #[test]

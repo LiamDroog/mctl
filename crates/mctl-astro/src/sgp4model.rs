@@ -68,6 +68,32 @@ impl GpModel {
         })
     }
 
+    /// Every record of an OMM JSON array, in file order (supplemental GP files hold many segments).
+    pub fn all_from_omm_json(json: &str) -> Result<Vec<Self>, GpError> {
+        let value: serde_json::Value =
+            serde_json::from_str(json).map_err(|e| GpError::Json(e.to_string()))?;
+        let records: Vec<sgp4::Elements> =
+            serde_json::from_value(value.clone()).map_err(|e| GpError::Json(e.to_string()))?;
+        if records.is_empty() {
+            return Err(GpError::Empty);
+        }
+        records
+            .iter()
+            .enumerate()
+            .map(|(i, el)| {
+                let epoch_text = value[i]["EPOCH"].as_str().ok_or(GpError::Empty)?;
+                let constants = sgp4::Constants::from_elements_afspc_compatibility_mode(el)
+                    .map_err(|e| GpError::Init(e.to_string()))?;
+                Ok(Self {
+                    constants: Arc::new(constants),
+                    epoch: Utc::parse(epoch_text).map_err(|e| GpError::Epoch(e.to_string()))?,
+                    name: value[i]["OBJECT_NAME"].as_str().unwrap_or("").to_owned(),
+                    norad: value[i]["NORAD_CAT_ID"].as_u64().unwrap_or(0) as u32,
+                })
+            })
+            .collect()
+    }
+
     /// TEME state at `t` (UTC minutes since epoch, as Vallado's reference does).
     pub fn state_teme(&self, t: Utc) -> Result<State, TrajectoryError> {
         let p = self

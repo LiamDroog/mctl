@@ -9,4 +9,5 @@ pub mod observer;
 pub mod oem;
 pub mod sgp4model;
 pub mod sun;
+pub mod supgp;
 pub mod trajectory;

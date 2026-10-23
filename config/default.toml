@@ -15,6 +15,13 @@ url_template = "https://celestrak.org/NORAD/elements/gp.php?CATNR={norad}&FORMAT
 min_refresh_s = 7200      # polite default: once per 2 h per object
 stale_after_s = 259200    # an element set older than this is STALE (assumption: 3 days)
 
+[sources.celestrak_supgp]
+# Supplemental GP (operator-derived, e.g. ISS-E): many 6-hourly segments, each valid for a few hours
+# around its epoch. Only vehicles that list "supgp" under sources use it; CelesTrak has none for others.
+url_template = "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?CATNR={norad}&FORMAT=json"
+min_refresh_s = 7200
+stale_after_s = 86400     # segments cover a rolling ~2 days; beyond a day of age the newest is old
+
 [sources.nasa_oem]
 url = "https://nasa-public-data.s3.amazonaws.com/iss-coords/current/ISS_OEM/ISS.OEM_J2K_EPH.txt"
 min_refresh_s = 1800
@@ -85,7 +92,7 @@ track_samples = 400
 id = "iss"
 name = "ISS"
 norad = 25544
-sources = ["oem", "gp"]
+sources = ["oem", "supgp", "gp"]
 telemetry = "isslive"
 # MET epoch: launch of Zarya, 1998-11-20 06:40 UTC (assumption; verify before relying on MET).
 met_epoch = "1998-11-20T06:40:00"

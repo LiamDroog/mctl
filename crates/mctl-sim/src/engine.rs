@@ -56,6 +56,8 @@ struct VehicleModel {
     oem: Option<Loaded<Oem>>,
     gp_health: Health,
     oem_health: Health,
+    supgp: Option<Loaded<mctl_astro::supgp::SupGp>>,
+    supgp_health: Health,
     track: Option<(Utc, SourceKind, Arc<Track>)>,
 }
 
@@ -215,6 +217,8 @@ impl Model {
                 gp: None,
                 oem: None,
                 gp_health: Health::Starting,
+                supgp: None,
+                supgp_health: Health::Starting,
                 oem_health: Health::Starting,
                 track: None,
             })
@@ -579,6 +583,13 @@ impl Model {
                             key += &format!("gp{}", g.fetched_at.0);
                         }
                     }
+                    SourceKind::SupGp => {
+                        if let Some(x) = &vm.supgp {
+                            parts.push(x.data.clone());
+                            labels.push("SUP-GP");
+                            key += &format!("sup{}", x.fetched_at.0);
+                        }
+                    }
                     SourceKind::Oem => {
                         if let Some(x) = &vm.oem {
                             parts.push(x.data.clone());
@@ -817,6 +828,25 @@ impl Model {
                         v.track = None;
                     }
                 }
+                (SourceKey::SupGp(id), Payload::SupGp(s)) => {
+                    if let Some(raw) = raw {
+                        self.record(Record::Elements {
+                            vehicle: id.clone(),
+                            source: SourceKind::SupGp.label().into(),
+                            epoch: Some(s.newest_epoch()),
+                            fetched_at,
+                            blob: raw.to_string(),
+                        });
+                    }
+                    if let Some(v) = self.vehicles.iter_mut().find(|v| v.def.id == id) {
+                        v.supgp = Some(Loaded {
+                            data: Arc::new(*s),
+                            fetched_at,
+                            from_cache,
+                        });
+                        v.track = None;
+                    }
+                }
                 (SourceKey::Oem(id), Payload::Oem(o)) => {
                     let notes: Vec<String> = o
                         .maneuver_notes()
@@ -861,6 +891,11 @@ impl Model {
                 SourceKey::Gp(id) => {
                     if let Some(v) = self.vehicles.iter_mut().find(|v| v.def.id == id) {
                         v.gp_health = health;
+                    }
+                }
+                SourceKey::SupGp(id) => {
+                    if let Some(v) = self.vehicles.iter_mut().find(|v| v.def.id == id) {
+                        v.supgp_health = health;
                     }
                 }
                 SourceKey::Oem(id) => {
@@ -916,6 +951,7 @@ impl Model {
         let stale = (
             self.cfg.sources.celestrak_gp.stale_after_s,
             self.cfg.sources.nasa_oem.stale_after_s,
+            self.cfg.sources.celestrak_supgp.stale_after_s,
         );
         let limits = self.cfg.limits.clone();
         let (past_rev, future_rev, samples) = (
@@ -1086,7 +1122,7 @@ fn vehicle_view(
     v: &mut VehicleModel,
     t: Utc,
     orientation: Orientation,
-    stale: (f64, f64),
+    stale: (f64, f64, f64),
     limits: &mctl_core::config::Limits,
     track_cfg: (f64, f64, usize),
     eop: Option<&EopTable>,
@@ -1100,6 +1136,14 @@ fn vehicle_view(
         .iter()
         .map(|k| match k {
             SourceKind::Gp => sample(*k, &v.gp, &v.gp_health, |g| g.epoch, stale.0, t),
+            SourceKind::SupGp => sample(
+                *k,
+                &v.supgp,
+                &v.supgp_health,
+                |s| s.newest_epoch(),
+                stale.2,
+                t,
+            ),
             SourceKind::Oem => sample(*k, &v.oem, &v.oem_health, |o| o.creation_date, stale.1, t),
         })
         .collect();
@@ -1204,6 +1248,7 @@ fn vehicle_view(
                 *revision += 1;
                 let traj: Option<&dyn Trajectory> = match kind {
                     SourceKind::Gp => v.gp.as_ref().map(|l| &*l.data as &dyn Trajectory),
+                    SourceKind::SupGp => v.supgp.as_ref().map(|l| &*l.data as &dyn Trajectory),
                     SourceKind::Oem => v.oem.as_ref().map(|l| &*l.data as &dyn Trajectory),
                 };
                 if let Some(traj) = traj {
@@ -1558,8 +1603,8 @@ mod tests {
         assert_eq!(sol.source, SourceKind::Oem);
         assert_eq!(sol.quality, Quality::Pred);
         assert_eq!(v.sources[0].status, SourceStatus::Active);
-        assert_eq!(v.sources[1].status, SourceStatus::Standby);
-        let r = v.sources[1].residual.unwrap();
+        assert_eq!(v.sources[2].status, SourceStatus::Standby);
+        let r = v.sources[2].residual.unwrap();
         assert!(
             r.norm_km > 0.0 && r.norm_km < 20.0,
             "GP vs OEM residual {} km should be a few km",
@@ -1605,7 +1650,7 @@ mod tests {
             SourceStatus::NoData,
             "OEM was never loaded"
         );
-        assert_eq!(v.sources[1].status, SourceStatus::Active);
+        assert_eq!(v.sources[2].status, SourceStatus::Active);
     }
 
     #[test]
@@ -1703,7 +1748,7 @@ mod tests {
         let mut m2 = model();
         feed(&mut m2, true, false);
         assert_eq!(
-            m2.world_at(early, sim, early).vehicles[0].sources[1].status,
+            m2.world_at(early, sim, early).vehicles[0].sources[2].status,
             SourceStatus::Active,
             "relaxed pass still accepts it"
         );
@@ -2246,5 +2291,58 @@ mod tests {
             "no duplicate entries"
         );
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn supplemental_gp_outranks_standard_gp_but_not_the_oem() {
+        let mut m = model();
+        feed(&mut m, true, false);
+        // Segments around the GP fixture's epoch, so the supplemental set is valid there.
+        let base: serde_json::Value = serde_json::from_str(OMM).unwrap();
+        let ep = GpModel::from_omm_json(OMM).unwrap().epoch;
+        let segs: Vec<serde_json::Value> = (0..4)
+            .map(|k| {
+                let mut r = base[0].clone();
+                r["EPOCH"] = ep.plus(f64::from(k) * 6.0 * 3600.0).iso().into();
+                r
+            })
+            .collect();
+        let sup = mctl_astro::supgp::SupGp::parse(&serde_json::to_string(&segs).unwrap()).unwrap();
+        let t = ep.plus(3_600.0);
+        let sup_fetched = t;
+        m.apply(Event::Data {
+            key: SourceKey::SupGp("iss".into()),
+            payload: Payload::SupGp(Box::new(sup)),
+            info: DataInfo {
+                from_cache: false,
+                fetched_at: sup_fetched,
+                raw: None,
+            },
+        });
+        let w = m.world(t);
+        let v = &w.vehicles[0];
+        assert_eq!(
+            v.sources.iter().map(|s| s.kind).collect::<Vec<_>>(),
+            vec![SourceKind::Oem, SourceKind::SupGp, SourceKind::Gp]
+        );
+        assert_eq!(
+            v.solution.as_ref().unwrap().source,
+            SourceKind::SupGp,
+            "no OEM here, so SUP-GP wins over GP"
+        );
+        assert!(
+            v.sources[2].residual.is_some(),
+            "GP is a standby with a residual against the active source"
+        );
+        feed(&mut m, false, true);
+        assert_eq!(
+            m.world(t_in_oem()).vehicles[0]
+                .solution
+                .as_ref()
+                .unwrap()
+                .source,
+            SourceKind::Oem,
+            "the OEM keeps priority"
+        );
     }
 }
