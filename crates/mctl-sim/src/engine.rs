@@ -1140,7 +1140,7 @@ fn vehicle_view(
                 *k,
                 &v.supgp,
                 &v.supgp_health,
-                |s| s.newest_epoch(),
+                |s| s.segment_for(t).epoch,
                 stale.2,
                 t,
             ),
@@ -1603,8 +1603,8 @@ mod tests {
         assert_eq!(sol.source, SourceKind::Oem);
         assert_eq!(sol.quality, Quality::Pred);
         assert_eq!(v.sources[0].status, SourceStatus::Active);
-        assert_eq!(v.sources[2].status, SourceStatus::Standby);
-        let r = v.sources[2].residual.unwrap();
+        assert_eq!(v.sources[1].status, SourceStatus::Standby);
+        let r = v.sources[1].residual.unwrap();
         assert!(
             r.norm_km > 0.0 && r.norm_km < 20.0,
             "GP vs OEM residual {} km should be a few km",
@@ -1650,7 +1650,7 @@ mod tests {
             SourceStatus::NoData,
             "OEM was never loaded"
         );
-        assert_eq!(v.sources[2].status, SourceStatus::Active);
+        assert_eq!(v.sources[1].status, SourceStatus::Active);
     }
 
     #[test]
@@ -1748,7 +1748,7 @@ mod tests {
         let mut m2 = model();
         feed(&mut m2, true, false);
         assert_eq!(
-            m2.world_at(early, sim, early).vehicles[0].sources[2].status,
+            m2.world_at(early, sim, early).vehicles[0].sources[1].status,
             SourceStatus::Active,
             "relaxed pass still accepts it"
         );
@@ -2295,7 +2295,10 @@ mod tests {
 
     #[test]
     fn supplemental_gp_outranks_standard_gp_but_not_the_oem() {
-        let mut m = model();
+        let mut cfg = Config::from_layers(mctl_core::config::DEFAULT_CONFIG, None).unwrap();
+        cfg.observer.geoclue = false;
+        cfg.vehicles[0].sources = vec![SourceKind::Oem, SourceKind::SupGp, SourceKind::Gp];
+        let mut m = Model::new(cfg);
         feed(&mut m, true, false);
         // Segments around the GP fixture's epoch, so the supplemental set is valid there.
         let base: serde_json::Value = serde_json::from_str(OMM).unwrap();

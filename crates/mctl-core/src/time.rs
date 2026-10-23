@@ -138,13 +138,15 @@ impl Utc {
     }
 
     pub fn iso(self) -> String {
-        let (y, mo, d, h, mi, s) = self.to_ymd_hms();
+        // Round to the printed precision first, so 59.9996 s carries into the minute instead of
+        // printing as ":60.000".
+        let (y, mo, d, h, mi, s) = Utc((self.0 * 1.0e3).round() / 1.0e3).to_ymd_hms();
         format!("{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{s:06.3}")
     }
 
     /// GMT as `DDD:HH:MM:SS.ss` (day of year), DESIGN.md §6.3.
     pub fn gmt_doy(self) -> String {
-        let (y, mo, d, h, mi, s) = self.to_ymd_hms();
+        let (y, mo, d, h, mi, s) = Utc((self.0 * 1.0e2).round() / 1.0e2).to_ymd_hms();
         let doy = days_from_civil(y, mo, d) - days_from_civil(y, 1, 1) + 1;
         format!("{doy:03}:{h:02}:{mi:02}:{s:05.2}")
     }
@@ -321,6 +323,23 @@ pub fn fmt_dur(secs: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn seconds_that_round_up_carry_into_the_minute_instead_of_printing_sixty() {
+        let t = Utc::parse("2026-10-23T18:02:59.0").unwrap().plus(0.9999);
+        assert_eq!(t.iso(), "2026-10-23T18:03:00.000");
+        assert_eq!(t.gmt_doy(), "296:18:03:00.00");
+        let u = Utc::parse("2026-12-31T23:59:59.0").unwrap().plus(0.9996);
+        assert_eq!(
+            u.iso(),
+            "2027-01-01T00:00:00.000",
+            "carries across the year too"
+        );
+        assert_eq!(
+            Utc::parse("2026-10-23T18:02:59.5").unwrap().iso(),
+            "2026-10-23T18:02:59.500"
+        );
+    }
 
     #[test]
     fn civil_roundtrip_over_many_years() {

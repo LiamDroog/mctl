@@ -92,7 +92,10 @@ track_samples = 400
 id = "iss"
 name = "ISS"
 norad = 25544
-sources = ["oem", "supgp", "gp"]
+# "supgp" (CelesTrak supplemental GP, ISS-E) is implemented but NOT in the default list: measured against
+# the OEM it was 57 km along-track off while standard GP was under 2 km (docs/step4/supgp-evaluation.md).
+# Add it, e.g. ["oem", "supgp", "gp"], to try it; its residual is then shown and graded like any source.
+sources = ["oem", "gp"]
 telemetry = "isslive"
 # MET epoch: launch of Zarya, 1998-11-20 06:40 UTC (assumption; verify before relying on MET).
 met_epoch = "1998-11-20T06:40:00"

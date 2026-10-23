@@ -634,6 +634,17 @@ impl Console {
                 }
             }
             if let (Some(sc), true) = (scene.as_ref(), has_area) {
+                if let (Some(track), Some(sol)) = (vehicle.and_then(|v| v.track.as_ref()), sol) {
+                    crate::overlays::paint(
+                        &painter,
+                        &theme,
+                        globe_px,
+                        sc,
+                        track,
+                        sol,
+                        self.camera.exaggeration(),
+                    );
+                }
                 // Label the vehicle over the globe, flagging it when the Earth hides it.
                 let clip = sc.view_proj * sc.vehicle.extend(1.0);
                 if clip.w > 0.0 {

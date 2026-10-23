@@ -15,6 +15,7 @@ mod gpu;
 mod grid;
 mod keys;
 mod offline;
+mod overlays;
 mod page;
 mod pages;
 mod render;

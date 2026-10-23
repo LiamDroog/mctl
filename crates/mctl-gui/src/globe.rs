@@ -114,7 +114,7 @@ pub struct GlobeScene {
 }
 
 /// Stretch a position (Earth radii) radially so altitude above the unit sphere is multiplied by `k`.
-fn exaggerate(p: Vec3, k: f32) -> Vec3 {
+pub(crate) fn exaggerate(p: Vec3, k: f32) -> Vec3 {
     let r = p.length();
     if r <= 1.0 {
         p
@@ -123,12 +123,12 @@ fn exaggerate(p: Vec3, k: f32) -> Vec3 {
     }
 }
 
-fn to_vec3(km: [f64; 3]) -> Vec3 {
+pub(crate) fn to_vec3(km: [f64; 3]) -> Vec3 {
     Vec3::new(km[0] as f32, km[1] as f32, km[2] as f32) / EARTH_RADIUS_KM
 }
 
 /// True if the segment from `a` to `b` passes through the unit sphere (the Earth).
-fn segment_hits_unit_sphere(a: Vec3, b: Vec3) -> bool {
+pub(crate) fn segment_hits_unit_sphere(a: Vec3, b: Vec3) -> bool {
     let d = b - a;
     let (qa, qb, qc) = (d.dot(d), 2.0 * a.dot(d), a.dot(a) - 1.0);
     let disc = qb * qb - 4.0 * qa * qc;

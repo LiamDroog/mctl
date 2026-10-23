@@ -540,7 +540,7 @@ mod tests {
     fn embedded_defaults_are_valid() {
         let c = Config::from_layers(DEFAULT_CONFIG, None).unwrap();
         assert_eq!(c.vehicles[0].id, "iss");
-        assert!(c.vehicles[0].sources == [SourceKind::Oem, SourceKind::SupGp, SourceKind::Gp]);
+        assert!(c.vehicles[0].sources == [SourceKind::Oem, SourceKind::Gp]);
     }
 
     #[test]
