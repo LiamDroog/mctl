@@ -1,0 +1,60 @@
+2026-10-23T15:14:34.149291Z  INFO isslive::session: WebSocket connected, subprotocol agreed url=wss://push.lightstreamer.com/lightstreamer
+2026-10-23T15:14:34.354443Z  INFO isslive::session: session created session_id=S22585165f3853299M175T1434240 keepalive_ms=5000 request_limit=50000 control_link=*
+2026-10-23T15:14:34.525209Z  INFO isslive::session: subscribed sub_id=1 items=20 fields=2
+2026-10-23T15:14:34.525225Z  WARN isslive::session: unhandled notification tag=CONF args=1,unlimited,filtered
+15:14:34.525 USLAB000018  value=0.997143268585205078125  [ND] ts=7106.308195000026      age=46565.02s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 0
+15:14:34.525 USLAB000019  value=0.008336908183991909027099609375 [ND] ts=7106.308195000026      age=46565.02s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 1
+15:14:34.525 USLAB000020  value=-0.066646873950958251953125 [ND] ts=7106.308195000026      age=46565.02s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 2
+15:14:34.525 USLAB000021  value=-0.034554012119770050048828125 [ND] ts=7106.308195000026      age=46565.02s changed=["TimeStamp", "Value"] US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 3
+15:14:34.525 USLAB000022  value=0.337185428991168711920778378043905831873416900634765625 [RAD] ts=7106.3082505555285     age=46564.82s changed=["TimeStamp", "Value"] US Attitude Roll Error (deg)
+15:14:34.525 USLAB000023  value=0.1720962159263435820033549816798768006265163421630859375 [RAD] ts=7106.3082505555285     age=46564.82s changed=["TimeStamp", "Value"] US Attitude Pitch Error (deg)
+15:14:34.525 USLAB000024  value=-0.0069750155200628792540040734593276283703744411468505859375 [RAD] ts=7106.3082505555285     age=46564.82s changed=["TimeStamp", "Value"] US Attitude Yaw Error (deg)
+15:14:34.525 USLAB000025  value=0.004679743469244567778686505477026003063656389713287353515625 [RAD/S] ts=7106.308195000026      age=46565.02s changed=["TimeStamp", "Value"] US Inertial Attitude Rate X (deg/s)
+15:14:34.525 USLAB000028  value=0.997064411640167236328125 [ND] ts=6989.735860833327      age=466225.43s changed=["TimeStamp", "Value"] US Commanded Attitude Quaternion Component 0
+15:14:34.525 USLAB000029  value=0.00545731373131275177001953125 [ND] ts=6989.735860833327      age=466225.43s changed=["TimeStamp", "Value"] US Commanded Attitude Quaternion Component 1
+15:14:34.525 USLAB000030  value=-0.068245224654674530029296875 [ND] ts=6989.735860833327      age=466225.43s changed=["TimeStamp", "Value"] US Commanded Attitude Quaternion Component 2
+15:14:34.525 USLAB000031  value=-0.0342837460339069366455078125 [ND] ts=6989.735860833327      age=466225.43s changed=["TimeStamp", "Value"] US Commanded Attitude Quaternion Component 3
+15:14:34.525 USLAB000013  value=2                        [N/A] ts=7025.403751944436      age=337821.02s changed=["TimeStamp", "Value"] US Attitude Source
+15:14:34.525 USLAB000017  value=0                        [N/A] ts=6989.735860833327      age=466225.43s changed=["TimeStamp", "Value"] Attitude Control Reference Frame
+15:14:34.525 USLAB000081  value=0                        [N/A] ts=7025.400944444471      age=337831.12s changed=["TimeStamp", "Value"] Attitude Maneuver In Progress status
+15:14:34.525 S0000003     value=87.14778900146484375     [DEG] ts=7106.308221944438      age=46564.93s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Starboard Joint Angle Position (degrees)
+15:14:34.525 S0000004     value=272.8582763671875        [DEG] ts=7106.308221944438      age=46564.93s changed=["TimeStamp", "Value"] Solar Alpha Rotary Joint (SARJ) Port Joint Angle Position (degrees)
+15:14:34.525 P4000007     value=43.428955078125          [DEG] ts=7106.305305833287      age=46575.42s changed=["TimeStamp", "Value"] Photovolatic Control Unit (PVCU) - Solar Array - 2A - Beta Gimble Assembly (BGA) Position (degrees)
+15:14:34.525 USLAB000027  value=0.00059402495157828520688791940074224839918315410614013671875 [RAD/S] ts=7106.308195000026      age=46565.02s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Z (deg/s)
+15:14:34.525 USLAB000026  value=-0.0643359160039806698971887044535833410918712615966796875 [RAD/S] ts=7106.308195000026      age=46565.02s changed=["TimeStamp", "Value"] US Inertial Attitude Rate Y (deg/s)
+2026-10-23T15:14:34.699305Z  INFO isslive::session: subscribed sub_id=2 items=1 fields=4
+2026-10-23T15:14:34.699319Z  WARN isslive::session: unhandled notification tag=CONF args=2,unlimited,filtered
+15:14:34.699 TIME_000001  value=25582709918              [] ts=7106.308310555551      age=46564.78s changed=["TimeStamp", "Value", "Status.Class", "Status.Indicator"] 
+              TIME_000001  Status.Class=1 Status.Indicator=M
+
+=== session ===
+session id S22585165f3853299M175T1434240 keepalive 5000 ms; connect+CONOK 1118 ms; subscribe 344 ms; ended by duration
+notifications: [("CONF", 2), ("CONOK", 1), ("CONS", 1), ("PROBE", 29), ("REQOK", 2), ("SUBOK", 2), ("U", 21)]
+
+=== per item (150 s requested) ===
+item         group    updates  upd/min mean dt s    chgs distinct            min            max  age med s  last value
+P4000007     joint          1      0.0       NaN       1        1      43.428955      43.428955   46575.42  43.428955078125
+S0000003     joint          1      0.0       NaN       1        1      87.147789      87.147789   46564.93  87.14778900146484375
+S0000004     joint          1      0.0       NaN       1        1     272.858276     272.858276   46564.93  272.8582763671875
+TIME_000001  time           1      0.0       NaN       1        1 25582709918.000000 25582709918.000000   46564.78  25582709918
+USLAB000013  attitude       1      0.0       NaN       1        1       2.000000       2.000000  337821.02  2
+USLAB000017  attitude       1      0.0       NaN       1        1       0.000000       0.000000  466225.43  0
+USLAB000018  attitude       1      0.0       NaN       1        1       0.997143       0.997143   46565.02  0.997143268585205078125
+USLAB000019  attitude       1      0.0       NaN       1        1       0.008337       0.008337   46565.02  0.008336908183991909027099609375
+USLAB000020  attitude       1      0.0       NaN       1        1      -0.066647      -0.066647   46565.02  -0.066646873950958251953125
+USLAB000021  attitude       1      0.0       NaN       1        1      -0.034554      -0.034554   46565.02  -0.034554012119770050048828125
+USLAB000022  attitude       1      0.0       NaN       1        1       0.337185       0.337185   46564.82  0.337185428991168711920778378043905831873416900634765625
+USLAB000023  attitude       1      0.0       NaN       1        1       0.172096       0.172096   46564.82  0.1720962159263435820033549816798768006265163421630859375
+USLAB000024  attitude       1      0.0       NaN       1        1      -0.006975      -0.006975   46564.82  -0.0069750155200628792540040734593276283703744411468505859375
+USLAB000025  attitude       1      0.0       NaN       1        1       0.004680       0.004680   46565.02  0.004679743469244567778686505477026003063656389713287353515625
+USLAB000026  attitude       1      0.0       NaN       1        1      -0.064336      -0.064336   46565.02  -0.0643359160039806698971887044535833410918712615966796875
+USLAB000027  attitude       1      0.0       NaN       1        1       0.000594       0.000594   46565.02  0.00059402495157828520688791940074224839918315410614013671875
+USLAB000028  attitude       1      0.0       NaN       1        1       0.997064       0.997064  466225.43  0.997064411640167236328125
+USLAB000029  attitude       1      0.0       NaN       1        1       0.005457       0.005457  466225.43  0.00545731373131275177001953125
+USLAB000030  attitude       1      0.0       NaN       1        1      -0.068245      -0.068245  466225.43  -0.068245224654674530029296875
+USLAB000031  attitude       1      0.0       NaN       1        1      -0.034284      -0.034284  466225.43  -0.0342837460339069366455078125
+USLAB000081  attitude       1      0.0       NaN       1        1       0.000000       0.000000  337831.12  0
+
+quaternion current LVLH attitude (USLAB000018-21): |q| over 1 samples: min 1.000000 max 1.000000
+
+quaternion commanded attitude (USLAB000028-31): |q| over 1 samples: min 1.000000 max 1.000000

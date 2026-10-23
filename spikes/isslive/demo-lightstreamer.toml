@@ -1,0 +1,39 @@
+# Client validation against Lightstreamer's own public DEMO feed (a stock-quote simulator that ticks
+# about once a second). Used to prove live-update decoding independently of the state of ISSLIVE.
+# Item and field names come from Lightstreamer's public demo documentation (QUOTE_ADAPTER).
+
+[server]
+url = "wss://push.lightstreamer.com/lightstreamer"
+adapter_set = "DEMO"
+data_adapter = "QUOTE_ADAPTER"
+
+[run]
+duration_s = 30
+connect_timeout_s = 15
+setup_timeout_s = 15
+stall_factor = 3.0
+
+[fields]
+data = ["stock_name", "last_price", "time", "pct_change", "bid", "ask"]
+time = ["stock_name", "last_price", "time"]
+
+[time_item]
+id = "item4"
+
+[[item]]
+id = "item1"
+group = "demo"
+description = "demo stock 1"
+units = ""
+
+[[item]]
+id = "item2"
+group = "demo"
+description = "demo stock 2"
+units = ""
+
+[[item]]
+id = "item3"
+group = "demo"
+description = "demo stock 3"
+units = ""
