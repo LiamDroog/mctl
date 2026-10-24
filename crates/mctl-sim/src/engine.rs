@@ -21,6 +21,7 @@ use mctl_core::command::Command;
 use mctl_core::config::{Config, Regime, VehicleDef};
 use mctl_core::cw::{Condition, Latch, Metric, RuleDef, Sample as CwSample, Tracker};
 use mctl_core::plan::{PlanCommand, PlanDef, PlanStatus, PlanView};
+use mctl_core::schedule::{FieldRequest, FieldState, FieldView, Ops};
 use mctl_core::state::{Elements, Geodetic, Quality, SourceKind, State};
 use mctl_core::time::{EopTable, Utc};
 use mctl_core::world::{
@@ -46,6 +47,10 @@ const EVENT_STEPS_PER_REV: f64 = 200.0;
 const TRACK_REBUILD_S: f64 = 1.0;
 /// Track window for an L2 vehicle, days either side of now (a halo orbit takes about six months).
 const DEEP_TRACK_DAYS: f64 = 90.0;
+/// Pictures shown per vehicle: JWST's current and next targets, or Hubble's first programs.
+const FIELDS_PER_VEHICLE: usize = 4;
+/// A picture that could not be had is asked for again after this long, seconds.
+const FIELD_RETRY_S: f64 = 600.0;
 /// Recorded states further apart than this are a gap in the recording; replay falls back to the sources.
 const REPLAY_MAX_GAP_S: f64 = 5.0;
 /// Replayed telemetry is re-read from the store when the clock has moved this far, seconds.
@@ -136,6 +141,9 @@ pub struct Model {
     trends_latest: Option<Arc<mctl_core::world::TrendSet>>,
     pass_worker: Option<crate::passes::Worker>,
     plan_worker: Option<crate::planner::Worker>,
+    field_tx: Option<std::sync::mpsc::Sender<(String, FieldRequest)>>,
+    /// Picture requests: state and when it was last asked for (a failure is retried after a while).
+    fields: HashMap<(String, String), (FieldState, Instant)>,
     /// The recording, opened read-only on the first replay.
     db_path: Option<std::path::PathBuf>,
     replay_store: Option<mctl_store::Store>,
@@ -348,6 +356,8 @@ impl Model {
             trends_latest: None,
             pass_worker: None,
             plan_worker: None,
+            field_tx: None,
+            fields: HashMap::new(),
             db_path: None,
             replay_store: None,
             replay_tel: HashMap::new(),
@@ -537,6 +547,87 @@ impl Model {
         for f in failures {
             self.note(wall, format!("replay read failed: {f}"));
         }
+    }
+
+    pub fn set_field_requests(
+        &mut self,
+        tx: Option<std::sync::mpsc::Sender<(String, FieldRequest)>>,
+    ) {
+        self.field_tx = tx;
+    }
+
+    /// The pictures worth showing for `vehicle` at `t`, as (request, caption) in display order.
+    fn wanted_fields(&self, vm: &VehicleModel, t: Utc) -> Vec<(FieldRequest, String)> {
+        match &vm.ops {
+            Some(Ops::Jwst(s)) => {
+                let mut out: Vec<(FieldRequest, String)> = Vec::new();
+                let visits = s.current(t).into_iter().chain(s.upcoming(t));
+                for v in visits {
+                    if v.is_maintenance() || v.target.is_empty() {
+                        continue;
+                    }
+                    let req = FieldRequest::Target(v.target.clone());
+                    if out.iter().all(|(r, _)| *r != req) {
+                        out.push((req, v.instrument.clone()));
+                    }
+                    if out.len() == FIELDS_PER_VEHICLE {
+                        break;
+                    }
+                }
+                out
+            }
+            Some(Ops::Hst(r)) => r
+                .science
+                .iter()
+                .take(FIELDS_PER_VEHICLE)
+                .map(|p| {
+                    (
+                        FieldRequest::HstProgram(p.id.clone()),
+                        format!("{} {}", p.id, p.title),
+                    )
+                })
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+
+    /// Ask for pictures not yet requested, and return the views for the current wishes.
+    fn field_views(&mut self, t: Utc) -> Vec<Vec<Arc<FieldView>>> {
+        let mut out = Vec::new();
+        for i in 0..self.vehicles.len() {
+            let id = self.vehicles[i].def.id.clone();
+            let wanted = self.wanted_fields(&self.vehicles[i], t);
+            let mut views = Vec::new();
+            for (req, label) in wanted {
+                let key = req.key();
+                let known = self.fields.get(&(id.clone(), key.clone())).cloned();
+                let state = match known {
+                    Some((s, at))
+                        if !matches!(s, FieldState::Unavailable(_))
+                            || at.elapsed().as_secs_f64() < FIELD_RETRY_S =>
+                    {
+                        s
+                    }
+                    _ => {
+                        let sent = self
+                            .field_tx
+                            .as_ref()
+                            .is_some_and(|tx| tx.send((id.clone(), req.clone())).is_ok());
+                        let state = if sent {
+                            FieldState::Loading
+                        } else {
+                            FieldState::Unavailable("pictures are not being fetched".into())
+                        };
+                        self.fields
+                            .insert((id.clone(), key.clone()), (state.clone(), Instant::now()));
+                        state
+                    }
+                };
+                views.push(Arc::new(FieldView { key, label, state }));
+            }
+            out.push(views);
+        }
+        out
     }
 
     pub fn enable_plan_worker(&mut self) {
@@ -1223,6 +1314,13 @@ impl Model {
                     self.feed_clock = Some(data_time);
                 }
             }
+            Event::Field {
+                vehicle,
+                key,
+                state,
+            } => {
+                self.fields.insert((vehicle, key), (state, Instant::now()));
+            }
             Event::Ops { vehicle, ops, .. } => {
                 if let Some(v) = self.vehicles.iter_mut().find(|v| v.def.id == vehicle) {
                     v.ops = Some(ops);
@@ -1540,6 +1638,10 @@ impl Model {
         });
         self.update_passes(&mut vehicles, t, orientation);
         self.update_plans(&vehicles, t, orientation, wall);
+        let field_views = self.field_views(t);
+        for (view, fields) in vehicles.iter_mut().zip(field_views) {
+            view.fields = fields;
+        }
         let finished = self
             .trend_worker
             .as_ref()
@@ -1835,6 +1937,7 @@ fn vehicle_view(
             .as_ref()
             .map(|o| o.data.reference_burns())
             .unwrap_or_default(),
+        fields: vec![],
         ops: v.ops.clone(),
         ops_health: v.ops_health.clone(),
         met_epoch: v.def.met_epoch.as_deref().and_then(|m| Utc::parse(m).ok()),
@@ -2077,6 +2180,7 @@ pub fn start(
                 model.set_recorder(tx);
             }
             model.set_telemetry(sources.telemetry.clone());
+            model.set_field_requests(sources.field_tx.clone());
             let mut clock = Clock::live(Instant::now());
             let mut next = Instant::now();
             loop {
@@ -2229,6 +2333,72 @@ mod tests {
         let v = w.vehicles.iter().find(|v| v.id == "jwst").unwrap();
         assert!(v.solution.is_none());
         assert_eq!(v.sources[0].status, SourceStatus::OutOfSpan);
+    }
+
+    #[test]
+    fn field_pictures_are_requested_once_for_the_current_and_next_targets_and_retried_after_a_failure()
+     {
+        use mctl_core::schedule::{JwstSchedule, Visit};
+        let visit = |id: &str, start: f64, instrument: &str, target: &str| Visit {
+            id: id.into(),
+            start: Utc(start),
+            duration_s: 100.0,
+            kind: "PRIME TARGETED FIXED".into(),
+            pcs_mode: String::new(),
+            instrument: instrument.into(),
+            target: target.into(),
+            category: String::new(),
+            parallels: vec![],
+        };
+        let sched = JwstSchedule {
+            visits: vec![
+                visit("1", 1000.0, "NIRCam Imaging", "V339-Del"),
+                visit("2", 1100.0, "", ""),
+                visit("3", 1200.0, "MIRI Dark", "V339-Del"),
+                visit("4", 1300.0, "NIRSpec MOS", "o16"),
+            ],
+            files: vec![],
+            fetched_at: Utc(0.0),
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut m = model();
+        m.set_field_requests(Some(tx));
+        m.apply(Event::Ops {
+            vehicle: "jwst".into(),
+            ops: Ops::Jwst(Arc::new(sched)),
+            from_cache: true,
+        });
+        let fields = |m: &mut Model, t: f64| {
+            m.world(Utc(t))
+                .vehicles
+                .iter()
+                .find(|v| v.id == "jwst")
+                .unwrap()
+                .fields
+                .clone()
+        };
+        let f = fields(&mut m, 1050.0);
+        // The current visit's target, then the next different one; the same target twice is one picture.
+        let keys: Vec<&str> = f.iter().map(|x| x.key.as_str()).collect();
+        assert_eq!(keys, ["target:V339-Del", "target:o16"]);
+        assert_eq!(f[0].label, "NIRCam Imaging");
+        assert!(f.iter().all(|x| x.state == FieldState::Loading));
+        let asked: Vec<_> = rx.try_iter().collect();
+        assert_eq!(asked.len(), 2, "{asked:?}");
+        // Asking again at the next tick sends nothing new.
+        fields(&mut m, 1051.0);
+        assert!(rx.try_recv().is_err());
+        // The answer shows up; a failure is reported as such and not retried at once.
+        m.apply(Event::Field {
+            vehicle: "jwst".into(),
+            key: "target:o16".into(),
+            state: FieldState::Unavailable("not catalogued".into()),
+        });
+        let f = fields(&mut m, 1052.0);
+        assert_eq!(f[1].state, FieldState::Unavailable("not catalogued".into()));
+        assert!(rx.try_recv().is_err());
+        // Vehicles with no schedule have no pictures.
+        assert!(m.world(Utc(1050.0)).vehicles[0].fields.is_empty());
     }
 
     #[test]

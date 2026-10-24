@@ -2,6 +2,7 @@
 //! per-frame preparation of the page from the engine's snapshot. The windowed app, the benchmark and
 //! the screenshot tool all drive this same type, so what is measured and captured is what is shown.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
@@ -83,6 +84,8 @@ struct CommandLine {
 
 pub struct Console {
     pub ctx: Context,
+    /// Decoded field pictures by `vehicle/key`.
+    field_textures: HashMap<String, egui::TextureHandle>,
     pub themes: Vec<Theme>,
     pub theme_idx: usize,
     pub toggles: EffectToggles,
@@ -120,6 +123,9 @@ impl Drop for Console {
     }
 }
 
+/// Field pictures kept as textures at once (a switch of vehicle or schedule drops the lot).
+const MAX_FIELD_TEXTURES: usize = 12;
+
 /// Pixel rectangle `[x, y, w, h]` of a cell rectangle.
 pub fn cell_rect_px(theme: &Theme, r: crate::grid::CellRect) -> [u32; 4] {
     let (cw, ch) = (theme.font.cell_w_px, theme.font.cell_h_px);
@@ -132,6 +138,41 @@ pub fn cell_rect_px(theme: &Theme, r: crate::grid::CellRect) -> [u32; 4] {
 }
 
 impl Console {
+    /// The texture for a field picture, decoding and uploading it on first use.
+    fn field_texture(
+        &mut self,
+        vehicle: &mctl_core::world::VehicleView,
+        key: &str,
+    ) -> Option<egui::TextureId> {
+        let field = vehicle.fields.iter().find(|f| f.key == key)?;
+        let mctl_core::schedule::FieldState::Ready { jpeg, .. } = &field.state else {
+            return None;
+        };
+        let name = format!("{}/{key}", vehicle.id);
+        if let Some(t) = self.field_textures.get(&name) {
+            return Some(t.id());
+        }
+        let img =
+            match image::load_from_memory_with_format(jpeg.as_slice(), image::ImageFormat::Jpeg) {
+                Ok(i) => i.to_rgb8(),
+                Err(e) => {
+                    tracing::warn!(error = %e, key, "field picture is not a decodable JPEG");
+                    return None;
+                }
+            };
+        let size = [img.width() as usize, img.height() as usize];
+        let color = egui::ColorImage::from_rgb(size, img.as_raw());
+        if self.field_textures.len() >= MAX_FIELD_TEXTURES {
+            self.field_textures.clear();
+        }
+        let handle = self
+            .ctx
+            .load_texture(name.clone(), color, egui::TextureOptions::LINEAR);
+        let id = handle.id();
+        self.field_textures.insert(name, handle);
+        Some(id)
+    }
+
     pub fn new(
         themes: Vec<Theme>,
         start_theme: Option<&str>,
@@ -161,6 +202,7 @@ impl Console {
         let toggles = EffectToggles::from_theme(&themes[theme_idx].effects);
         Ok(Self {
             ctx,
+            field_textures: std::collections::HashMap::new(),
             themes,
             theme_idx,
             toggles,
@@ -627,6 +669,18 @@ impl Console {
             .iter()
             .map(|w| (cell_rect_px(&theme, w.rect()), w.clone()))
             .collect();
+        let image_draws: Vec<([u32; 4], egui::TextureId)> = match vehicle {
+            Some(v) => widget_px
+                .iter()
+                .filter_map(|(px, w)| match w {
+                    crate::grid::Widget::Image { key, .. } => {
+                        self.field_texture(v, key).map(|t| (*px, t))
+                    }
+                    _ => None,
+                })
+                .collect(),
+            None => Vec::new(),
+        };
         let attitude = adi_px.map(|_| crate::adi::attitude(world.telemetry.as_ref()));
         let has_area = globe_px[2] > 0 && globe_px[3] > 0;
         let aspect = globe_px[2] as f32 / globe_px[3].max(1) as f32;
@@ -665,6 +719,27 @@ impl Console {
                         crate::trendplot::paint(&painter, &theme, *px, plot, set, marks);
                     }
                 }
+            }
+            for (px, id) in &image_draws {
+                // Square survey cutouts, fitted and centred in their cell rectangle.
+                let [x, y, w, h] = px.map(|v| v as f32);
+                let side = w.min(h);
+                let rect = egui::Rect::from_min_size(
+                    Pos2::new(x + (w - side) / 2.0, y + (h - side) / 2.0),
+                    egui::vec2(side, side),
+                );
+                painter.image(
+                    *id,
+                    rect,
+                    egui::Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                    egui::Color32::WHITE,
+                );
+                painter.rect_stroke(
+                    rect,
+                    0.0,
+                    egui::Stroke::new(1.0, theme.palette.border.to_egui()),
+                    egui::StrokeKind::Outside,
+                );
             }
             for (px, w) in &widget_px {
                 let plan = vehicle

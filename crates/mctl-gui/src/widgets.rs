@@ -66,6 +66,8 @@ pub fn paint(
             ticks,
             ..
         } => bar(painter, theme, px, *frac, *centered, *limit, ticks),
+        // Pictures are textures: the console paints them.
+        Widget::Image { .. } => {}
         Widget::Chart { series, .. } => chart(painter, theme, px, series),
         Widget::DataBar { frac, .. } => data_bar(painter, theme, px, *frac),
         Widget::Spark { values, limit, .. } => spark(painter, theme, px, values, *limit),

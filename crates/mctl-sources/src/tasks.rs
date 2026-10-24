@@ -84,6 +84,12 @@ pub enum Event {
     TelemetryClock {
         data_time: Utc,
     },
+    /// The picture for a field request (or why there is none).
+    Field {
+        vehicle: String,
+        key: String,
+        state: mctl_core::schedule::FieldState,
+    },
     /// A refreshed observing schedule or daily report for a vehicle.
     Ops {
         vehicle: String,
@@ -283,6 +289,8 @@ pub struct SourceSet {
     pub events: Receiver<Event>,
     /// Items the telemetry feed subscribes to (empty without a telemetry vehicle).
     pub telemetry: Vec<TelemetryMeta>,
+    /// Where the engine sends requests for field pictures; `None` when no vehicle has a schedule.
+    pub field_tx: Option<std::sync::mpsc::Sender<(String, mctl_core::schedule::FieldRequest)>>,
     _stop: Vec<SyncSender<()>>,
     _threads: Vec<JoinHandle<()>>,
 }
@@ -300,6 +308,7 @@ pub fn start(
     cache_dir: std::path::PathBuf,
     offline: bool,
 ) -> Result<SourceSet, CacheError> {
+    let cache_dir_for_sky = cache_dir.clone();
     let cache = Arc::new(HttpCache::new(
         cache_dir,
         &cfg.fetch.user_agent,
@@ -387,9 +396,27 @@ pub fn start(
         );
         stops.push(stop_tx);
     }
+    let field_tx = if cfg.vehicles.iter().any(|v| v.schedule.is_some()) {
+        let (req_tx, req_rx) = std::sync::mpsc::channel();
+        let (sky, ua, timeout, dir, tx) = (
+            cfg.sources.sky.clone(),
+            cfg.fetch.user_agent.clone(),
+            cfg.fetch.timeout_s,
+            cache_dir_for_sky.clone(),
+            tx.clone(),
+        );
+        std::thread::Builder::new()
+            .name("src-sky".into())
+            .spawn(move || crate::sky::run(sky, ua, timeout, &dir, &req_rx, &tx, offline))
+            .expect("spawn sky thread");
+        Some(req_tx)
+    } else {
+        None
+    };
     Ok(SourceSet {
         events: rx,
         telemetry,
+        field_tx,
         _stop: stops,
         _threads: threads,
     })
@@ -679,7 +706,7 @@ mod tests {
                 | Event::Observer(_)
                 | Event::ObserverNote(_) => {}
                 Event::Ops { .. } => panic!("no schedule can exist with an empty cache"),
-                Event::TelemetryClock { .. } => {}
+                Event::TelemetryClock { .. } | Event::Field { .. } => {}
                 Event::TelemetryHealth(h) => assert_eq!(h, Health::Offline),
             }
             if offline == expected {

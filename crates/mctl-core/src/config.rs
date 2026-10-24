@@ -65,6 +65,26 @@ pub struct Sources {
     pub iers_eop: EopSource,
     pub horizons: HorizonsSource,
     pub schedules: ScheduleSources,
+    pub sky: SkySources,
+}
+
+/// Where the "what is it looking at" pictures come from: a name resolver and a survey cutout service.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SkySources {
+    /// CDS Sesame, plain-text output; `{name}` is replaced by the percent-encoded target name.
+    pub sesame_url: String,
+    /// CDS hips2fits endpoint.
+    pub hips2fits_url: String,
+    /// HiPS survey id for the cutout.
+    pub survey: String,
+    /// Field of view of the cutout, degrees, and its size in pixels.
+    pub fov_deg: f64,
+    pub size_px: u32,
+    /// Hubble Phase II program file; `{id}` is the program number.
+    pub hst_program_url: String,
+    /// Cutouts and program files are reused for this long, seconds.
+    pub cache_s: f64,
 }
 
 /// JPL Horizons vector tables (DESIGN.md gives Horizons as the source for non-ISS vehicles).
@@ -439,6 +459,13 @@ impl Config {
         }
         if s.horizons.min_refresh_s < 600.0 || s.schedules.min_refresh_s < 600.0 {
             return bad("sources.horizons and sources.schedules: min_refresh_s >= 600".into());
+        }
+        if !s.sky.sesame_url.contains("{name}")
+            || !s.sky.hst_program_url.contains("{id}")
+            || !(s.sky.fov_deg > 0.0 && s.sky.fov_deg <= 5.0)
+            || !(64..=2048).contains(&s.sky.size_px)
+        {
+            return bad("sources.sky: sesame_url needs {name}, hst_program_url needs {id}, fov_deg in (0, 5], size_px 64..=2048".into());
         }
         if !s.schedules.hst_index_template.contains("{year}") {
             return bad("sources.schedules.hst_index_template must contain {year}".into());

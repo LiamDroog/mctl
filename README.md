@@ -3,7 +3,7 @@
 Mission control display for the ISS, Hubble, JWST and Roman, styled after a flight control console. Design and
 requirements: [`DESIGN.md`](DESIGN.md). Decisions: [`docs/adr/`](docs/adr/). Status: M0-M4 done (core and sources, MASTER/TRAJ with store-backed trends, live telemetry, C&W,
 recording, observer sites and passes), plus JWST and Roman at Sun-Earth L2 from Horizons, STScI observing
-schedules (OPS page) and telemetry visuals; next is M5. See "What is real" below.
+schedules and survey pictures of the targets (OPS page), telemetry visuals, and M5 (numerical propagator, maneuver planner, replay); next is M6. See "What is real" below.
 
 ## Running
 
@@ -28,6 +28,8 @@ mctl export telemetry --from 2026-10-23T00:00:00 --out t.csv   # state|telemetry
 mctl export --out ./dump         # every table, one CSV each
 tools/smoke.sh                   # render every page headless and check the images
 mctl --no-record                 # do not record this run
+mctl --replay start              # play back the recording (start, an ISO epoch, or an offset such as -2h); also :replay in the console
+mctl shot --exec "burn add apo vnb 1 0 0;plan horizon 3" --pages traj:4   # set up console commands before a headless capture
 ```
 
 The launcher runs `cargo build --release` (a no-op in ~0.3 s when nothing changed) and refuses to run a
@@ -62,8 +64,10 @@ and documented in `docs/step3/attitude-verification.md`. Panels for later milest
 supplies them. Passes are predicted for each observer site (OEM then GP/SGP4); pass times match an independent
 implementation to milliseconds (`docs/step4/pass-verification.md`) but have not been compared with a
 published predictor. SUP-GP (ISS-E) is implemented but off by default (`docs/step4/supgp-evaluation.md`). The observer site is the configured one, else GeoClue, else (optional, off by
-default) an IP lookup, else the NASA HQ fallback; `:site save` keeps one. Not yet: planner and replay
-(M5), visiting vehicles and proximity operations (M6).
+default) an IP lookup, else the NASA HQ fallback; `:site save` keeps one. The maneuver planner (TRAJ sub-page 4: `burn add`, `plan ...`) propagates numerically (DOP853, J2-J4, Sun and Moon, exponential-atmosphere drag, optional SRP);
+it was checked against the NASA ISS ephemeris (3.1 km after a day without drag, 7.3 km with the static drag model, so the drag scale is a control).
+REPLAY plays states and telemetry back from the recording. Not yet: visiting vehicles and proximity operations (M6).
+The OPS page pictures are DSS2 sky-survey cutouts around the target (CDS Sesame + hips2fits), not Hubble or JWST images.
 
 ## Layout
 

@@ -47,6 +47,19 @@ hst_index_template = "https://www.stsci.edu/public/hst_status/{year}_reports.htm
 hst_origin = "https://www.stsci.edu"
 min_refresh_s = 3600
 
+[sources.sky]
+# "What is it looking at": a target name is resolved with CDS Sesame (SIMBAD/NED/VizieR), and a cutout of
+# the DSS2 colour survey around it comes from CDS hips2fits. The picture is a SKY SURVEY image of the
+# field, not an image taken by Hubble or JWST. Hubble's daily report names programs, not targets, so
+# targets come from each program's public Phase II file (fixed targets only; no visit times exist).
+sesame_url = "https://cds.unistra.fr/cgi-bin/nph-sesame/-oI/SNV?{name}"
+hips2fits_url = "https://alasky.cds.unistra.fr/hips-image-services/hips2fits"
+survey = "CDS/P/DSS2/color"
+fov_deg = 0.25
+size_px = 512
+hst_program_url = "https://www.stsci.edu/hst/phase2-public/{id}.pro"
+cache_s = 604800
+
 [limits]
 # Inter-source residual (|dr|) that raises a caution on the sources panel. Assumption, not a published limit.
 residual_caution_km = 5.0

@@ -182,3 +182,48 @@ mod tests {
         assert!(all.iter().any(|(f, _)| f == "MAINT"));
     }
 }
+
+/// A request for a picture of what an observatory is pointed at.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum FieldRequest {
+    /// A JWST target by name, as the visit list gives it.
+    Target(String),
+    /// The first positioned target of a Hubble program (number and title for the label).
+    HstProgram(String),
+}
+
+impl FieldRequest {
+    pub fn key(&self) -> String {
+        match self {
+            Self::Target(n) => format!("target:{n}"),
+            Self::HstProgram(id) => format!("hst:{id}"),
+        }
+    }
+}
+
+/// Where the request stands.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FieldState {
+    Loading,
+    /// Nothing to show, and why (name not resolvable, program has only solar-system targets, ...).
+    Unavailable(String),
+    Ready {
+        /// Resolved target name and position, ICRS degrees.
+        target: String,
+        ra_deg: f64,
+        dec_deg: f64,
+        fov_deg: f64,
+        /// How the position was found, e.g. `SIMBAD via Sesame`.
+        origin: String,
+        survey: String,
+        jpeg: std::sync::Arc<Vec<u8>>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FieldView {
+    pub key: String,
+    /// What the operator sees as the caption's first line (the visit's instrument, or the program).
+    pub label: String,
+    pub state: FieldState,
+}

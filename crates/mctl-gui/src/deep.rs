@@ -4,7 +4,7 @@
 //! orbit seen from Earth and from above the ecliptic, distance and light time, and (for JWST) the
 //! visit schedule. Everything is drawn from the engine's snapshot.
 
-use mctl_core::schedule::{HstProgram, JwstSchedule, Ops};
+use mctl_core::schedule::{FieldState, FieldView, HstProgram, JwstSchedule, Ops};
 use mctl_core::time::Utc;
 use mctl_core::world::{Health, VehicleView};
 
@@ -283,7 +283,8 @@ fn visit_table(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>, s: &JwstSch
         dim,
     );
     l.row += 1;
-    let target_col = 64usize;
+    // Prefix (marker, start, duration) is 26 characters; the instrument gets a bit over half the rest.
+    let target_col = 26 + (l.rect.cols.saturating_sub(27)) * 55 / 100 + 1;
     let tw = l.rect.cols.saturating_sub(target_col + 1);
     let current = s.current(now).cloned();
     let rows_left = l.rect.rows.saturating_sub(l.row);
@@ -308,12 +309,153 @@ fn visit_table(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>, s: &JwstSch
                 if is_now { ">" } else { " " },
                 &v.start.gmt_doy()[..12],
                 fmt_dur(v.duration_s),
-                truncate(&what, 38),
+                truncate(&what, target_col.saturating_sub(27)),
             ),
             style,
         );
         l.put(target_col, &truncate(&v.target, tw), style);
         l.row += 1;
+    }
+}
+
+/// Greedy word wrap to `width` characters.
+fn wrap(text: &str, width: usize) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for word in text.split_whitespace() {
+        match out.last_mut() {
+            Some(l) if l.chars().count() + 1 + word.chars().count() <= width => {
+                l.push(' ');
+                l.push_str(word);
+            }
+            _ => out.push(word.chars().take(width).collect()),
+        }
+    }
+    out
+}
+
+fn fmt_ra(deg: f64) -> String {
+    let h = deg / 15.0;
+    format!(
+        "{:02.0}h{:02.0}m{:04.1}s",
+        h.floor(),
+        (h.fract() * 60.0).floor(),
+        (h * 60.0).fract() * 60.0
+    )
+}
+
+fn fmt_dec(deg: f64) -> String {
+    let a = deg.abs();
+    format!(
+        "{}{:02.0}d{:02.0}'{:02.0}\"",
+        if deg < 0.0 { '-' } else { '+' },
+        a.floor(),
+        (a.fract() * 60.0).floor(),
+        (a * 60.0).fract() * 60.0
+    )
+}
+
+/// One picture with its caption: label as the box title, the image above, the caption lines under it.
+fn field_cell(grid: &mut Grid, rect: CellRect, f: &FieldView) {
+    boxed(
+        grid,
+        rect,
+        &truncate(&f.label.to_uppercase(), rect.cols.saturating_sub(4)),
+    );
+    let inner = rect.inner();
+    let (dim, fg, bright) = (
+        Style::new(Role::Dim),
+        Style::new(Role::Fg),
+        Style::new(Role::Bright),
+    );
+    let w = inner.cols.saturating_sub(2).max(8);
+    let mut lines: Vec<(String, Style)> = Vec::new();
+    let mut widget_key = None;
+    match &f.state {
+        FieldState::Ready {
+            target,
+            ra_deg,
+            dec_deg,
+            fov_deg,
+            origin,
+            survey,
+            ..
+        } => {
+            let survey: Vec<&str> = survey.rsplit('/').take(2).collect();
+            let survey = survey.into_iter().rev().collect::<Vec<_>>().join(" ");
+            lines.push((truncate(target, w), bright));
+            lines.push((format!("RA  {}", fmt_ra(*ra_deg)), fg));
+            lines.push((format!("DEC {}", fmt_dec(*dec_deg)), fg));
+            lines.push((
+                format!("{} {:.0}' FIELD", survey.to_uppercase(), fov_deg * 60.0),
+                dim,
+            ));
+            for l in wrap(
+                &format!(
+                    "SURVEY CUTOUT, NOT AN OBSERVATORY IMAGE. POSITION: {}",
+                    origin.to_uppercase()
+                ),
+                w,
+            ) {
+                lines.push((l, dim));
+            }
+            widget_key = Some(f.key.clone());
+        }
+        FieldState::Loading => lines.push((
+            "RESOLVING THE TARGET AND FETCHING A SURVEY CUTOUT..."
+                .chars()
+                .take(w)
+                .collect(),
+            dim,
+        )),
+        FieldState::Unavailable(why) => {
+            lines.push(("NO PICTURE".into(), Style::limit(Limit::Stale)));
+            lines.extend(wrap(&why.to_uppercase(), w).into_iter().map(|l| (l, dim)));
+        }
+    }
+    let text_rows = lines.len().min(inner.rows);
+    let top_of_text = if widget_key.is_some() {
+        inner.rows - text_rows
+    } else {
+        1
+    };
+    let mut l = Lines::new(grid, rect);
+    l.row = top_of_text;
+    for (text, style) in lines {
+        l.line(&text, style);
+    }
+    if let Some(key) = widget_key {
+        grid.widget(Widget::Image {
+            rect: CellRect::new(inner.col, inner.row, inner.cols, inner.rows - text_rows),
+            key,
+        });
+    }
+}
+
+/// Pictures side by side across `rect`; `caption` supplies each box title.
+fn field_strip(
+    grid: &mut Grid,
+    rect: CellRect,
+    fields: &[std::sync::Arc<FieldView>],
+    caption: &dyn Fn(usize, &FieldView) -> String,
+) {
+    if fields.is_empty() {
+        boxed(grid, rect, "WHAT IT IS LOOKING AT");
+        Lines::new(grid, rect).no_data("NO TARGETS IN THE SCHEDULE YET");
+        return;
+    }
+    let n = fields.len();
+    let w = rect.cols / n;
+    for (i, f) in fields.iter().enumerate() {
+        let cw = if i + 1 == n { rect.cols - w * i } else { w };
+        let named = FieldView {
+            label: caption(i, f),
+            ..(**f).clone()
+        };
+        field_cell(
+            grid,
+            CellRect::new(rect.col + i * w, rect.row, cw, rect.rows),
+            &named,
+        );
     }
 }
 
@@ -352,16 +494,30 @@ pub(crate) fn ops(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
                 "TIMELINE  -6 H TO +42 H  BY INSTRUMENT  (PLAN)",
                 PlotKind::Timeline,
             );
-            let lw = cols * 66 / 100;
-            visit_table(
+            let (lw, fw) = (cols * 42 / 100, cols * 34 / 100);
+            let row = (split_rows[1].row, split_rows[1].rows);
+            visit_table(grid, CellRect::new(0, row.0, lw, row.1), inp, s);
+            let fields: Vec<_> = inp
+                .vehicle
+                .map(|v| v.fields.iter().take(2).cloned().collect())
+                .unwrap_or_default();
+            let now_target = s.current(inp.world.t).map(|c| c.target.clone());
+            field_strip(
                 grid,
-                CellRect::new(0, split_rows[1].row, lw, split_rows[1].rows),
-                inp,
-                s,
+                CellRect::new(lw, row.0, fw, row.1),
+                &fields,
+                &|i, f| {
+                    let what = f.label.split_whitespace().next().unwrap_or_default();
+                    let is_now = i == 0
+                        && now_target
+                            .as_deref()
+                            .is_some_and(|t| f.key == format!("target:{t}"));
+                    format!("{} {what}", if is_now { "NOW" } else { "NEXT" })
+                },
             );
             plot(
                 grid,
-                CellRect::new(lw, split_rows[1].row, cols - lw, split_rows[1].rows),
+                CellRect::new(lw + fw, row.0, cols - lw - fw, row.1),
                 "NEXT 7 DAYS BY INSTRUMENT",
                 PlotKind::InstrumentShare,
             );
@@ -377,10 +533,20 @@ pub(crate) fn ops(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             let fetched = r.fetched_at;
             feed_line(&mut l, inp, fetched, "STSCI DAILY REPORT");
             l.line(
-                "PROGRAMS SCHEDULED IN THE PERIOD; THE REPORT GIVES NO VISIT TIMES AND NO ENGINEERING TELEMETRY.",
+                "PROGRAMS IN THE PERIOD; NO VISIT TIMES OR TELEMETRY. PICTURES: THE FIRST FIXED TARGET OF EACH PROGRAM, NOT NECESSARILY WHAT IT IS POINTED AT NOW.",
                 Style::new(Role::Dim),
             );
-            let lists = CellRect::new(0, top + 5, cols, h - 5);
+            let strip_h = (h.saturating_sub(5) * 42 / 100)
+                .max(10)
+                .min(h.saturating_sub(5));
+            let fields: Vec<_> = inp.vehicle.map(|v| v.fields.clone()).unwrap_or_default();
+            field_strip(
+                grid,
+                CellRect::new(0, top + 5, cols, strip_h),
+                &fields,
+                &|_, f| f.label.clone(),
+            );
+            let lists = CellRect::new(0, top + 5 + strip_h, cols, h.saturating_sub(5 + strip_h));
             let w = lists.cols / 3;
             program_list(
                 grid,

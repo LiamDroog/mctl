@@ -675,6 +675,7 @@ mod tests {
             schedule: None,
             deep: None,
             reference_burns: vec![],
+            fields: vec![],
             ops: None,
             ops_health: None,
             met_epoch: None,
@@ -863,6 +864,83 @@ mod tests {
         assert!(!g.text().contains("Lab cabin pressure"), "{}", g.text());
         assert!(g.row_text(0).contains("NOM"), "{}", g.row_text(0));
         assert_eq!(w.cw.worst_now(Some("jwst")), None);
+    }
+
+    #[test]
+    fn ops_pictures_are_labelled_as_survey_cutouts_and_failures_say_why() {
+        use mctl_core::schedule::{FieldState, FieldView, JwstSchedule, Ops, Visit};
+        use std::sync::Arc;
+        let mut v = l2_view();
+        v.ops = Some(Ops::Jwst(Arc::new(JwstSchedule {
+            visits: vec![Visit {
+                id: "1:1:1".into(),
+                start: Utc(1.0e9 - 10.0),
+                duration_s: 100.0,
+                kind: "PRIME TARGETED FIXED".into(),
+                pcs_mode: String::new(),
+                instrument: "NIRCam Imaging".into(),
+                target: "M31".into(),
+                category: String::new(),
+                parallels: vec![],
+            }],
+            files: vec![],
+            fetched_at: Utc(1.0e9),
+        })));
+        v.fields = vec![
+            Arc::new(FieldView {
+                key: "target:M31".into(),
+                label: "NIRCam".into(),
+                state: FieldState::Ready {
+                    target: "M31".into(),
+                    ra_deg: 10.6847,
+                    dec_deg: 41.2687,
+                    fov_deg: 0.25,
+                    origin: "Sesame".into(),
+                    survey: "CDS/P/DSS2/color".into(),
+                    jpeg: Arc::new(vec![0xFF, 0xD8]),
+                },
+            }),
+            Arc::new(FieldView {
+                key: "target:o16".into(),
+                label: "NIRSpec".into(),
+                state: FieldState::Unavailable(
+                    "o16 is a proposal-internal name, not a catalogued object".into(),
+                ),
+            }),
+        ];
+        let (g, layout) = render_page(&bare_world(), Some(&v), Page::Ops, 0, 160, 45);
+        let t = g.text();
+        assert!(
+            t.contains("NOW NIRCAM"),
+            "the current visit's picture is NOW: {t}"
+        );
+        assert!(
+            t.contains("SURVEY CUTOUT")
+                && t.contains("OBSERVATORY IMAGE")
+                && t.contains("DSS2 COLOR 15' FIELD"),
+            "{t}"
+        );
+        assert!(
+            t.contains("RA  00h42m44.3s") && t.contains("DEC +41d16'07\""),
+            "{t}"
+        );
+        assert!(
+            t.contains("NO PICTURE") && t.contains("PROPOSAL-INTERNAL"),
+            "{t}"
+        );
+        let images: Vec<_> = layout
+            .widgets
+            .iter()
+            .filter_map(|w| match w {
+                crate::grid::Widget::Image { key, .. } => Some(key.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            images,
+            ["target:M31"],
+            "only a ready picture gets an image widget"
+        );
     }
 
     fn l2_view() -> VehicleView {

@@ -157,6 +157,8 @@ pub struct VehicleView {
     pub deep: Option<DeepView>,
     /// Maneuvers mentioned in the OEM header comments (read-only reference burns).
     pub reference_burns: Vec<crate::plan::ReferenceBurn>,
+    /// Pictures of what the observatory is pointed at (JWST: now and next; Hubble: today's programs).
+    pub fields: Vec<std::sync::Arc<crate::schedule::FieldView>>,
     /// Latest observing schedule or daily report, when the vehicle has one and it has arrived.
     pub ops: Option<crate::schedule::Ops>,
     /// Fetch health of the schedule source; `None` for a vehicle without one.

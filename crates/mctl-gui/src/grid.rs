@@ -128,6 +128,8 @@ pub enum Widget {
         rect: CellRect,
         series: Vec<(String, std::sync::Arc<[f32]>)>,
     },
+    /// A survey picture of a field (`key` is the field request key on the selected vehicle).
+    Image { rect: CellRect, key: String },
     /// Circular angle dial with a needle at `deg` (0 at the top, clockwise).
     Dial {
         rect: CellRect,
@@ -144,6 +146,7 @@ impl Widget {
             Self::Bar { rect, .. }
             | Self::DataBar { rect, .. }
             | Self::Chart { rect, .. }
+            | Self::Image { rect, .. }
             | Self::Spark { rect, .. }
             | Self::Dial { rect, .. }
             | Self::Plot { rect, .. } => *rect,

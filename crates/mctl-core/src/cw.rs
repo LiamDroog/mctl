@@ -729,6 +729,7 @@ mod tests {
             schedule: None,
             deep: None,
             reference_burns: vec![],
+            fields: vec![],
             ops: None,
             ops_health: None,
             met_epoch: None,
