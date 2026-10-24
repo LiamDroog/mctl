@@ -40,6 +40,13 @@ pub enum Command {
     },
     /// Save the active site into the user configuration, under `name` if given.
     SaveSite(Option<String>),
+    /// Edit the maneuver plan.
+    Plan {
+        vehicle: String,
+        edit: crate::plan::PlanCommand,
+    },
+    /// Recompute a vehicle's plan from the current clock time.
+    PlanRun(String),
     /// Acknowledge the master caution and warning latches (not a clock command).
     Ack,
 }

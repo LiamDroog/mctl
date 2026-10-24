@@ -20,6 +20,7 @@ use mctl_core::bus::Bus;
 use mctl_core::command::Command;
 use mctl_core::config::{Config, Regime, VehicleDef};
 use mctl_core::cw::{Condition, Latch, Metric, RuleDef, Sample as CwSample, Tracker};
+use mctl_core::plan::{PlanCommand, PlanDef, PlanStatus, PlanView};
 use mctl_core::state::{Elements, Geodetic, Quality, SourceKind, State};
 use mctl_core::time::{EopTable, Utc};
 use mctl_core::world::{
@@ -52,6 +53,30 @@ struct Loaded<T> {
     data: Arc<T>,
     fetched_at: Utc,
     from_cache: bool,
+}
+
+/// One vehicle's maneuver plan: what the operator defined and the latest result.
+#[derive(Default)]
+struct PlanState {
+    def: PlanDef,
+    view: Option<PlanView>,
+    /// Job id in flight.
+    pending: Option<u64>,
+    /// The definition changed (or a rerun was asked for) and the result is out of date.
+    dirty: bool,
+}
+
+/// Plan file name: letters, digits, dash and underscore only, so it cannot name another directory.
+fn plan_path(name: &str) -> Result<std::path::PathBuf, String> {
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!("plan name {name:?}: use letters, digits, - and _"));
+    }
+    let dir = mctl_core::config::data_dir().ok_or("no home directory for plans")?;
+    Ok(dir.join("plans").join(format!("{name}.toml")))
 }
 
 struct VehicleModel {
@@ -102,6 +127,9 @@ pub struct Model {
     trend_worker: Option<crate::trends::Worker>,
     trends_latest: Option<Arc<mctl_core::world::TrendSet>>,
     pass_worker: Option<crate::passes::Worker>,
+    plan_worker: Option<crate::planner::Worker>,
+    plans: HashMap<String, PlanState>,
+    plan_job_counter: u64,
     pass_entries: HashMap<String, PassEntry>,
     job_counter: u64,
 }
@@ -124,6 +152,31 @@ struct Observed {
 }
 
 /// The value a rule watches right now, and its data quality.
+fn empty_plan(def: &PlanDef) -> PlanView {
+    PlanView {
+        def: def.clone(),
+        status: PlanStatus::Empty,
+        t0: Utc(0.0),
+        t_end: Utc(0.0),
+        burns: vec![],
+        nominal: Arc::new(vec![]),
+        planned: Arc::new(vec![]),
+        report: None,
+        separation_km: Arc::new(vec![]),
+        passes: vec![],
+        notes: vec![],
+    }
+}
+
+fn failed_plan(def: &PlanDef, t: Utc, why: &str) -> PlanView {
+    PlanView {
+        status: PlanStatus::Failed(why.to_owned()),
+        t0: t,
+        t_end: t,
+        ..empty_plan(def)
+    }
+}
+
 fn rule_sample(
     def: &RuleDef,
     vehicles: &[VehicleView],
@@ -279,6 +332,9 @@ impl Model {
             trend_worker: None,
             trends_latest: None,
             pass_worker: None,
+            plan_worker: None,
+            plans: HashMap::new(),
+            plan_job_counter: 0,
             pass_entries: HashMap::new(),
             job_counter: 0,
         }
@@ -398,6 +454,242 @@ impl Model {
                 "trends need the recording, which is off or unavailable",
             ),
         }
+    }
+
+    pub fn enable_plan_worker(&mut self) {
+        self.plan_worker = Some(crate::planner::Worker::start());
+    }
+
+    /// Apply an edit to a vehicle's plan. The result is recomputed on the next snapshot.
+    pub fn plan_edit(&mut self, vehicle: &str, edit: PlanCommand, wall: Utc) {
+        let Some(vm) = self.vehicles.iter().find(|v| v.def.id == vehicle) else {
+            self.note(wall, format!("plan rejected: unknown vehicle {vehicle:?}"));
+            return;
+        };
+        if vm.def.regime != Regime::Earth {
+            self.note(
+                wall,
+                format!(
+                    "plan rejected: the planner is for Earth-orbit vehicles, not {}",
+                    vm.def.name
+                ),
+            );
+            return;
+        }
+        let st = self.plans.entry(vehicle.to_owned()).or_default();
+        let mut def = st.def.clone();
+        let mut msg = String::new();
+        let outcome: Result<(), String> = (|| {
+            match edit {
+                PlanCommand::AddBurn(b) => {
+                    msg = format!("plan: burn {} added", def.burns.len() + 1);
+                    def.burns.push(b);
+                }
+                PlanCommand::DelBurn(n) => {
+                    if n == 0 || n > def.burns.len() {
+                        return Err(format!("no burn {n}; the plan has {}", def.burns.len()));
+                    }
+                    def.burns.remove(n - 1);
+                    msg = format!("plan: burn {n} removed");
+                }
+                PlanCommand::Clear => {
+                    def.burns.clear();
+                    msg = "plan: burns cleared".into();
+                }
+                PlanCommand::Horizon(r) => {
+                    def.horizon_revs = r;
+                    msg = format!("plan: horizon {r} revolutions");
+                }
+                PlanCommand::Force { name, on } => {
+                    match name.as_str() {
+                        "zonal" | "j2" => def.zonal = on,
+                        "sun" => def.sun = on,
+                        "moon" => def.moon = on,
+                        "drag" => def.drag = on,
+                        "srp" => def.srp = on,
+                        other => {
+                            return Err(format!(
+                                "unknown force {other:?}; use zonal, sun, moon, drag or srp"
+                            ));
+                        }
+                    }
+                    msg = format!("plan: {name} {}", if on { "on" } else { "off" });
+                }
+                PlanCommand::DragScale(x) => {
+                    def.drag_scale = x;
+                    msg = format!("plan: drag scale {x}");
+                }
+                PlanCommand::Save(name) => {
+                    let path = plan_path(&name)?;
+                    std::fs::create_dir_all(path.parent().expect("has a parent"))
+                        .map_err(|e| format!("{}: {e}", path.display()))?;
+                    std::fs::write(&path, def.to_toml().map_err(|e| e.to_string())?)
+                        .map_err(|e| format!("{}: {e}", path.display()))?;
+                    msg = format!("plan saved to {}", path.display());
+                    return Ok(());
+                }
+                PlanCommand::Load(name) => {
+                    let path = plan_path(&name)?;
+                    let text = std::fs::read_to_string(&path)
+                        .map_err(|e| format!("{}: {e}", path.display()))?;
+                    def = PlanDef::from_toml(&text).map_err(|e| e.to_string())?;
+                    msg = format!("plan loaded from {}", path.display());
+                }
+            }
+            def.validate().map_err(|e| e.to_string())
+        })();
+        match outcome {
+            Ok(()) => {
+                if def != st.def {
+                    st.def = def;
+                    st.dirty = true;
+                }
+                self.note(wall, msg);
+            }
+            Err(e) => self.note(wall, format!("plan rejected: {e}")),
+        }
+    }
+
+    pub fn plan_rerun(&mut self, vehicle: &str) {
+        if let Some(st) = self.plans.get_mut(vehicle) {
+            st.dirty = true;
+        }
+    }
+
+    /// Start planner jobs for plans that changed, collect finished ones.
+    fn update_plans(
+        &mut self,
+        vehicles: &[VehicleView],
+        t: Utc,
+        orientation: Orientation,
+        wall: Utc,
+    ) {
+        if let Some(w) = &self.plan_worker {
+            for done in w.poll() {
+                for st in self
+                    .plans
+                    .values_mut()
+                    .filter(|s| s.pending == Some(done.id))
+                {
+                    st.pending = None;
+                    st.view = Some(match &done.result {
+                        Ok(v) => v.clone(),
+                        Err(e) => failed_plan(&st.def, t, e),
+                    });
+                }
+                if let Err(e) = &done.result {
+                    self.log_plan_failure(wall, e);
+                }
+            }
+        }
+        let ids: Vec<String> = self
+            .plans
+            .iter()
+            .filter(|(_, s)| s.dirty)
+            .map(|(k, _)| k.clone())
+            .collect();
+        for id in ids {
+            let (Some(vm), Some(view)) = (
+                self.vehicles.iter().find(|v| v.def.id == id),
+                vehicles.iter().find(|v| v.id == id),
+            ) else {
+                continue;
+            };
+            let st = self.plans.get_mut(&id).expect("listed");
+            if st.def.burns.is_empty() {
+                st.dirty = false;
+                st.view = None;
+                continue;
+            }
+            // Wait for a state to start from; the plan stays dirty until there is one.
+            let Some(sol) = &view.solution else { continue };
+            let mut parts: Vec<Arc<dyn Trajectory>> = Vec::new();
+            for k in &vm.def.sources {
+                match k {
+                    SourceKind::Gp => parts.extend(
+                        vm.gp
+                            .as_ref()
+                            .map(|l| l.data.clone() as Arc<dyn Trajectory>),
+                    ),
+                    SourceKind::SupGp => parts.extend(
+                        vm.supgp
+                            .as_ref()
+                            .map(|l| l.data.clone() as Arc<dyn Trajectory>),
+                    ),
+                    SourceKind::Oem => parts.extend(
+                        vm.oem
+                            .as_ref()
+                            .map(|l| l.data.clone() as Arc<dyn Trajectory>),
+                    ),
+                    SourceKind::Horizons => parts.extend(
+                        vm.horizons
+                            .as_ref()
+                            .map(|l| l.data.clone() as Arc<dyn Trajectory>),
+                    ),
+                }
+            }
+            let ballistic = vm
+                .oem
+                .as_ref()
+                .map(|o| o.data.drag.cd_a_over_m())
+                .filter(|b| b.is_finite())
+                .or(vm.def.ballistic_m2_per_kg);
+            self.plan_job_counter += 1;
+            let job = crate::planner::Job {
+                id: self.plan_job_counter,
+                def: st.def.clone(),
+                t0: t,
+                start: sol.state_gcrf,
+                nominal: Arc::new(crate::passes::Chain { parts }),
+                orientation,
+                ballistic,
+                sites: self.sites.iter().map(|(s, _)| s.clone()).collect(),
+                mask_deg: self.cfg.observer.mask_deg,
+            };
+            st.dirty = false;
+            st.pending = Some(job.id);
+            match &self.plan_worker {
+                Some(w) => w.submit(job),
+                None => {
+                    let result = crate::planner::compute(&job);
+                    st.pending = None;
+                    st.view = Some(match &result {
+                        Ok(v) => v.clone(),
+                        Err(e) => failed_plan(&st.def, t, e),
+                    });
+                    if let Err(e) = &result {
+                        let e = e.clone();
+                        self.log_plan_failure(wall, &e);
+                    }
+                }
+            }
+        }
+    }
+
+    fn log_plan_failure(&mut self, wall: Utc, e: &str) {
+        self.note(wall, format!("plan failed: {e}"));
+    }
+
+    fn plans_view(&self) -> Vec<(String, Arc<PlanView>)> {
+        self.plans
+            .iter()
+            .map(|(id, st)| {
+                let mut v = st.view.clone().unwrap_or_else(|| empty_plan(&st.def));
+                v.def = st.def.clone();
+                v.status = if st.pending.is_some() || st.dirty {
+                    if st.def.burns.is_empty() {
+                        PlanStatus::Empty
+                    } else {
+                        PlanStatus::Computing
+                    }
+                } else if st.def.burns.is_empty() {
+                    PlanStatus::Empty
+                } else {
+                    v.status
+                };
+                (id.clone(), Arc::new(v))
+            })
+            .collect()
     }
 
     /// Run pass predictions on a worker thread instead of inline.
@@ -1136,6 +1428,7 @@ impl Model {
                 .collect(),
         });
         self.update_passes(&mut vehicles, t, orientation);
+        self.update_plans(&vehicles, t, orientation, wall);
         let finished = self
             .trend_worker
             .as_ref()
@@ -1159,6 +1452,7 @@ impl Model {
             cw,
             observer,
             trends: self.trends_latest.clone(),
+            plans: self.plans_view(),
             t,
             clock,
             log: self.log.iter().cloned().collect(),
@@ -1570,6 +1864,14 @@ fn drain_commands(rx: &Receiver<Command>, clock: &mut Clock, model: &mut Model, 
                 model.ack(wall_utc);
                 continue;
             }
+            Command::Plan { vehicle, edit } => {
+                model.plan_edit(vehicle, edit.clone(), wall_utc);
+                continue;
+            }
+            Command::PlanRun(vehicle) => {
+                model.plan_rerun(vehicle);
+                continue;
+            }
             Command::SelectSite(n) => {
                 if let Err(e) = model.select_site(n, wall_utc) {
                     model.note(wall_utc, format!("command rejected: {e}"));
@@ -1636,6 +1938,7 @@ pub fn start(
             let sources = sources;
             let mut model = Model::new(cfg);
             model.enable_pass_worker();
+            model.enable_plan_worker();
             if let Some(db) = trends_db {
                 model.enable_trends(db);
             }
@@ -1795,6 +2098,59 @@ mod tests {
         let v = w.vehicles.iter().find(|v| v.id == "jwst").unwrap();
         assert!(v.solution.is_none());
         assert_eq!(v.sources[0].status, SourceStatus::OutOfSpan);
+    }
+
+    #[test]
+    fn plan_edits_produce_a_plan_view_from_the_active_source_and_reject_bad_input() {
+        use mctl_core::plan::{BurnDef, BurnFrame};
+        let mut m = model();
+        feed(&mut m, true, true);
+        let t = t_in_oem();
+        let burn = BurnDef {
+            trigger: "apo".into(),
+            frame: BurnFrame::Vnb,
+            dv_m_s: [1.0, 0.0, 0.0],
+        };
+        m.plan_edit("iss", PlanCommand::AddBurn(burn), t);
+        // Empty until the next snapshot, which has a state to start from.
+        let w = m.world(t);
+        let (id, p) = &w.plans[0];
+        assert_eq!(id, "iss");
+        assert_eq!(p.status, PlanStatus::Ready, "{:?}", p.status);
+        assert_eq!(p.burns.len(), 1);
+        let r = p.report.as_ref().unwrap();
+        assert!(r.d_period_s > 0.0 && r.planned.sma_km > r.nominal.sma_km);
+        // The ISS OEM carries a ballistic coefficient, so drag is on and nothing is noted.
+        assert!(p.notes.is_empty(), "{:?}", p.notes);
+        // Bad edits are refused with a log line and leave the plan alone.
+        m.plan_edit("iss", PlanCommand::DelBurn(5), t);
+        m.plan_edit("iss", PlanCommand::Horizon(-1.0), t);
+        m.plan_edit(
+            "iss",
+            PlanCommand::Force {
+                name: "gravity".into(),
+                on: false,
+            },
+            t,
+        );
+        m.plan_edit("jwst", PlanCommand::Clear, t);
+        m.plan_edit("nobody", PlanCommand::Clear, t);
+        let w = m.world(t);
+        assert_eq!(w.plans[0].1.def.burns.len(), 1);
+        assert_eq!(
+            w.log
+                .iter()
+                .filter(|l| l.text.starts_with("plan rejected"))
+                .count(),
+            5
+        );
+        // Clearing the burns empties the plan.
+        m.plan_edit("iss", PlanCommand::Clear, t);
+        assert_eq!(m.world(t).plans[0].1.status, PlanStatus::Empty);
+        // A plan file name cannot escape the plans directory.
+        assert!(
+            plan_path("../x").is_err() && plan_path("").is_err() && plan_path("ok-1_a").is_ok()
+        );
     }
 
     #[test]

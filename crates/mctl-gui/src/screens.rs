@@ -1555,11 +1555,6 @@ fn sys_settings(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
 /// What each greyed page will contain, from DESIGN.md §9.6.
 fn describe(page: Page, sub: usize) -> &'static [&'static str] {
     match (page, sub) {
-        (Page::Traj, 3) => &[
-            "BURN TABLE: TRIGGER, EPOCH, FRAME (VNB/RTN), DELTA-V.",
-            "FORCE-MODEL TOGGLES, HORIZON, BALLISTIC COEFFICIENT.",
-            "RESULTS: DELTA ELEMENTS, NEW HA/HP, DELTA PERIOD, DELTA PHASE, PASS SHIFTS.",
-        ],
         (Page::Gnc, 0) => &[
             "SHADED 8-BALL WITH SKY/GROUND SPLIT, PITCH LADDER, HEADING MERIDIANS, ROLL SCALE,",
             "RATE AND ERROR NEEDLES. REFERENCE LVLH OR INERTIAL. NEVER SYNTHESISED WITHOUT AN ATTITUDE SOURCE.",
@@ -1660,6 +1655,7 @@ pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             (Page::Master, _) if is_l2(inp) => crate::deep::master(grid, inp),
             (Page::Traj, 0) if is_l2(inp) => crate::deep::traj_orbit(grid, inp),
             (Page::Traj, 2) if is_l2(inp) => crate::deep::traj_series(grid, inp),
+            (Page::Traj, 3) => crate::planner_page::planner(grid, inp),
             (Page::Ops, _) => crate::deep::ops(grid, inp),
             (Page::Master, _) => master(grid, inp),
             (Page::Traj, 0) => traj_orbit(grid, inp),

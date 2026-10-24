@@ -4,6 +4,7 @@
 
 use egui::{Align2, Painter, Pos2, Shape, Stroke};
 use glam::Vec3;
+use mctl_core::plan::{PlanPoint, PlanView};
 use mctl_core::time::Utc;
 use mctl_core::world::{EventKind, Solution, Track};
 
@@ -167,6 +168,78 @@ pub fn paint(
             "SUN",
             font,
             caution,
+        );
+    }
+}
+
+/// The plan point nearest `t`.
+pub fn plan_point_at(points: &[PlanPoint], t: Utc) -> Option<&PlanPoint> {
+    points
+        .iter()
+        .min_by(|a, b| (a.t.0 - t.0).abs().total_cmp(&(b.t.0 - t.0).abs()))
+}
+
+/// The nominal and planned trajectories over the orbit map (DESIGN.md FR-31): nominal dim and dashed,
+/// planned solid in the info colour, burns as diamonds numbered in time order.
+pub fn paint_plan(
+    painter: &Painter,
+    theme: &Theme,
+    rect_px: [u32; 4],
+    scene: &GlobeScene,
+    plan: &PlanView,
+    exaggeration: f32,
+) {
+    let p = &theme.palette;
+    let font = crate::fonts::font_id(theme);
+    let line = |points: &[PlanPoint], stroke: Stroke, dashed: bool| {
+        let mut run: Vec<Pos2> = Vec::new();
+        let flush = |run: &mut Vec<Pos2>| {
+            if run.len() > 1 {
+                let pts = std::mem::take(run);
+                if dashed {
+                    painter.add(Shape::dashed_line(&pts, stroke, 5.0, 4.0));
+                } else {
+                    painter.add(Shape::line(pts, stroke));
+                }
+            }
+            run.clear();
+        };
+        for pt in points {
+            let w = exaggerate(to_vec3(pt.r_gcrf_km), exaggeration);
+            match project(scene, rect_px, w) {
+                Some(px) if visible(scene, w) => run.push(px),
+                _ => flush(&mut run),
+            }
+        }
+        flush(&mut run);
+    };
+    line(&plan.nominal, Stroke::new(1.5, p.dim.to_egui()), true);
+    line(&plan.planned, Stroke::new(2.0, p.info.to_egui()), false);
+    for (i, b) in plan.burns.iter().enumerate() {
+        let Some(pt) = plan_point_at(&plan.planned, b.t) else {
+            continue;
+        };
+        let w = exaggerate(to_vec3(pt.r_gcrf_km), exaggeration);
+        let (Some(px), true) = (project(scene, rect_px, w), visible(scene, w)) else {
+            continue;
+        };
+        let s = 6.0;
+        painter.add(Shape::convex_polygon(
+            vec![
+                px + egui::vec2(0.0, -s),
+                px + egui::vec2(s, 0.0),
+                px + egui::vec2(0.0, s),
+                px + egui::vec2(-s, 0.0),
+            ],
+            p.caution.to_egui(),
+            Stroke::new(1.0, p.bright.to_egui()),
+        ));
+        painter.text(
+            px + egui::vec2(9.0, -9.0),
+            Align2::LEFT_BOTTOM,
+            format!("B{}", i + 1),
+            font.clone(),
+            p.bright.to_egui(),
         );
     }
 }

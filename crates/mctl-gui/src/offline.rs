@@ -230,6 +230,8 @@ pub struct ShotOptions {
     /// `page`, `page:sub` or `all`.
     pub pages: Vec<String>,
     pub low_power: bool,
+    /// Command lines run before the captures, e.g. `burn add apo vnb 1 0 0`.
+    pub exec: Vec<String>,
 }
 
 /// Expand `--pages` into (page, sub-page index) pairs.
@@ -276,6 +278,16 @@ pub fn shots(live: &Live, themes: Vec<Theme>, opts: &ShotOptions) -> Result<Vec<
     };
     let pages = expand_pages(&opts.pages)?;
     let mut written = Vec::new();
+    for line in &opts.exec {
+        let world = live.bus.latest();
+        off.console
+            .exec_line(line, &world)
+            .map_err(|e| anyhow::anyhow!("--exec {line:?}: {e}"))?;
+    }
+    if !opts.exec.is_empty() {
+        // Give the engine a moment to take the commands and publish the result.
+        std::thread::sleep(std::time::Duration::from_secs(4));
+    }
     for idx in which {
         off.select_theme(idx);
         if opts.effects_off {
@@ -618,6 +630,7 @@ mod tests {
                 .map(String::from)
                 .to_vec(),
             low_power: false,
+            exec: vec![],
         };
         shots(&live, themes, &opts).unwrap();
     }

@@ -151,6 +151,8 @@ impl Clock {
             | Command::SelectSite(_)
             | Command::AddSite { .. }
             | Command::SaveSite(_)
+            | Command::Plan { .. }
+            | Command::PlanRun(_)
             | Command::Trend { .. } => Err("not a clock command".into()),
         }
     }

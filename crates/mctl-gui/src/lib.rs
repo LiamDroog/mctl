@@ -19,6 +19,7 @@ mod offline;
 mod overlays;
 mod page;
 mod pages;
+mod planner_page;
 mod render;
 mod screens;
 mod sky;

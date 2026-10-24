@@ -297,8 +297,25 @@ impl Console {
             UiAction::CameraEarthFixed(b) => self.camera.earth_fixed = b,
             UiAction::FocusVehicle(b) => self.camera.focus_vehicle = b,
             UiAction::StateEcef(b) => self.show_ecef = b,
+            UiAction::Plan(edit) => {
+                let vehicle = self.vehicle_id.clone();
+                self.send(Command::Plan { vehicle, edit });
+            }
+            UiAction::PlanRun => {
+                let vehicle = self.vehicle_id.clone();
+                self.send(Command::PlanRun(vehicle));
+            }
         }
         Outcome::Continue
+    }
+
+    /// Run one command line as if typed after `:` (headless captures use this to set up a page).
+    pub fn exec_line(&mut self, line: &str, world: &World) -> Result<(), String> {
+        self.execute(line, world);
+        match &self.status {
+            Some((m, _)) if m.error => Err(m.text.clone()),
+            _ => Ok(()),
+        }
     }
 
     fn execute(&mut self, line: &str, world: &World) -> Outcome {
@@ -650,7 +667,10 @@ impl Console {
                 }
             }
             for (px, w) in &widget_px {
-                crate::widgets::paint(&painter, &theme, *px, w, vehicle, now);
+                let plan = vehicle
+                    .and_then(|v| world.plans.iter().find(|(id, _)| *id == v.id))
+                    .map(|(_, p)| &**p);
+                crate::widgets::paint(&painter, &theme, *px, w, vehicle, plan, now);
             }
             if let Some(px) = sky_px {
                 let site = world.observer.active_site();
@@ -675,7 +695,12 @@ impl Console {
             }
             if let Some(v) = vehicle {
                 if let Some(px) = ground_px {
-                    page::paint_ground_track(&painter, &theme, px, coast, v, &world.observer);
+                    let plan = world
+                        .plans
+                        .iter()
+                        .find(|(id, _)| *id == v.id)
+                        .map(|(_, p)| &**p);
+                    page::paint_ground_track(&painter, &theme, px, coast, v, &world.observer, plan);
                 }
                 if let Some(px) = eclipse_px {
                     page::paint_eclipse_ring(&painter, &theme, px, v, now);
@@ -692,6 +717,18 @@ impl Console {
                         sol,
                         self.camera.exaggeration(),
                     );
+                    if let Some((_, plan)) =
+                        vehicle.and_then(|v| world.plans.iter().find(|(id, _)| *id == v.id))
+                    {
+                        crate::overlays::paint_plan(
+                            &painter,
+                            &theme,
+                            globe_px,
+                            sc,
+                            plan,
+                            self.camera.exaggeration(),
+                        );
+                    }
                 }
                 // Label the vehicle over the globe, flagging it when the Earth hides it.
                 let clip = sc.view_proj * sc.vehicle.extend(1.0);

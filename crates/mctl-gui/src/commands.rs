@@ -32,6 +32,10 @@ pub enum UiAction {
     CameraEarthFixed(bool),
     FocusVehicle(bool),
     StateEcef(bool),
+    /// Edit the maneuver plan of the selected vehicle.
+    Plan(mctl_core::plan::PlanCommand),
+    /// Recompute the selected vehicle's plan from the current clock time.
+    PlanRun,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -83,6 +87,14 @@ pub const COMMANDS: &[(&str, &str)] = &[
     (
         "trend",
         "trend <6h|24h|7d|30d|90d>  window of the trend plots (TRAJ, elements and trends)",
+    ),
+    (
+        "burn",
+        "burn add <an|dn|apo|peri|epoch> <vnb|rtn> <dx> <dy> <dz>  (m/s) | burn del <n> | burn clear",
+    ),
+    (
+        "plan",
+        "plan run | horizon <revs> | force <zonal|sun|moon|drag|srp> <on|off> | drag <scale> | save|load <name>",
     ),
     ("camera", "camera <inertial|earthfixed>"),
     ("focus", "focus <earth|vehicle>"),
@@ -300,6 +312,49 @@ pub fn parse(line: &str, names: &Names<'_>) -> Result<Action, String> {
             "ecef" | "itrf" => ui(UiAction::StateEcef(true)),
             o => Err(format!("frame: expected eci or ecef, got {o:?}")),
         },
+        "burn" => {
+            use mctl_core::plan::{BurnDef, BurnFrame, PlanCommand};
+            let num = |a: &str| {
+                a.parse::<f64>()
+                    .map_err(|_| format!("burn: {a:?} is not a number"))
+            };
+            match args {
+                ["add", trig, frame, dx, dy, dz] => {
+                    let b = BurnDef {
+                        trigger: (*trig).to_owned(),
+                        frame: BurnFrame::parse(frame).map_err(|e| e.to_string())?,
+                        dv_m_s: [num(dx)?, num(dy)?, num(dz)?],
+                    };
+                    b.validate().map_err(|e| e.to_string())?;
+                    ui(UiAction::Plan(PlanCommand::AddBurn(b)))
+                }
+                ["del", n] => {
+                    let n: usize = n.parse().map_err(|_| format!("burn del: {n:?} is not a burn number"))?;
+                    ui(UiAction::Plan(PlanCommand::DelBurn(n)))
+                }
+                ["clear"] => ui(UiAction::Plan(PlanCommand::Clear)),
+                _ => Err("burn: use 'burn add <trigger> <vnb|rtn> <dx> <dy> <dz>', 'burn del <n>' or 'burn clear'".into()),
+            }
+        }
+        "plan" => {
+            use mctl_core::plan::PlanCommand;
+            match args {
+                ["run"] => ui(UiAction::PlanRun),
+                ["horizon", r] => ui(UiAction::Plan(PlanCommand::Horizon(
+                    r.parse().map_err(|_| format!("plan horizon: {r:?} is not a number of revolutions"))?,
+                ))),
+                ["force", name, onoff] => ui(UiAction::Plan(PlanCommand::Force {
+                    name: name.to_ascii_lowercase(),
+                    on: on_off(onoff)?,
+                })),
+                ["drag", x] => ui(UiAction::Plan(PlanCommand::DragScale(
+                    x.parse().map_err(|_| format!("plan drag: {x:?} is not a number"))?,
+                ))),
+                ["save", n] => ui(UiAction::Plan(PlanCommand::Save((*n).to_owned()))),
+                ["load", n] => ui(UiAction::Plan(PlanCommand::Load((*n).to_owned()))),
+                _ => Err("plan: run | horizon <revs> | force <name> <on|off> | drag <scale> | save <name> | load <name>".into()),
+            }
+        }
         "help" => ui(UiAction::ToggleHelp),
         "quit" => ui(UiAction::Quit),
         _ => unreachable!("every command in COMMANDS is handled"),
@@ -409,6 +464,17 @@ pub fn complete(line: &str, names: &Names<'_>) -> Completion {
                 (Some("focus"), 1) => vec!["earth".into(), "vehicle".into()],
                 (Some("frame"), 1) => vec!["eci".into(), "ecef".into()],
                 (Some("seek"), 1) => vec!["now".into()],
+                (Some("burn"), 1) => vec!["add".into(), "del".into(), "clear".into()],
+                (Some("burn"), 2) => ["an", "dn", "apo", "peri"].map(String::from).to_vec(),
+                (Some("burn"), 3) => vec!["vnb".into(), "rtn".into()],
+                (Some("plan"), 1) => ["run", "horizon", "force", "drag", "save", "load"]
+                    .map(String::from)
+                    .to_vec(),
+                (Some("plan"), 2) if words.get(1).is_some_and(|w| *w == "force") => {
+                    ["zonal", "sun", "moon", "drag", "srp"]
+                        .map(String::from)
+                        .to_vec()
+                }
                 _ => vec![],
             }
         }
@@ -576,7 +642,8 @@ mod tests {
         assert!(
             p("burn add next-apo vnb 0.5 0 0")
                 .unwrap_err()
-                .contains("unknown command")
+                .contains("trigger"),
+            "a bad trigger names itself"
         );
         assert!(p("").unwrap_err().contains("empty"));
         assert!(p("   ").unwrap_err().contains("empty"));
@@ -654,6 +721,48 @@ mod tests {
     }
 
     #[test]
+    fn burn_and_plan_commands_parse_into_plan_edits() {
+        use mctl_core::plan::{BurnDef, BurnFrame, PlanCommand};
+        let ui = |c| Ok(Action::Ui(UiAction::Plan(c)));
+        assert_eq!(
+            p("burn add apo vnb 1 0 -0.5"),
+            ui(PlanCommand::AddBurn(BurnDef {
+                trigger: "apo".into(),
+                frame: BurnFrame::Vnb,
+                dv_m_s: [1.0, 0.0, -0.5]
+            }))
+        );
+        assert!(p("burn add 2026-10-25T12:00:00 rtn 0 1 0").is_ok());
+        assert_eq!(p("burn del 2"), ui(PlanCommand::DelBurn(2)));
+        assert_eq!(p("burn clear"), ui(PlanCommand::Clear));
+        assert!(p("burn add apo vnb 1 0").unwrap_err().contains("burn:"));
+        assert!(p("burn add apo xyz 1 0 0").unwrap_err().contains("frame"));
+        assert!(
+            p("burn add apo vnb 5000 0 0")
+                .unwrap_err()
+                .contains("exceeds")
+        );
+        assert!(p("burn del x").unwrap_err().contains("burn number"));
+        assert_eq!(p("plan run"), Ok(Action::Ui(UiAction::PlanRun)));
+        assert_eq!(p("plan horizon 5"), ui(PlanCommand::Horizon(5.0)));
+        assert_eq!(
+            p("plan force Drag off"),
+            ui(PlanCommand::Force {
+                name: "drag".into(),
+                on: false
+            })
+        );
+        assert_eq!(p("plan drag 0.4"), ui(PlanCommand::DragScale(0.4)));
+        assert_eq!(
+            p("plan save test-1"),
+            ui(PlanCommand::Save("test-1".into()))
+        );
+        assert!(p("plan force drag maybe").is_err());
+        assert!(p("plan").unwrap_err().contains("plan:"));
+        assert_eq!(c("burn a").line, "burn add ");
+    }
+
+    #[test]
     fn every_listed_command_parses_with_valid_arguments() {
         for (name, _) in COMMANDS {
             let arg = match *name {
@@ -670,6 +779,8 @@ mod tests {
                 "trend" => " 24h",
                 "focus" => " earth",
                 "frame" => " eci",
+                "burn" => " clear",
+                "plan" => " run",
                 _ => "",
             };
             assert!(p(&format!("{name}{arg}")).is_ok(), "{name}{arg}");

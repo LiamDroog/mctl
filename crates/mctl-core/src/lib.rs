@@ -6,6 +6,7 @@ pub mod bus;
 pub mod command;
 pub mod config;
 pub mod cw;
+pub mod plan;
 pub mod schedule;
 pub mod state;
 pub mod time;

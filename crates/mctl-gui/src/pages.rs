@@ -156,7 +156,9 @@ pub fn availability(page: Page, sub: usize, vehicle: Option<&VehicleView>) -> Av
     let l2 = vehicle.is_some_and(|v| v.regime == Regime::L2);
     match page {
         Page::Master | Page::Sys => Available,
-        Page::Traj if sub == 3 => NoSource("maneuver planner arrives in M5".into()),
+        Page::Traj if sub == 3 && l2 => NoSource(
+            "the maneuver planner models Earth-orbit vehicles; an L2 halo orbit is not planned here".into(),
+        ),
         Page::Traj if l2 && sub == 1 => NoSource(
             "a ground track means nothing 1.5 million km from Earth; see the halo plots".into(),
         ),
@@ -260,9 +262,7 @@ mod tests {
             availability(Page::Traj, 0, Some(&hst)),
             Availability::Available
         );
-        assert!(
-            matches!(availability(Page::Traj, 3, Some(&iss)), Availability::NoSource(r) if r.contains("M5"))
-        );
+        assert!(availability(Page::Traj, 3, Some(&iss)) == Availability::Available);
         assert!(
             matches!(availability(Page::Eps, 1, Some(&iss)), Availability::NoSource(r) if r.contains("no battery"))
         );

@@ -45,8 +45,19 @@ pub fn paint(
     px: [u32; 4],
     w: &Widget,
     vehicle: Option<&VehicleView>,
+    plan: Option<&mctl_core::plan::PlanView>,
     now: Utc,
 ) {
+    if let Widget::Plot {
+        kind: k @ (PlotKind::PlanAltitude | PlotKind::PlanSeparation),
+        ..
+    } = w
+    {
+        if let Some(plan) = plan {
+            plan_plot(painter, theme, px, plan, *k, now);
+        }
+        return;
+    }
     match w {
         Widget::Bar {
             frac,
@@ -65,6 +76,7 @@ pub fn paint(
                 PlotKind::Halo => halo(painter, theme, px, v, now),
                 PlotKind::TopView => top_view(painter, theme, px, v, now),
                 PlotKind::DeepSeries(s) => deep_series(painter, theme, px, v, now, *s),
+                PlotKind::PlanAltitude | PlotKind::PlanSeparation => {}
                 PlotKind::Timeline => timeline(painter, theme, px, v, now),
                 PlotKind::InstrumentShare => instrument_share(painter, theme, px, v, now),
             }
@@ -727,7 +739,7 @@ fn time_plot(
         p.dim.to_egui(),
     );
     painter.text(
-        r.right_bottom() + vec2(-4.0, -2.0),
+        r.right_bottom() + vec2(-4.0, -22.0),
         Align2::RIGHT_BOTTOM,
         crate::trendplot::axis_label(lo),
         font.clone(),
@@ -750,7 +762,11 @@ fn time_plot(
                 r.bottom() - 2.0 - if (pos - nx).abs() < 60.0 { 14.0 } else { 0.0 },
             ),
             align,
-            format!("{:+.0}d", (t - now.0) / 86_400.0),
+            if t1 - t0 < 2.0 * 86_400.0 {
+                format!("{:+.1}h", (t - now.0) / 3600.0)
+            } else {
+                format!("{:+.0}d", (t - now.0) / 86_400.0)
+            },
             font.clone(),
             p.dim.to_egui(),
         );
@@ -949,6 +965,36 @@ fn instrument_share(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleV
             p.dim.to_egui(),
         );
     }
+}
+
+fn plan_plot(
+    painter: &Painter,
+    theme: &Theme,
+    px: [u32; 4],
+    plan: &mctl_core::plan::PlanView,
+    kind: PlotKind,
+    now: Utc,
+) {
+    let alt = |pts: &[mctl_core::plan::PlanPoint]| -> Vec<(f64, f32)> {
+        pts.iter().map(|p| (p.t.0, p.alt_km as f32)).collect()
+    };
+    let series: Vec<(&str, Vec<(f64, f32)>)> = match kind {
+        PlotKind::PlanAltitude => vec![
+            ("NOMINAL ALTITUDE (km)", alt(&plan.nominal)),
+            ("PLANNED", alt(&plan.planned)),
+        ],
+        _ => vec![(
+            "SEPARATION FROM NOMINAL (km)",
+            plan.separation_km
+                .iter()
+                .map(|(t, d)| (t.0, *d as f32))
+                .collect(),
+        )],
+    };
+    if series.iter().all(|(_, s)| s.len() < 2) {
+        return;
+    }
+    time_plot(painter, theme, px, &series, now);
 }
 
 #[cfg(test)]

@@ -159,6 +159,10 @@ pub enum PlotKind {
     TopView,
     /// Distance, off-axis angle, Y/Z offsets or range rate against time, from the track.
     DeepSeries(DeepSeries),
+    /// Altitude of the nominal and planned orbits against time.
+    PlanAltitude,
+    /// Distance between the planned and nominal vehicle against time.
+    PlanSeparation,
     /// JWST visit timeline by instrument.
     Timeline,
     /// Hours of observing per instrument over the schedule.

@@ -224,6 +224,10 @@ pub struct VehicleDef {
     /// Request for the `horizons` source; required when that source is listed.
     #[serde(default)]
     pub horizons: Option<HorizonsDef>,
+    /// Cd*A/m, m^2/kg, for the planner's drag model when no OEM supplies one. Leave unset when unknown:
+    /// the planner then says drag is off rather than guessing.
+    #[serde(default)]
+    pub ballistic_m2_per_kg: Option<f64>,
     /// Observing schedule shown on the OPS page: `jwst` or `hst`.
     #[serde(default)]
     pub schedule: Option<String>,

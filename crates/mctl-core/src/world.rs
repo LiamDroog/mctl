@@ -457,6 +457,8 @@ pub struct World {
     pub observer: ObserverView,
     /// Latest trend computation requested by the UI.
     pub trends: Option<Arc<TrendSet>>,
+    /// Maneuver plans by vehicle id, for vehicles that have one.
+    pub plans: Vec<(String, Arc<crate::plan::PlanView>)>,
     pub vehicles: Vec<VehicleView>,
 }
 
@@ -474,6 +476,7 @@ impl World {
             telemetry: None,
             cw: CwView::default(),
             trends: None,
+            plans: Vec::new(),
             observer: ObserverView {
                 sites: Vec::new(),
                 active: 0,

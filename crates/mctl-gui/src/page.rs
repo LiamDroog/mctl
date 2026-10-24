@@ -238,6 +238,7 @@ pub fn paint_ground_track(
     coast: &[crate::coast::Line],
     v: &VehicleView,
     observer: &mctl_core::world::ObserverView,
+    plan: Option<&mctl_core::plan::PlanView>,
 ) {
     let [px0, py0, pw, ph] = rect_px;
     if pw < 8 || ph < 8 {
@@ -403,6 +404,55 @@ pub fn paint_ground_track(
         prev_lon = Some(p.lon_deg);
     }
     draw(&mut seg, seg_future);
+    if let Some(plan) = plan {
+        // The planned and nominal ground tracks: nominal dashed dim, planned solid, burns numbered.
+        let trace = |pts: &[mctl_core::plan::PlanPoint], stroke: Stroke, dashed: bool| {
+            let mut run: Vec<Pos2> = Vec::new();
+            let mut prev: Option<f64> = None;
+            let flush = |run: &mut Vec<Pos2>| {
+                if run.len() > 1 {
+                    let pts = std::mem::take(run);
+                    if dashed {
+                        painter.extend(egui::Shape::dashed_line(&pts, stroke, 5.0, 4.0));
+                    } else {
+                        painter.add(egui::Shape::line(pts, stroke));
+                    }
+                }
+                run.clear();
+            };
+            for q in pts {
+                if prev.is_some_and(|l| (l - q.lon_deg).abs() > 180.0) {
+                    flush(&mut run);
+                }
+                run.push(to_screen(q.lon_deg, q.lat_deg));
+                prev = Some(q.lon_deg);
+            }
+            flush(&mut run);
+        };
+        trace(
+            &plan.nominal,
+            Stroke::new(1.5, theme.palette.dim.to_egui()),
+            true,
+        );
+        trace(
+            &plan.planned,
+            Stroke::new(2.0, theme.palette.info.to_egui()),
+            false,
+        );
+        for (i, b) in plan.burns.iter().enumerate() {
+            if let Some(q) = crate::overlays::plan_point_at(&plan.planned, b.t) {
+                let at = to_screen(q.lon_deg, q.lat_deg);
+                painter.circle_filled(at, 4.0, theme.palette.caution.to_egui());
+                painter.text(
+                    at + egui::vec2(6.0, -6.0),
+                    egui::Align2::LEFT_BOTTOM,
+                    format!("B{}", i + 1),
+                    crate::fonts::font_id(theme),
+                    theme.palette.bright.to_egui(),
+                );
+            }
+        }
+    }
     if let Some(sol) = &v.solution {
         let at = to_screen(sol.geodetic.lon_deg, sol.geodetic.lat_deg);
         painter.circle_stroke(at, 7.0, Stroke::new(2.5, theme.globe.vehicle.to_egui()));

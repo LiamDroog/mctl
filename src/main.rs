@@ -94,6 +94,10 @@ enum Command {
         /// sample per 10 s).
         #[arg(long, default_value_t = 0.0)]
         settle_s: f64,
+        /// Console commands to run before capturing, separated by `;` (for example
+        /// `--exec "burn add apo vnb 1 0 0;plan horizon 3"`).
+        #[arg(long, value_delimiter = ';')]
+        exec: Vec<String>,
     },
     /// Headless frame-time benchmark of the full pipeline.
     Bench {
@@ -451,6 +455,7 @@ fn main() -> Result<()> {
             pages,
             wait_s,
             settle_s,
+            exec,
         }) => {
             let (live, _engine) = start_live(&cfg, cli.vehicle.as_deref(), cli.offline, false)?;
             wait_for_data(&live.bus, &live.vehicle_id, wait_s);
@@ -481,6 +486,7 @@ fn main() -> Result<()> {
                 warmup_frames: warmup,
                 pages,
                 low_power: cli.low_power,
+                exec,
             };
             mctl_gui::shots(&live, load_themes(&cli.themes_dir)?, &opts).map(|_| ())
         }

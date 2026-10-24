@@ -7,6 +7,7 @@ pub mod kepler;
 pub mod l2;
 pub mod local_frames;
 pub mod moon;
+pub mod numerical;
 pub mod observer;
 pub mod oem;
 pub mod sgp4model;
