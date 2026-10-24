@@ -9,6 +9,7 @@ mod assets;
 mod coast;
 mod commands;
 mod console;
+mod deep;
 mod fonts;
 mod globe;
 mod gpu;
@@ -24,6 +25,7 @@ mod sky;
 mod telemetry_view;
 mod theme;
 mod trendplot;
+mod widgets;
 
 pub use app::{Options, Present, run};
 /// Check the `[keys]` table, so a bad binding fails at start-up with its reason.

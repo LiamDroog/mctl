@@ -309,7 +309,14 @@ pub struct TelemetryItem {
     pub rx: Utc,
     /// Seconds between receive time and the receive wall clock now; computed by the engine.
     pub age_s: f64,
+    /// Recent numeric values, oldest first, one per `HISTORY_PERIOD_S` (empty for text items).
+    pub history: Arc<[f32]>,
 }
+
+/// Spacing of the recent-value samples kept for each telemetry item, seconds.
+pub const HISTORY_PERIOD_S: f64 = 10.0;
+/// Samples kept per item (15 minutes at the period above).
+pub const HISTORY_LEN: usize = 90;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TelemetryView {

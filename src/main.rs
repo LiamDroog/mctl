@@ -90,6 +90,10 @@ enum Command {
         /// Seconds to wait for sources before rendering.
         #[arg(long, default_value_t = DEFAULT_WAIT_S)]
         wait_s: f64,
+        /// Extra seconds to keep running once data has arrived, so recent-history charts fill (one
+        /// sample per 10 s).
+        #[arg(long, default_value_t = 0.0)]
+        settle_s: f64,
     },
     /// Headless frame-time benchmark of the full pipeline.
     Bench {
@@ -446,6 +450,7 @@ fn main() -> Result<()> {
             warmup,
             pages,
             wait_s,
+            settle_s,
         }) => {
             let (live, _engine) = start_live(&cfg, cli.vehicle.as_deref(), cli.offline, false)?;
             wait_for_data(&live.bus, &live.vehicle_id, wait_s);
@@ -467,6 +472,7 @@ fn main() -> Result<()> {
                     std::thread::sleep(Duration::from_millis(200));
                 }
             }
+            std::thread::sleep(Duration::from_secs_f64(settle_s.max(0.0)));
             let opts = mctl_gui::ShotOptions {
                 size: mctl_gui::parse_size(&size)?,
                 theme,

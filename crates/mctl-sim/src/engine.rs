@@ -23,9 +23,9 @@ use mctl_core::cw::{Condition, Latch, Metric, RuleDef, Sample as CwSample, Track
 use mctl_core::state::{Elements, Geodetic, Quality, SourceKind, State};
 use mctl_core::time::{EopTable, Utc};
 use mctl_core::world::{
-    ClockView, CwRuleView, CwView, DeepView, EopView, Health, LogEntry, LookView, ObserverView,
-    PassSet, Residual, SiteView, Solution, SourceStatus, SourceView, TelemetryItem, TelemetryView,
-    Track, TrackPoint, VehicleView, World,
+    ClockView, CwRuleView, CwView, DeepView, EopView, HISTORY_LEN, HISTORY_PERIOD_S, Health,
+    LogEntry, LookView, ObserverView, PassSet, Residual, SiteView, Solution, SourceStatus,
+    SourceView, TelemetryItem, TelemetryView, Track, TrackPoint, VehicleView, World,
 };
 use mctl_sources::tasks::{DataInfo, Event, Payload, SourceKey, SourceSet, TelemetryMeta};
 use mctl_store::{Record, Recorder};
@@ -45,6 +45,8 @@ const EVENT_STEPS_PER_REV: f64 = 200.0;
 const TRACK_REBUILD_S: f64 = 1.0;
 /// Track window for an L2 vehicle, days either side of now (a halo orbit takes about six months).
 const DEEP_TRACK_DAYS: f64 = 90.0;
+/// A telemetry value older than this is not added to the item's recent history, seconds.
+const HISTORY_STALE_S: f64 = 120.0;
 
 struct Loaded<T> {
     data: Arc<T>,
@@ -78,6 +80,10 @@ pub struct Model {
     telemetry_meta: Vec<TelemetryMeta>,
     telemetry: HashMap<String, (Option<String>, Utc)>,
     telemetry_health: Option<Health>,
+    /// Recent numeric samples per item, and the same as shared slices rebuilt only when sampled.
+    history: HashMap<String, VecDeque<f32>>,
+    history_view: HashMap<String, Arc<[f32]>>,
+    history_last: f64,
     cw_rules: Vec<(RuleDef, Tracker)>,
     latch: Latch,
     prev_conditions: HashSet<String>,
@@ -250,6 +256,9 @@ impl Model {
             telemetry_meta: Vec::new(),
             telemetry: HashMap::new(),
             telemetry_health: None,
+            history: HashMap::new(),
+            history_view: HashMap::new(),
+            history_last: f64::NEG_INFINITY,
             cw_rules,
             latch: Latch::default(),
             prev_conditions: HashSet::new(),
@@ -782,6 +791,30 @@ impl Model {
         }
     }
 
+    /// Append one sample per numeric item once `HISTORY_PERIOD_S` has passed. A value that has not
+    /// been refreshed for a few periods is skipped (a gap), never repeated as if it were current.
+    fn sample_history(&mut self, wall: Utc) {
+        if wall.0 - self.history_last < HISTORY_PERIOD_S {
+            return;
+        }
+        self.history_last = wall.0;
+        for (id, (text, rx)) in &self.telemetry {
+            let Some(v) = text.as_deref().and_then(|t| t.trim().parse::<f32>().ok()) else {
+                continue;
+            };
+            if !v.is_finite() || wall.minus(*rx) > HISTORY_STALE_S {
+                continue;
+            }
+            let h = self.history.entry(id.clone()).or_default();
+            h.push_back(v);
+            while h.len() > HISTORY_LEN {
+                h.pop_front();
+            }
+            self.history_view
+                .insert(id.clone(), h.iter().copied().collect());
+        }
+    }
+
     /// Tell the model which telemetry items exist (their order is the display order).
     pub fn set_telemetry(&mut self, meta: Vec<TelemetryMeta>) {
         if !meta.is_empty() && self.telemetry_health.is_none() {
@@ -1061,6 +1094,7 @@ impl Model {
                 }
             }
         }
+        self.sample_history(wall);
         let telemetry = self.telemetry_health.clone().map(|health| TelemetryView {
             health,
             subscribed: self.telemetry_meta.len(),
@@ -1083,6 +1117,7 @@ impl Model {
                         text: text.clone(),
                         rx: *rx,
                         age_s: wall.minus(*rx),
+                        history: self.history_view.get(&m.id).cloned().unwrap_or_default(),
                     })
                 })
                 .collect(),
@@ -1747,6 +1782,42 @@ mod tests {
         let v = w.vehicles.iter().find(|v| v.id == "jwst").unwrap();
         assert!(v.solution.is_none());
         assert_eq!(v.sources[0].status, SourceStatus::OutOfSpan);
+    }
+
+    #[test]
+    fn telemetry_history_samples_once_per_period_and_leaves_gaps_for_old_values() {
+        let mut m = model();
+        m.set_telemetry(vec![meta("A"), meta("B")]);
+        let at = |m: &mut Model, id: &str, v: &str, rx: f64| {
+            m.apply(Event::Telemetry {
+                id: id.into(),
+                text: Some(v.into()),
+                rx: Utc(rx),
+            })
+        };
+        at(&mut m, "A", "1.5", 100.0);
+        at(&mut m, "B", "open", 100.0);
+        let hist = |m: &mut Model, wall: f64, id: &str| -> Vec<f32> {
+            let w = m.world_at(Utc(wall), ClockView::LIVE, Utc(wall));
+            w.telemetry.unwrap().get(id).unwrap().history.to_vec()
+        };
+        assert_eq!(hist(&mut m, 100.0, "A"), [1.5]);
+        // Ticks inside one period add nothing, however many there are.
+        assert_eq!(hist(&mut m, 103.0, "A"), [1.5]);
+        at(&mut m, "A", "2.5", 109.0);
+        assert_eq!(hist(&mut m, 110.0, "A"), [1.5, 2.5]);
+        // Text items have no history.
+        assert!(hist(&mut m, 110.0, "B").is_empty());
+        // A value last refreshed long ago leaves a gap instead of being repeated.
+        assert_eq!(hist(&mut m, 300.0, "A"), [1.5, 2.5]);
+        // The window is bounded.
+        for k in 0..(HISTORY_LEN + 20) {
+            let t = 1000.0 + HISTORY_PERIOD_S * k as f64;
+            at(&mut m, "A", "3.0", t);
+            hist(&mut m, t, "A");
+        }
+        let last = 1000.0 + HISTORY_PERIOD_S * (HISTORY_LEN + 19) as f64;
+        assert_eq!(hist(&mut m, last, "A").len(), HISTORY_LEN);
     }
 
     #[test]

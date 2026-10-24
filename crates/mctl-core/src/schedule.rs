@@ -65,6 +65,29 @@ impl JwstSchedule {
         self.visits.iter().filter(move |v| v.start.0 > t.0)
     }
 
+    /// Hours of prime observing per instrument family inside `[from, to]` (visits are clipped to the
+    /// window; maintenance activities are counted as `MAINT`). Largest first.
+    pub fn hours_by_instrument(&self, from: Utc, to: Utc) -> Vec<(String, f64)> {
+        let mut out: Vec<(String, f64)> = Vec::new();
+        for v in &self.visits {
+            let (a, b) = (v.start.0.max(from.0), v.end().0.min(to.0));
+            if b <= a {
+                continue;
+            }
+            let family = if v.is_maintenance() {
+                "MAINT".to_owned()
+            } else {
+                v.instrument_family().to_owned()
+            };
+            match out.iter_mut().find(|(f, _)| *f == family) {
+                Some((_, h)) => *h += (b - a) / 3600.0,
+                None => out.push((family, (b - a) / 3600.0)),
+            }
+        }
+        out.sort_by(|a, b| b.1.total_cmp(&a.1));
+        out
+    }
+
     /// Span of time the schedule covers.
     pub fn span(&self) -> Option<(Utc, Utc)> {
         let first = self.visits.first()?.start;
@@ -101,4 +124,61 @@ pub struct HstReport {
 pub enum Ops {
     Jwst(std::sync::Arc<JwstSchedule>),
     Hst(std::sync::Arc<HstReport>),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn visit(id: &str, start: f64, dur: f64, instrument: &str) -> Visit {
+        Visit {
+            id: id.into(),
+            start: Utc(start),
+            duration_s: dur,
+            kind: "PRIME TARGETED FIXED".into(),
+            pcs_mode: String::new(),
+            instrument: instrument.into(),
+            target: "T".into(),
+            category: String::new(),
+            parallels: vec![],
+        }
+    }
+
+    fn sched() -> JwstSchedule {
+        JwstSchedule {
+            visits: vec![
+                visit("a", 0.0, 3600.0, "NIRSpec MultiObject Spectroscopy"),
+                visit("b", 3600.0, 7200.0, "NIRCam Imaging"),
+                visit("c", 10_800.0, 1800.0, "NIRSpec Fixed Slit"),
+                visit("m", 12_600.0, 600.0, ""),
+            ],
+            files: vec![],
+            fetched_at: Utc(0.0),
+        }
+    }
+
+    #[test]
+    fn current_and_upcoming_visits() {
+        let s = sched();
+        assert_eq!(s.current(Utc(4000.0)).unwrap().id, "b");
+        assert!(s.current(Utc(-1.0)).is_none());
+        // A visit ends exactly when the next begins; at that instant the next one is current.
+        assert_eq!(s.current(Utc(3600.0)).unwrap().id, "b");
+        let up: Vec<&str> = s.upcoming(Utc(4000.0)).map(|v| v.id.as_str()).collect();
+        assert_eq!(up, ["c", "m"]);
+        assert_eq!(s.span(), Some((Utc(0.0), Utc(13_200.0))));
+    }
+
+    #[test]
+    fn hours_per_instrument_are_clipped_to_the_window_and_sorted() {
+        let h = sched().hours_by_instrument(Utc(1800.0), Utc(12_600.0));
+        // NIRCam 2 h; NIRSpec 0.5 h (clipped) + 0.5 h; the maintenance visit starts at the window end.
+        assert_eq!(h[0].0, "NIRCam");
+        assert!((h[0].1 - 2.0).abs() < 1e-9);
+        assert_eq!(h[1].0, "NIRSpec");
+        assert!((h[1].1 - 1.0).abs() < 1e-9);
+        assert_eq!(h.len(), 2);
+        let all = sched().hours_by_instrument(Utc(0.0), Utc(20_000.0));
+        assert!(all.iter().any(|(f, _)| f == "MAINT"));
+    }
 }

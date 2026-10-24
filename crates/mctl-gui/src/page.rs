@@ -63,6 +63,8 @@ pub struct Layout {
     pub sky: Option<CellRect>,
     /// Trend plots to draw: (pixel area, index into the trend set's plots).
     pub plots: Vec<(CellRect, usize)>,
+    /// Pixel-drawn widgets queued by the panels (gauges, sparklines, dials, plots).
+    pub widgets: Vec<crate::grid::Widget>,
     /// Clickable footer legend entries: (first column, last column inclusive, row, page).
     pub legend: Vec<(usize, usize, usize, crate::pages::Page)>,
 }
@@ -142,6 +144,19 @@ impl<'a> Lines<'a> {
         self.put(8, value, value_style);
         self.put(8 + value.chars().count() + 1, unit, dim);
         self.row += 1;
+    }
+
+    /// A horizontal gauge on the current row, `width` cells wide starting at `col`.
+    pub(crate) fn bar(&mut self, col: usize, width: usize, frac: f32, limit: Option<Limit>) {
+        if self.row < self.rect.rows && col + width <= self.rect.cols && width > 0 {
+            self.grid.widget(crate::grid::Widget::Bar {
+                rect: CellRect::new(self.rect.col + col, self.rect.row + self.row, width, 1),
+                frac,
+                centered: false,
+                limit,
+                ticks: Vec::new(),
+            });
+        }
     }
 
     pub(crate) fn no_data(&mut self, why: &str) {
@@ -727,6 +742,86 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn another_vehicles_telemetry_never_appears_on_a_vehicle_without_a_feed() {
+        let mut w = bare_world();
+        w.telemetry = Some(mctl_core::world::TelemetryView {
+            health: Health::Ok,
+            items: vec![],
+            subscribed: 5,
+            group_totals: vec![("attitude".into(), 5)],
+        });
+        let hubble = view(SourceStatus::Active, Health::Ok, None);
+        let (g, _) = render_page(&w, Some(&hubble), Page::Master, 0, 160, 45);
+        assert!(!g.text().contains("ITEMS RECEIVED"), "{}", g.text());
+        assert!(g.text().contains("NO SOURCE"));
+        let mut iss = view(SourceStatus::Active, Health::Ok, None);
+        iss.telemetry = Some("isslive".into());
+        let (g, _) = render_page(&w, Some(&iss), Page::Master, 0, 160, 45);
+        assert!(
+            g.text().contains("ITEMS RECEIVED"),
+            "the ISS still shows its own feed"
+        );
+    }
+
+    fn l2_view() -> VehicleView {
+        let mut v = view(SourceStatus::Active, Health::Ok, None);
+        v.name = "JWST".into();
+        v.norad = 0;
+        v.regime = mctl_core::config::Regime::L2;
+        v.schedule = Some("jwst".into());
+        v.ops_health = Some(Health::Starting);
+        v
+    }
+
+    #[test]
+    fn l2_pages_render_at_every_size_and_queue_their_plots() {
+        use crate::grid::{PlotKind, Widget};
+        let v = l2_view();
+        let w = bare_world();
+        for (cols, rows) in [(160, 45), (100, 30), (60, 20), (20, 6)] {
+            for (page, sub) in [
+                (Page::Master, 0),
+                (Page::Traj, 0),
+                (Page::Traj, 2),
+                (Page::Ops, 0),
+            ] {
+                let (g, _) = render_page(&w, Some(&v), page, sub, cols, rows);
+                if cols >= 100 {
+                    assert!(
+                        g.row_text(0).contains("JWST") && !g.row_text(0).contains("(0)"),
+                        "{}",
+                        g.row_text(0)
+                    );
+                }
+            }
+        }
+        let kinds = |page, sub| -> Vec<PlotKind> {
+            render_page(&w, Some(&v), page, sub, 160, 45)
+                .1
+                .widgets
+                .iter()
+                .filter_map(|w| match w {
+                    Widget::Plot { kind, .. } => Some(*kind),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert_eq!(kinds(Page::Master, 0), [PlotKind::Halo, PlotKind::TopView]);
+        assert_eq!(kinds(Page::Traj, 2).len(), 4);
+        // OPS with no schedule yet says so rather than drawing an empty timeline.
+        let (g, layout) = render_page(&w, Some(&v), Page::Ops, 0, 160, 45);
+        assert!(g.text().contains("SCHEDULE NOT YET LOADED"));
+        assert!(layout.widgets.is_empty());
+        // The ground track and passes are unavailable at L2, with the reason.
+        let (g, _) = render_page(&w, Some(&v), Page::Traj, 1, 160, 45);
+        assert!(
+            g.text().contains("GROUND TRACK MEANS NOTHING"),
+            "{}",
+            g.text()
+        );
     }
 
     #[test]

@@ -102,10 +102,82 @@ impl CellRect {
     }
 }
 
+/// A pixel-drawn element that sits in a cell rectangle the text grid leaves empty. Panels queue them
+/// while laying out text; the console paints them over the same rectangle.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Widget {
+    /// Horizontal gauge. `frac` is 0..1 filled from the left; when `centered`, -1..1 from the middle.
+    /// `ticks` are marks at 0..1 positions.
+    Bar {
+        rect: CellRect,
+        frac: f32,
+        centered: bool,
+        limit: Option<Limit>,
+        ticks: Vec<f32>,
+    },
+    /// A faint bar drawn behind a number: `frac` of the cell width, relative to its row's largest value.
+    DataBar { rect: CellRect, frac: f32 },
+    /// Line of recent values, scaled to its own min and max.
+    Spark {
+        rect: CellRect,
+        values: std::sync::Arc<[f32]>,
+        limit: Option<Limit>,
+    },
+    /// History chart: each series is evenly spaced samples ending now (`HISTORY_PERIOD_S` apart).
+    Chart {
+        rect: CellRect,
+        series: Vec<(String, std::sync::Arc<[f32]>)>,
+    },
+    /// Circular angle dial with a needle at `deg` (0 at the top, clockwise).
+    Dial {
+        rect: CellRect,
+        deg: f32,
+        limit: Option<Limit>,
+    },
+    /// A plot drawn from the selected vehicle's data.
+    Plot { rect: CellRect, kind: PlotKind },
+}
+
+impl Widget {
+    pub fn rect(&self) -> CellRect {
+        match self {
+            Self::Bar { rect, .. }
+            | Self::DataBar { rect, .. }
+            | Self::Chart { rect, .. }
+            | Self::Spark { rect, .. }
+            | Self::Dial { rect, .. }
+            | Self::Plot { rect, .. } => *rect,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlotKind {
+    /// L2 halo orbit seen from Earth (Y-Z).
+    Halo,
+    /// L2 orbit from ecliptic north (X-Y), with the Moon's orbit for scale.
+    TopView,
+    /// Distance, off-axis angle, Y/Z offsets or range rate against time, from the track.
+    DeepSeries(DeepSeries),
+    /// JWST visit timeline by instrument.
+    Timeline,
+    /// Hours of observing per instrument over the schedule.
+    InstrumentShare,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeepSeries {
+    Distance,
+    OffAxis,
+    Offsets,
+    RangeRate,
+}
+
 pub struct Grid {
     pub cols: usize,
     pub rows: usize,
     cells: Vec<Cell>,
+    widgets: Vec<Widget>,
 }
 
 impl Grid {
@@ -118,7 +190,18 @@ impl Grid {
             cols,
             rows,
             cells: vec![blank; cols * rows],
+            widgets: Vec::new(),
         }
+    }
+
+    /// Queue a pixel-drawn widget for the console to paint.
+    pub fn widget(&mut self, w: Widget) {
+        self.widgets.push(w);
+    }
+
+    /// Hand over the queued widgets (once per page render).
+    pub fn take_widgets(&mut self) -> Vec<Widget> {
+        std::mem::take(&mut self.widgets)
     }
 
     /// Write a string starting at (col, row). Anything outside the grid is clipped, never a panic:

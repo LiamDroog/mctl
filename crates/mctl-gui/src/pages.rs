@@ -3,6 +3,7 @@
 //! A page a vehicle has no data for is greyed with the reason (`NO SOURCE`), never hidden, so the
 //! layout stays stable across vehicles (DESIGN.md §2).
 
+use mctl_core::config::Regime;
 use mctl_core::world::VehicleView;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -17,9 +18,10 @@ pub enum Page {
     Prox,
     View,
     Sys,
+    Ops,
 }
 
-pub const ALL_PAGES: [Page; 10] = [
+pub const ALL_PAGES: [Page; 11] = [
     Page::Master,
     Page::Traj,
     Page::Gnc,
@@ -30,6 +32,7 @@ pub const ALL_PAGES: [Page; 10] = [
     Page::Prox,
     Page::View,
     Page::Sys,
+    Page::Ops,
 ];
 
 impl Page {
@@ -46,6 +49,7 @@ impl Page {
             Self::Prox => "prox",
             Self::View => "view",
             Self::Sys => "sys",
+            Self::Ops => "ops",
         }
     }
 
@@ -61,6 +65,7 @@ impl Page {
             Self::Prox => "PROX",
             Self::View => "VIEW",
             Self::Sys => "SYS",
+            Self::Ops => "OPS",
         }
     }
 
@@ -97,6 +102,7 @@ impl Page {
             Self::Prox => &["R-BAR/V-BAR"],
             Self::View => &["WINDOW VIEW"],
             Self::Sys => &["EVENT LOG", "SOURCE HEALTH", "SETTINGS", "C&W RULES"],
+            Self::Ops => &["OBSERVING SCHEDULE"],
         }
     }
 
@@ -147,10 +153,26 @@ pub fn availability(page: Page, sub: usize, vehicle: Option<&VehicleView>) -> Av
         Some("isslive") => NoSource(why.into()),
         _ => telemetry(vehicle),
     };
+    let l2 = vehicle.is_some_and(|v| v.regime == Regime::L2);
     match page {
         Page::Master | Page::Sys => Available,
         Page::Traj if sub == 3 => NoSource("maneuver planner arrives in M5".into()),
+        Page::Traj if l2 && sub == 1 => NoSource(
+            "a ground track means nothing 1.5 million km from Earth; see the halo plots".into(),
+        ),
         Page::Traj => Available,
+        Page::Pass if l2 => NoSource(
+            "an L2 vehicle is above the horizon for about half of every day; passes are not predicted"
+                .into(),
+        ),
+        Page::Ops => match vehicle {
+            None => NoSource("no vehicle data yet".into()),
+            Some(v) if v.schedule.is_some() => Available,
+            Some(v) => NoSource(format!(
+                "{} has no public observing schedule (none found)",
+                v.name
+            )),
+        },
         Page::Gnc | Page::Tcs => isslive(vehicle, true, ""),
         Page::Eps => isslive(
             vehicle,
@@ -200,7 +222,7 @@ mod tests {
             assert!(!p.subpages().is_empty());
         }
         assert_eq!(Page::from_fkey(0), None);
-        assert_eq!(Page::from_fkey(11), None);
+        assert_eq!(Page::from_fkey(12), None);
         assert_eq!(
             Page::from_name("TRAJ"),
             Some(Page::Traj),
@@ -253,5 +275,31 @@ mod tests {
             Availability::NoSource(_)
         ));
         assert_eq!(availability(Page::Sys, 2, None), Availability::Available);
+    }
+
+    #[test]
+    fn l2_vehicles_lose_the_ground_track_and_passes_and_ops_needs_a_schedule() {
+        let mut jwst = vehicle(None);
+        jwst.regime = Regime::L2;
+        jwst.schedule = Some("jwst".into());
+        assert!(
+            matches!(availability(Page::Traj, 1, Some(&jwst)), Availability::NoSource(r) if r.contains("ground track"))
+        );
+        assert_eq!(
+            availability(Page::Traj, 0, Some(&jwst)),
+            Availability::Available
+        );
+        assert!(matches!(
+            availability(Page::Pass, 0, Some(&jwst)),
+            Availability::NoSource(_)
+        ));
+        assert_eq!(
+            availability(Page::Ops, 0, Some(&jwst)),
+            Availability::Available
+        );
+        let iss = vehicle(Some("isslive"));
+        assert!(
+            matches!(availability(Page::Ops, 0, Some(&iss)), Availability::NoSource(r) if r.contains("no public observing schedule"))
+        );
     }
 }

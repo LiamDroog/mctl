@@ -281,6 +281,8 @@ pub fn parse_hst_report(
         .map(|i| {
             let end = html[i..].find("</p>").map_or(html.len(), |e| i + e);
             strip_tags(&html[i + 15..end].replace("<br>", " / "))
+                .trim_start_matches(['/', ' '])
+                .to_owned()
         })
         .ok_or_else(|| ScheduleError::Format("no `Period Covered:` line".into()))?;
     let (mut science, mut calibration, mut other) = (Vec::new(), Vec::new(), Vec::new());

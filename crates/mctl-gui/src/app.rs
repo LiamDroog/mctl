@@ -74,7 +74,7 @@ struct App {
 
 fn fkey(n: &NamedKey) -> Option<u8> {
     use NamedKey::*;
-    [F1, F2, F3, F4, F5, F6, F7, F8, F9, F10]
+    [F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11]
         .iter()
         .position(|k| k == n)
         .map(|i| i as u8 + 1)

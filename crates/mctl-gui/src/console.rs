@@ -605,6 +605,11 @@ impl Console {
             .iter()
             .map(|(r, i)| (cell_rect_px(&theme, r.inner()), *i))
             .collect();
+        let widget_px: Vec<([u32; 4], crate::grid::Widget)> = layout
+            .widgets
+            .iter()
+            .map(|w| (cell_rect_px(&theme, w.rect()), w.clone()))
+            .collect();
         let attitude = adi_px.map(|_| crate::adi::attitude(world.telemetry.as_ref()));
         let has_area = globe_px[2] > 0 && globe_px[3] > 0;
         let aspect = globe_px[2] as f32 / globe_px[3].max(1) as f32;
@@ -643,6 +648,9 @@ impl Console {
                         crate::trendplot::paint(&painter, &theme, *px, plot, set, marks);
                     }
                 }
+            }
+            for (px, w) in &widget_px {
+                crate::widgets::paint(&painter, &theme, *px, w, vehicle, now);
             }
             if let Some(px) = sky_px {
                 let site = world.observer.active_site();
@@ -822,7 +830,9 @@ mod tests {
             "a new page starts at its first sub-page"
         );
         c.handle_key(KeyInput::F(11), &w);
-        assert_eq!(c.page, Page::Sys, "F11 is not a page");
+        assert_eq!(c.page, Page::Ops, "F11 is the OPS page");
+        c.handle_key(KeyInput::F(12), &w);
+        assert_eq!(c.page, Page::Ops, "F12 is not a page");
     }
 
     #[test]

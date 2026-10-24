@@ -44,11 +44,14 @@ fn clock_text(inp: &PageInput<'_>) -> (String, Style) {
 fn sub_title(inp: &PageInput<'_>) -> String {
     let subs = inp.page.subpages();
     if subs.len() > 1 {
-        format!(
-            "{} / {}",
-            inp.page.title(),
-            subs[inp.sub.min(subs.len() - 1)]
-        )
+        let sub = subs[inp.sub.min(subs.len() - 1)];
+        // At L2 the orbit-map and elements sub-pages show different things under the same keys.
+        let sub = match (is_l2(inp), inp.page, inp.sub) {
+            (true, Page::Traj, 0) => "HALO ORBIT",
+            (true, Page::Traj, 2) => "DISTANCE AND ANGLE",
+            _ => sub,
+        };
+        format!("{} / {sub}", inp.page.title())
     } else {
         inp.page.title().to_owned()
     }
@@ -59,9 +62,17 @@ fn header(grid: &mut Grid, inp: &PageInput<'_>) {
     let cols = grid.cols;
     let (bright, _dim) = (Style::new(Role::Bright), Style::new(Role::Dim));
     let (severity, latched) = master_state(inp);
-    let (name, norad) = inp
-        .vehicle
-        .map_or(("--".to_owned(), 0), |v| (v.name.clone(), v.norad));
+    let (name, norad) = inp.vehicle.map_or(("--".to_owned(), String::new()), |v| {
+        // A vehicle with no catalogue number (JWST, Roman) shows just its name.
+        (
+            v.name.clone(),
+            if v.norad == 0 {
+                String::new()
+            } else {
+                format!(" ({})", v.norad)
+            },
+        )
+    });
     let src = inp
         .vehicle
         .and_then(|v| v.solution.as_ref())
@@ -86,7 +97,7 @@ fn header(grid: &mut Grid, inp: &PageInput<'_>) {
     let budget = cols.saturating_sub(annunciator.len() + 1);
     let (clock, clock_style) = clock_text(inp);
     let before = format!(
-        " {name} ({norad}) | {} | GMT {} | MET {met} | ",
+        " {name}{norad} | {} | GMT {} | MET {met} | ",
         sub_title(inp),
         inp.world.t.gmt_doy()
     );
@@ -181,7 +192,14 @@ fn footer(grid: &mut Grid, inp: &PageInput<'_>) -> Vec<(usize, usize, usize, Pag
             k.label(KeyAction::Vehicle)
         );
         (
-            format!("{}  {common}", page_hints(inp.page, inp.sub, k)),
+            format!(
+                "{}  {common}",
+                if is_l2(inp) && matches!(inp.page, Page::Master | Page::Traj) {
+                    "TAB SUBPAGE".to_owned()
+                } else {
+                    page_hints(inp.page, inp.sub, k)
+                }
+            ),
             dim,
         )
     };
@@ -221,7 +239,7 @@ fn footer(grid: &mut Grid, inp: &PageInput<'_>) -> Vec<(usize, usize, usize, Pag
 
 // ---- panels --------------------------------------------------------------------------------------------
 
-fn boxed(grid: &mut Grid, rect: CellRect, title: &str) {
+pub(crate) fn boxed(grid: &mut Grid, rect: CellRect, title: &str) {
     grid.draw_box(
         rect,
         title,
@@ -261,7 +279,7 @@ fn ground_panel(grid: &mut Grid, rect: CellRect) -> CellRect {
     rect.inner()
 }
 
-fn state_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
+pub(crate) fn state_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
     let fg = Style::new(Role::Fg);
     let sol = inp.vehicle.and_then(|v| v.solution.as_ref());
     let quality = sol.map_or("NO DATA".to_owned(), quality_text);
@@ -332,7 +350,12 @@ fn subsystem_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
     boxed(grid, rect, "SUBSYSTEM SUMMARY");
     let mut l = Lines::new(grid, rect);
     telemetry_banner(&mut l, inp);
-    let Some(t) = inp.world.telemetry.as_ref() else {
+    // The feed belongs to the vehicle that lists it; never show the ISS feed on another vehicle's page.
+    let feed = inp
+        .vehicle
+        .filter(|v| v.telemetry.is_some())
+        .and(inp.world.telemetry.as_ref());
+    let Some(t) = feed else {
         let why = match availability(Page::Gnc, 0, inp.vehicle) {
             Availability::NoSource(why) => why.to_uppercase(),
             Availability::Available => "NO TELEMETRY FEED".to_owned(),
@@ -378,7 +401,7 @@ fn master_state(inp: &PageInput<'_>) -> (Option<Severity>, bool) {
     (shown, latched.is_some())
 }
 
-fn cw_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
+pub(crate) fn cw_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
     let dim = Style::new(Role::Dim);
     let cw = &inp.world.cw;
     boxed(grid, rect, "CAUTION & WARNING");
@@ -436,7 +459,7 @@ fn cw_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
     );
 }
 
-fn sources_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
+pub(crate) fn sources_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
     let dim = Style::new(Role::Dim);
     boxed(grid, rect, "SOURCES  HEALTH / AGE / DIFFERENCE");
     let mut l = Lines::new(grid, rect);
@@ -507,12 +530,12 @@ fn timeline_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
 // ---- pages ---------------------------------------------------------------------------------------------
 
 /// (row, height) of the body between the header and the two footer rows.
-fn body(rows: usize) -> (usize, usize) {
+pub(crate) fn body(rows: usize) -> (usize, usize) {
     (1, rows.saturating_sub(3))
 }
 
 /// Split `total` into parts by percentage, giving the remainder to the last part.
-fn split(total: usize, pcts: &[usize]) -> Vec<usize> {
+pub(crate) fn split(total: usize, pcts: &[usize]) -> Vec<usize> {
     let mut out: Vec<usize> = pcts.iter().map(|p| total * p / 100).collect();
     if let Some((last, rest)) = out.split_last_mut() {
         *last = total.saturating_sub(rest.iter().sum::<usize>());
@@ -520,7 +543,7 @@ fn split(total: usize, pcts: &[usize]) -> Vec<usize> {
     out
 }
 
-fn column(x: usize, w: usize, top: usize, heights: &[usize]) -> Vec<CellRect> {
+pub(crate) fn column(x: usize, w: usize, top: usize, heights: &[usize]) -> Vec<CellRect> {
     let mut y = top;
     heights
         .iter()
@@ -829,6 +852,19 @@ fn group_table_reserved(
     for (idx, rect) in &placed {
         telemetry_view::render(grid, *rect, &secs[*idx]);
     }
+    // History charts fill what the section boxes leave free, below them.
+    let used = placed
+        .iter()
+        .map(|(_, r)| r.row + r.rows)
+        .max()
+        .unwrap_or(region.row);
+    let free = CellRect::new(
+        0,
+        used,
+        cols,
+        (region.row + region.rows).saturating_sub(used),
+    );
+    telemetry_view::render_charts(grid, free, &telemetry_view::charts(&secs));
     if placed.len() < secs.len() {
         grid.put(
             1,
@@ -1528,7 +1564,7 @@ fn no_source(grid: &mut Grid, inp: &PageInput<'_>, reason: &str) -> Layout {
 fn help_overlay(grid: &mut Grid, k: &KeyMap) {
     let (cols, rows) = (grid.cols, grid.rows);
     let mut keys: Vec<String> = vec![
-        "F1..F10        pages: MASTER TRAJ GNC EPS TCS COMM PASS PROX VIEW SYS".into(),
+        "F1..F11        pages: MASTER TRAJ GNC EPS TCS COMM PASS PROX VIEW SYS OPS".into(),
         "TAB / SHIFT-TAB  next / previous sub-page".into(),
         "ARROWS         orbit camera".into(),
         "MOUSE          drag inside the ORBIT MAP to orbit; wheel there to zoom".into(),
@@ -1571,12 +1607,21 @@ fn help_overlay(grid: &mut Grid, k: &KeyMap) {
     }
 }
 
+fn is_l2(inp: &PageInput<'_>) -> bool {
+    inp.vehicle
+        .is_some_and(|v| v.regime == mctl_core::config::Regime::L2)
+}
+
 /// Draw the header, the current page, the footer, and the help overlay when open.
 pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     header(grid, inp);
     let mut layout = match availability(inp.page, inp.sub, inp.vehicle) {
         Availability::NoSource(why) => no_source(grid, inp, &why),
         Availability::Available => match (inp.page, inp.sub) {
+            (Page::Master, _) if is_l2(inp) => crate::deep::master(grid, inp),
+            (Page::Traj, 0) if is_l2(inp) => crate::deep::traj_orbit(grid, inp),
+            (Page::Traj, 2) if is_l2(inp) => crate::deep::traj_series(grid, inp),
+            (Page::Ops, _) => crate::deep::ops(grid, inp),
             (Page::Master, _) => master(grid, inp),
             (Page::Traj, 0) => traj_orbit(grid, inp),
             (Page::Traj, 1) => traj_ground(grid, inp),
@@ -1623,6 +1668,7 @@ pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
         },
     };
     layout.legend = footer(grid, inp);
+    layout.widgets = grid.take_widgets();
     if inp.help {
         help_overlay(grid, inp.keys);
     }
