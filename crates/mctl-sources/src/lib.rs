@@ -5,4 +5,5 @@ pub mod cache;
 pub mod geoclue;
 pub mod isslive;
 pub mod observer;
+pub mod schedules;
 pub mod tasks;

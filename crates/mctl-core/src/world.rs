@@ -73,6 +73,19 @@ pub struct TrackPoint {
     pub alt_km: f64,
     /// 1 = full sunlight, 0 = umbra.
     pub illumination: f32,
+    /// Position in the Sun-Earth rotating frame (x away from the Sun, z ecliptic north), km.
+    pub rot_km: [f64; 3],
+}
+
+/// L2 vehicle geometry at the snapshot time (see `mctl_astro::l2`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DeepView {
+    pub dist_km: f64,
+    pub speed_km_s: f64,
+    pub range_rate_km_s: f64,
+    pub light_time_s: f64,
+    pub off_axis_deg: f64,
+    pub rot_km: [f64; 3],
 }
 
 /// Orbit events (DESIGN.md FR-14).
@@ -137,6 +150,15 @@ pub struct VehicleView {
     pub norad: u32,
     /// Telemetry source this vehicle has, if any (pages that need one are greyed without it).
     pub telemetry: Option<String>,
+    pub regime: crate::config::Regime,
+    /// Observing-schedule kind this vehicle has (`jwst`, `hst`), if any.
+    pub schedule: Option<String>,
+    /// L2 vehicles only, once a state exists.
+    pub deep: Option<DeepView>,
+    /// Latest observing schedule or daily report, when the vehicle has one and it has arrived.
+    pub ops: Option<crate::schedule::Ops>,
+    /// Fetch health of the schedule source; `None` for a vehicle without one.
+    pub ops_health: Option<Health>,
     pub met_epoch: Option<Utc>,
     pub sources: Vec<SourceView>,
     /// `None` until some source can produce a state.

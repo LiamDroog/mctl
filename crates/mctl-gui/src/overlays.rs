@@ -186,6 +186,7 @@ mod tests {
             lon_deg: 0.0,
             alt_km: alt,
             illumination: 1.0,
+            rot_km: [0.0; 3],
         };
         Track {
             revision: 1,

@@ -63,6 +63,30 @@ pub struct Sources {
     pub celestrak_supgp: GpSource,
     pub nasa_oem: OemSource,
     pub iers_eop: EopSource,
+    pub horizons: HorizonsSource,
+    pub schedules: ScheduleSources,
+}
+
+/// JPL Horizons vector tables (DESIGN.md gives Horizons as the source for non-ISS vehicles).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HorizonsSource {
+    pub url: String,
+    pub min_refresh_s: f64,
+}
+
+/// Public observing schedules published by STScI.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScheduleSources {
+    /// Page listing the weekly JWST schedule files.
+    pub jwst_index_url: String,
+    /// Scheme and host that the index page's relative links are resolved against.
+    pub jwst_origin: String,
+    /// Hubble daily status report list for one year; `{year}` is replaced.
+    pub hst_index_template: String,
+    pub hst_origin: String,
+    pub min_refresh_s: f64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -190,7 +214,19 @@ pub struct Engine {
 pub struct VehicleDef {
     pub id: String,
     pub name: String,
+    /// NORAD catalogue number; 0 for a vehicle with none (it then cannot use the `gp` source).
+    #[serde(default)]
     pub norad: u32,
+    /// Where the vehicle is: `earth` orbit, or `l2`, the Sun-Earth L2 point (an Earth-centred
+    /// Kepler orbit means nothing there, so those vehicles get a different display).
+    #[serde(default)]
+    pub regime: Regime,
+    /// Request for the `horizons` source; required when that source is listed.
+    #[serde(default)]
+    pub horizons: Option<HorizonsDef>,
+    /// Observing schedule shown on the OPS page: `jwst` or `hst`.
+    #[serde(default)]
+    pub schedule: Option<String>,
     /// Trajectory sources in priority order (DESIGN.md §3.2).
     pub sources: Vec<SourceKind>,
     /// Telemetry source for the GNC/EPS/TCS/COMM pages, if the vehicle has one (`"isslive"`).
@@ -199,6 +235,41 @@ pub struct VehicleDef {
     /// Epoch for mission elapsed time in the header, UTC `YYYY-MM-DDThh:mm:ss`.
     #[serde(default)]
     pub met_epoch: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Regime {
+    #[default]
+    Earth,
+    L2,
+}
+
+/// What to ask Horizons for one vehicle.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HorizonsDef {
+    /// Horizons `COMMAND`, e.g. `-170`.
+    pub id: String,
+    pub step_s: f64,
+    pub past_days: f64,
+    pub future_days: f64,
+    /// Data fetched longer ago than this is STALE.
+    pub stale_after_s: f64,
+}
+
+impl HorizonsDef {
+    /// Whether the request is well formed (NaN fails every comparison, so it is rejected).
+    pub fn is_valid(&self) -> bool {
+        let rows = (self.past_days + self.future_days) * 86_400.0 / self.step_s;
+        !self.id.trim().is_empty()
+            && self.step_s >= 60.0
+            && self.step_s % 60.0 == 0.0
+            && self.past_days >= 0.0
+            && self.future_days > 0.0
+            && self.stale_after_s > 0.0
+            && rows <= 20_000.0
+    }
 }
 
 /// Merge `over` into `base`: tables merge key by key, anything else replaces.
@@ -362,6 +433,12 @@ impl Config {
                 "source min_refresh_s below the polite minimum (60 s, 60 s, 3600 s)".into(),
             );
         }
+        if s.horizons.min_refresh_s < 600.0 || s.schedules.min_refresh_s < 600.0 {
+            return bad("sources.horizons and sources.schedules: min_refresh_s >= 600".into());
+        }
+        if !s.schedules.hst_index_template.contains("{year}") {
+            return bad("sources.schedules.hst_index_template must contain {year}".into());
+        }
         if s.iers_eop.urls.is_empty() {
             return bad("sources.iers_eop.urls is empty".into());
         }
@@ -388,6 +465,36 @@ impl Config {
             }
             if v.sources.is_empty() {
                 return bad(format!("vehicle {:?} has no sources", v.id));
+            }
+            if v.sources.contains(&SourceKind::Gp) && v.norad == 0 {
+                return bad(format!(
+                    "vehicle {:?} uses gp but has no norad number",
+                    v.id
+                ));
+            }
+            if v.schedule
+                .as_deref()
+                .is_some_and(|k| !matches!(k, "jwst" | "hst"))
+            {
+                return bad(format!(
+                    "vehicle {:?}: unknown schedule {:?} (known: jwst, hst)",
+                    v.id, v.schedule
+                ));
+            }
+            match (&v.horizons, v.sources.contains(&SourceKind::Horizons)) {
+                (None, true) => {
+                    return bad(format!(
+                        "vehicle {:?} lists horizons but has no `horizons` table",
+                        v.id
+                    ));
+                }
+                (Some(h), _) if !h.is_valid() => {
+                    return bad(format!(
+                        "vehicle {:?}: horizons needs an id, step_s a multiple of 60, past_days >= 0, future_days > 0, stale_after_s > 0 and at most 20000 rows",
+                        v.id
+                    ));
+                }
+                _ => {}
             }
             if let Some(m) = v
                 .met_epoch

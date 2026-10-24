@@ -18,14 +18,14 @@ use mctl_astro::trajectory::{Trajectory, TrajectoryError};
 use mctl_core::arbiter::{Candidate, select};
 use mctl_core::bus::Bus;
 use mctl_core::command::Command;
-use mctl_core::config::{Config, VehicleDef};
+use mctl_core::config::{Config, Regime, VehicleDef};
 use mctl_core::cw::{Condition, Latch, Metric, RuleDef, Sample as CwSample, Tracker};
 use mctl_core::state::{Elements, Geodetic, Quality, SourceKind, State};
 use mctl_core::time::{EopTable, Utc};
 use mctl_core::world::{
-    ClockView, CwRuleView, CwView, EopView, Health, LogEntry, LookView, ObserverView, PassSet,
-    Residual, SiteView, Solution, SourceStatus, SourceView, TelemetryItem, TelemetryView, Track,
-    TrackPoint, VehicleView, World,
+    ClockView, CwRuleView, CwView, DeepView, EopView, Health, LogEntry, LookView, ObserverView,
+    PassSet, Residual, SiteView, Solution, SourceStatus, SourceView, TelemetryItem, TelemetryView,
+    Track, TrackPoint, VehicleView, World,
 };
 use mctl_sources::tasks::{DataInfo, Event, Payload, SourceKey, SourceSet, TelemetryMeta};
 use mctl_store::{Record, Recorder};
@@ -43,6 +43,8 @@ const CW_STARTUP_GRACE_S: f64 = 10.0;
 const EVENT_STEPS_PER_REV: f64 = 200.0;
 /// Track is rebuilt at least this often, seconds.
 const TRACK_REBUILD_S: f64 = 1.0;
+/// Track window for an L2 vehicle, days either side of now (a halo orbit takes about six months).
+const DEEP_TRACK_DAYS: f64 = 90.0;
 
 struct Loaded<T> {
     data: Arc<T>,
@@ -58,6 +60,10 @@ struct VehicleModel {
     oem_health: Health,
     supgp: Option<Loaded<mctl_astro::supgp::SupGp>>,
     supgp_health: Health,
+    horizons: Option<Loaded<Oem>>,
+    horizons_health: Health,
+    ops: Option<mctl_core::schedule::Ops>,
+    ops_health: Option<Health>,
     track: Option<(Utc, SourceKind, Arc<Track>)>,
 }
 
@@ -219,6 +225,10 @@ impl Model {
                 gp_health: Health::Starting,
                 supgp: None,
                 supgp_health: Health::Starting,
+                horizons: None,
+                horizons_health: Health::Starting,
+                ops: None,
+                ops_health: d.schedule.as_ref().map(|_| Health::Starting),
                 oem_health: Health::Starting,
                 track: None,
             })
@@ -571,6 +581,10 @@ impl Model {
             .collect::<Vec<_>>()
             .join(";");
         for (vm, view) in self.vehicles.iter().zip(vehicles.iter_mut()) {
+            // A vehicle at L2 is above the horizon for about half of every day; passes are meaningless.
+            if vm.def.regime == Regime::L2 {
+                continue;
+            }
             let mut parts: Vec<Arc<dyn Trajectory>> = Vec::new();
             let mut labels = Vec::new();
             let mut key = format!("{sites_key}|{}|", o.mask_deg);
@@ -595,6 +609,13 @@ impl Model {
                             parts.push(x.data.clone());
                             labels.push("OEM");
                             key += &format!("oem{}", x.fetched_at.0);
+                        }
+                    }
+                    SourceKind::Horizons => {
+                        if let Some(x) = &vm.horizons {
+                            parts.push(x.data.clone());
+                            labels.push("HORIZONS");
+                            key += &format!("hz{}", x.fetched_at.0);
                         }
                     }
                 }
@@ -782,6 +803,11 @@ impl Model {
                 self.telemetry.insert(id, (text, rx));
             }
             Event::TelemetryHealth(h) => self.telemetry_health = Some(h),
+            Event::Ops { vehicle, ops, .. } => {
+                if let Some(v) = self.vehicles.iter_mut().find(|v| v.def.id == vehicle) {
+                    v.ops = Some(ops);
+                }
+            }
             Event::ObserverNote(text) => {
                 let now = Utc::now().unwrap_or(Utc(0.0));
                 self.note(now, text);
@@ -875,6 +901,27 @@ impl Model {
                         v.track = None;
                     }
                 }
+                (SourceKey::Horizons(id), Payload::Horizons(mut o)) => {
+                    // The reply carries no creation time; its age is the age of the download.
+                    o.creation_date = fetched_at;
+                    if let Some(raw) = raw {
+                        self.record(Record::Elements {
+                            vehicle: id.clone(),
+                            source: SourceKind::Horizons.label().into(),
+                            epoch: Some(fetched_at),
+                            fetched_at,
+                            blob: raw.to_string(),
+                        });
+                    }
+                    if let Some(v) = self.vehicles.iter_mut().find(|v| v.def.id == id) {
+                        v.horizons = Some(Loaded {
+                            data: Arc::new(*o),
+                            fetched_at,
+                            from_cache,
+                        });
+                        v.track = None;
+                    }
+                }
                 (SourceKey::Eop, Payload::Eop(t)) => {
                     self.eop = Some(Loaded {
                         data: Arc::new(t),
@@ -901,6 +948,16 @@ impl Model {
                 SourceKey::Oem(id) => {
                     if let Some(v) = self.vehicles.iter_mut().find(|v| v.def.id == id) {
                         v.oem_health = health;
+                    }
+                }
+                SourceKey::Horizons(id) => {
+                    if let Some(v) = self.vehicles.iter_mut().find(|v| v.def.id == id) {
+                        v.horizons_health = health;
+                    }
+                }
+                SourceKey::Schedule(id) => {
+                    if let Some(v) = self.vehicles.iter_mut().find(|v| v.def.id == id) {
+                        v.ops_health = Some(health);
                     }
                 }
                 SourceKey::Eop => {}
@@ -1145,6 +1202,14 @@ fn vehicle_view(
                 t,
             ),
             SourceKind::Oem => sample(*k, &v.oem, &v.oem_health, |o| o.creation_date, stale.1, t),
+            SourceKind::Horizons => sample(
+                *k,
+                &v.horizons,
+                &v.horizons_health,
+                |o| o.creation_date,
+                v.def.horizons.as_ref().map_or(0.0, |h| h.stale_after_s),
+                t,
+            ),
         })
         .collect();
     let age = |s: &Sample| s.data_epoch.map(|e| t.minus(e));
@@ -1250,6 +1315,9 @@ fn vehicle_view(
                     SourceKind::Gp => v.gp.as_ref().map(|l| &*l.data as &dyn Trajectory),
                     SourceKind::SupGp => v.supgp.as_ref().map(|l| &*l.data as &dyn Trajectory),
                     SourceKind::Oem => v.oem.as_ref().map(|l| &*l.data as &dyn Trajectory),
+                    SourceKind::Horizons => {
+                        v.horizons.as_ref().map(|l| &*l.data as &dyn Trajectory)
+                    }
                 };
                 if let Some(traj) = traj {
                     v.track = Some((
@@ -1261,6 +1329,7 @@ fn vehicle_view(
                             t,
                             sol.elements.period_s,
                             track_cfg,
+                            v.def.regime,
                             eop,
                             *revision,
                         )),
@@ -1274,11 +1343,33 @@ fn vehicle_view(
             None
         }
     };
+    let deep_view = (v.def.regime == Regime::L2)
+        .then(|| {
+            solution.as_ref().map(|s| {
+                let (r, vel) = (s.state_gcrf.r, s.state_gcrf.v);
+                let sun = nalgebra::Vector3::from(s.sun_gcrf_km);
+                let d = mctl_astro::l2::summary(&r, &vel, &sun);
+                DeepView {
+                    dist_km: d.dist_km,
+                    speed_km_s: d.speed_km_s,
+                    range_rate_km_s: d.range_rate_km_s,
+                    light_time_s: d.light_time_s,
+                    off_axis_deg: d.off_axis_deg,
+                    rot_km: d.rot_km,
+                }
+            })
+        })
+        .flatten();
     VehicleView {
         id: v.def.id.clone(),
         name: v.def.name.clone(),
         norad: v.def.norad,
         telemetry: v.def.telemetry.clone(),
+        regime: v.def.regime,
+        schedule: v.def.schedule.clone(),
+        deep: deep_view,
+        ops: v.ops.clone(),
+        ops_health: v.ops_health.clone(),
         met_epoch: v.def.met_epoch.as_deref().and_then(|m| Utc::parse(m).ok()),
         sources,
         solution,
@@ -1330,12 +1421,14 @@ fn solution(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_track(
     traj: &dyn Trajectory,
     kind: SourceKind,
     now: Utc,
     period_s: f64,
     (past_rev, future_rev, samples): (f64, f64, usize),
+    regime: Regime,
     eop: Option<&EopTable>,
     revision: u64,
 ) -> Track {
@@ -1344,7 +1437,10 @@ fn build_track(
     } else {
         FALLBACK_PERIOD_S
     };
-    let (past, future) = (past_rev * period, future_rev * period);
+    let (past, future) = match regime {
+        Regime::Earth => (past_rev * period, future_rev * period),
+        Regime::L2 => (DEEP_TRACK_DAYS * 86_400.0, DEEP_TRACK_DAYS * 86_400.0),
+    };
     let dt = (past + future) / (samples - 1) as f64;
     let mut points = Vec::with_capacity(samples);
     for k in 0..samples {
@@ -1371,15 +1467,24 @@ fn build_track(
             lon_deg: g.lon_deg,
             alt_km: g.alt_km,
             illumination: illumination(&s.r, &sun) as f32,
+            rot_km: mctl_astro::l2::to_rotating(&s.r, &sun),
         });
     }
     let now_index = points.partition_point(|p| p.t.0 < now.0);
     // Events over the predicted part of the window, by root finding rather than track interpolation.
-    let events =
-        mctl_astro::events::find_events(traj, now, now.plus(future), period / EVENT_STEPS_PER_REV)
-            .into_iter()
-            .map(|e| (e.t, e.kind))
-            .collect();
+    // Nodes, apsides and eclipses have no meaning for a halo orbit about L2.
+    let events = match regime {
+        Regime::Earth => mctl_astro::events::find_events(
+            traj,
+            now,
+            now.plus(future),
+            period / EVENT_STEPS_PER_REV,
+        )
+        .into_iter()
+        .map(|e| (e.t, e.kind))
+        .collect(),
+        Regime::L2 => Vec::new(),
+    };
     Track {
         revision,
         source: kind,
@@ -1576,6 +1681,99 @@ mod tests {
     /// Inside the sample OEM's span, shortly before the GP epoch.
     fn t_in_oem() -> Utc {
         Utc::parse("2026-10-22T10:00:00").unwrap()
+    }
+
+    /// 13 hourly JWST vectors from a real Horizons reply (2026-10-21 00:00 .. 12:00 UT).
+    const HORIZONS_JWST: &str = include_str!("../../mctl-astro/fixtures/horizons-jwst-sample.txt");
+
+    fn jwst_model() -> (Model, Utc) {
+        let mut m = model();
+        let o = mctl_astro::horizons::parse(HORIZONS_JWST, Utc(0.0)).unwrap();
+        let t = Utc(o.states[6].t.0 + 600.0);
+        m.apply(Event::Data {
+            key: SourceKey::Horizons("jwst".into()),
+            payload: Payload::Horizons(Box::new(o)),
+            info: DataInfo {
+                from_cache: false,
+                fetched_at: t,
+                raw: None,
+            },
+        });
+        (m, t)
+    }
+
+    #[test]
+    fn an_l2_vehicle_gets_distance_light_time_and_halo_coordinates_not_orbit_events() {
+        let (mut m, t) = jwst_model();
+        let w = m.world(t);
+        let v = w.vehicles.iter().find(|v| v.id == "jwst").unwrap();
+        let sol = v.solution.as_ref().unwrap();
+        assert_eq!(sol.source, SourceKind::Horizons);
+        let d = v.deep.expect("an L2 vehicle has a deep-space view");
+        assert!((1.3e6..1.7e6).contains(&d.dist_km), "{}", d.dist_km);
+        // About 5 s of light time. The halo is wide (hundreds of thousands of km): the angle at Earth
+        // between the anti-Sun line and JWST reaches about 30 degrees, but not 45.
+        assert!((4.0..6.0).contains(&d.light_time_s), "{}", d.light_time_s);
+        assert!((5.0..45.0).contains(&d.off_axis_deg), "{}", d.off_axis_deg);
+        assert!(
+            d.rot_km[0] > 1.0e6,
+            "L2 is beyond Earth, away from the Sun: {:?}",
+            d.rot_km
+        );
+        assert!(d.speed_km_s < 1.0);
+        let tr = v.track.as_ref().expect("track");
+        assert!(
+            tr.events.is_empty(),
+            "no nodes or eclipses for a halo orbit"
+        );
+        assert!(tr.points.iter().all(|p| p.rot_km[0] > 1.0e6));
+        assert!(v.passes.is_empty(), "no pass prediction for an L2 vehicle");
+        // An Earth-orbit vehicle has no deep view.
+        assert!(w.vehicles[0].deep.is_none());
+    }
+
+    #[test]
+    fn the_horizons_source_is_stale_by_its_own_configured_age() {
+        let (mut m, t) = jwst_model();
+        // Data was fetched at `t`; far later the arbiter still returns it, but labelled STALE.
+        let later = Utc(t.0 + 3.0 * 86_400.0);
+        let w = m.world(t);
+        assert_eq!(
+            w.vehicles[2].solution.as_ref().unwrap().quality,
+            Quality::Pred
+        );
+        let w = m.world(later);
+        // Outside the 13-row (12 h) span there is no state at all; the source reports it.
+        let v = w.vehicles.iter().find(|v| v.id == "jwst").unwrap();
+        assert!(v.solution.is_none());
+        assert_eq!(v.sources[0].status, SourceStatus::OutOfSpan);
+    }
+
+    #[test]
+    fn an_observing_schedule_reaches_the_vehicle_view() {
+        let mut m = model();
+        let sched = mctl_core::schedule::JwstSchedule {
+            visits: vec![],
+            files: vec!["a.txt".into()],
+            fetched_at: Utc(1.0),
+        };
+        m.apply(Event::Ops {
+            vehicle: "jwst".into(),
+            ops: mctl_core::schedule::Ops::Jwst(Arc::new(sched)),
+            from_cache: true,
+        });
+        m.apply(Event::Health {
+            key: SourceKey::Schedule("jwst".into()),
+            health: Health::Ok,
+        });
+        let w = m.world(Utc(1.0));
+        let j = w.vehicles.iter().find(|v| v.id == "jwst").unwrap();
+        assert!(matches!(j.ops, Some(mctl_core::schedule::Ops::Jwst(_))));
+        assert_eq!(j.ops_health, Some(Health::Ok));
+        assert!(
+            w.vehicles[0].ops_health.is_none(),
+            "the ISS has no schedule source"
+        );
     }
 
     #[test]

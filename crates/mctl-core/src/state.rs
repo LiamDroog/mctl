@@ -28,6 +28,8 @@ pub enum SourceKind {
     #[serde(rename = "supgp")]
     SupGp,
     Gp,
+    /// JPL Horizons vector table.
+    Horizons,
 }
 
 impl SourceKind {
@@ -36,6 +38,7 @@ impl SourceKind {
             Self::Oem => "OEM",
             Self::SupGp => "SUP-GP",
             Self::Gp => "GP/SGP4",
+            Self::Horizons => "HORIZONS",
         }
     }
 }

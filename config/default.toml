@@ -32,6 +32,21 @@ stale_after_s = 604800    # OEM older than this is STALE (assumption: 7 days; th
 urls = ["https://maia.usno.navy.mil/ser7/finals2000A.all", "https://datacenter.iers.org/data/9/finals2000A.all"]
 min_refresh_s = 86400
 
+[sources.horizons]
+# JPL Horizons vector tables (geocentric ICRF). JWST and Roman come from Goddard flight-dynamics
+# trajectories; for Hubble the table is a concatenation of TLEs, so it is a cross-check, not a better source.
+url = "https://ssd.jpl.nasa.gov/api/horizons.api"
+min_refresh_s = 21600
+
+[sources.schedules]
+# STScI public schedules. JWST: weekly plain-text visit lists linked from the index page.
+# Hubble: daily status reports (programs scheduled; no visit times are published).
+jwst_index_url = "https://www.stsci.edu/jwst/science-execution/observing-schedules"
+jwst_origin = "https://www.stsci.edu"
+hst_index_template = "https://www.stsci.edu/public/hst_status/{year}_reports.html"
+hst_origin = "https://www.stsci.edu"
+min_refresh_s = 3600
+
 [limits]
 # Inter-source residual (|dr|) that raises a caution on the sources panel. Assumption, not a published limit.
 residual_caution_km = 5.0
@@ -104,9 +119,34 @@ met_epoch = "1998-11-20T06:40:00"
 id = "hubble"
 name = "HUBBLE"
 norad = 20580
-sources = ["gp"]
+# Horizons for Hubble is a concatenation of TLEs (no better than GP), so it is second in line: a fallback
+# when GP is stale, and a second opinion whose residual against GP is shown on the sources panel.
+sources = ["gp", "horizons"]
+schedule = "hst"
 # STS-31 liftoff, 1990-04-24 12:33:51 UTC (assumption; verify).
 met_epoch = "1990-04-24T12:33:51"
+horizons = { id = "-48", step_s = 120, past_days = 1, future_days = 3, stale_after_s = 172800 }
+
+[[vehicle]]
+id = "jwst"
+name = "JWST"
+regime = "l2"
+# Goddard FDF as-flown trajectory solutions with a prediction after the last tracking data; Horizons
+# header text is the authority (no NORAD-based GP is used for an L2 halo orbit).
+sources = ["horizons"]
+schedule = "jwst"
+# Ariane 5 liftoff, 2021-12-25 12:20 UTC (Horizons header).
+met_epoch = "2021-12-25T12:20:00"
+horizons = { id = "-170", step_s = 21600, past_days = 100, future_days = 100, stale_after_s = 1209600 }
+
+[[vehicle]]
+id = "roman"
+name = "ROMAN"
+regime = "l2"
+sources = ["horizons"]
+# Falcon Heavy liftoff, 2026-08-30 11:26:04 UTC (Horizons header). No public observing schedule found.
+met_epoch = "2026-08-30T11:26:04"
+horizons = { id = "-211", step_s = 21600, past_days = 50, future_days = 100, stale_after_s = 1209600 }
 
 # ---- Caution and warning rules (DESIGN.md 4.5) ---------------------------------------------------
 # Every rule says where its limits come from in `basis`. DESIGN.md FR-43: ISS subsystem limits are

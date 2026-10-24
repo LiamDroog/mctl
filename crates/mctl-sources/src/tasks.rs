@@ -33,6 +33,10 @@ pub enum SourceKey {
     SupGp(String),
     /// The NASA ISS OEM, used by the one vehicle that lists the `oem` source.
     Oem(String),
+    /// JPL Horizons vector table for the vehicle with this id.
+    Horizons(String),
+    /// Observing schedule for the vehicle with this id.
+    Schedule(String),
     Eop,
 }
 
@@ -40,6 +44,7 @@ pub enum Payload {
     Gp(GpModel),
     SupGp(Box<mctl_astro::supgp::SupGp>),
     Oem(Box<Oem>),
+    Horizons(Box<Oem>),
     Eop(EopTable),
 }
 
@@ -75,6 +80,12 @@ pub enum Event {
         rx: Utc,
     },
     TelemetryHealth(Health),
+    /// A refreshed observing schedule or daily report for a vehicle.
+    Ops {
+        vehicle: String,
+        ops: mctl_core::schedule::Ops,
+        from_cache: bool,
+    },
     Data {
         key: SourceKey,
         payload: Payload,
@@ -87,6 +98,8 @@ pub enum Event {
 }
 
 type Parser = Arc<dyn Fn(&str) -> Result<Payload, String> + Send + Sync>;
+/// Builds the request URLs for a given wall-clock time, for sources whose request names a time window.
+type UrlGen = Arc<dyn Fn(Utc) -> Vec<String> + Send + Sync>;
 
 #[derive(Clone)]
 pub struct Spec {
@@ -95,9 +108,17 @@ pub struct Spec {
     pub urls: Vec<String>,
     pub min_refresh_s: f64,
     parse: Parser,
+    url_gen: Option<UrlGen>,
 }
 
 impl Spec {
+    /// The URLs to try, in order, at wall-clock time `now`.
+    pub fn urls_at(&self, now: Utc) -> Vec<String> {
+        self.url_gen
+            .as_ref()
+            .map_or_else(|| self.urls.clone(), |g| g(now))
+    }
+
     pub fn parse(&self, body: &str) -> Result<Payload, String> {
         (self.parse)(body)
     }
@@ -110,6 +131,7 @@ pub fn specs(cfg: &Config) -> Vec<Spec> {
         if v.sources.contains(&SourceKind::Gp) {
             let (id, norad) = (v.id.clone(), v.norad);
             out.push(Spec {
+                url_gen: None,
                 key: SourceKey::Gp(v.id.clone()),
                 cache_key: format!("gp-{}.json", v.norad),
                 urls: vec![
@@ -135,6 +157,7 @@ pub fn specs(cfg: &Config) -> Vec<Spec> {
         if v.sources.contains(&SourceKind::SupGp) {
             let (id, norad) = (v.id.clone(), v.norad);
             out.push(Spec {
+                url_gen: None,
                 key: SourceKey::SupGp(v.id.clone()),
                 cache_key: format!("supgp-{}.json", v.norad),
                 urls: vec![
@@ -158,6 +181,7 @@ pub fn specs(cfg: &Config) -> Vec<Spec> {
         }
         if v.sources.contains(&SourceKind::Oem) {
             out.push(Spec {
+                url_gen: None,
                 key: SourceKey::Oem(v.id.clone()),
                 cache_key: "oem-iss.txt".into(),
                 urls: vec![cfg.sources.nasa_oem.url.clone()],
@@ -169,8 +193,26 @@ pub fn specs(cfg: &Config) -> Vec<Spec> {
                 }),
             });
         }
+        if let (true, Some(h)) = (v.sources.contains(&SourceKind::Horizons), &v.horizons) {
+            let (h, base, id) = (h.clone(), cfg.sources.horizons.url.clone(), v.id.clone());
+            out.push(Spec {
+                key: SourceKey::Horizons(v.id.clone()),
+                cache_key: format!("horizons-{}.txt", v.id),
+                urls: vec![],
+                url_gen: Some(Arc::new(move |now| vec![horizons_url(&base, &h, now)])),
+                min_refresh_s: cfg.sources.horizons.min_refresh_s,
+                parse: Arc::new(move |body| {
+                    // The reply has no creation time. Cached copies are stamped when the engine
+                    // loads them, so the age shown is the age of the download, not of the parse.
+                    mctl_astro::horizons::parse(body, Utc(0.0))
+                        .map(|o| Payload::Horizons(Box::new(o)))
+                        .map_err(|e| format!("{id}: {e}"))
+                }),
+            });
+        }
     }
     out.push(Spec {
+        url_gen: None,
         key: SourceKey::Eop,
         cache_key: "finals2000A.all".into(),
         urls: cfg.sources.iers_eop.urls.clone(),
@@ -182,6 +224,54 @@ pub fn specs(cfg: &Config) -> Vec<Spec> {
         }),
     });
     out
+}
+
+/// Percent-encode a query value (everything but unreserved characters).
+fn percent_encode(v: &str) -> String {
+    let mut out = String::new();
+    for b in v.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
+}
+
+/// Horizons request for geocentric ICRF vectors in km and km/s, UT time tags, as a CSV table.
+/// The window is anchored to the start of the current UTC day so repeated fetches ask the same thing.
+pub fn horizons_url(base: &str, h: &mctl_core::config::HorizonsDef, now: Utc) -> String {
+    let day0 = (now.0 / 86_400.0).floor() * 86_400.0;
+    let stamp = |t: f64| {
+        let iso = Utc(t).iso();
+        format!("'{} {}'", &iso[..10], &iso[11..16])
+    };
+    let params = [
+        ("format", "text".to_owned()),
+        ("COMMAND", format!("'{}'", h.id)),
+        ("EPHEM_TYPE", "VECTORS".into()),
+        ("CENTER", "'500@399'".into()),
+        ("START_TIME", stamp(day0 - h.past_days * 86_400.0)),
+        ("STOP_TIME", stamp(day0 + h.future_days * 86_400.0)),
+        (
+            "STEP_SIZE",
+            format!("'{} min'", (h.step_s / 60.0).round() as u64),
+        ),
+        ("OUT_UNITS", "KM-S".into()),
+        ("REF_PLANE", "FRAME".into()),
+        ("REF_SYSTEM", "ICRF".into()),
+        ("VEC_TABLE", "2".into()),
+        ("CSV_FORMAT", "YES".into()),
+        ("TIME_TYPE", "UT".into()),
+        ("VEC_LABELS", "NO".into()),
+        ("OBJ_DATA", "NO".into()),
+    ];
+    let q: Vec<String> = params
+        .iter()
+        .map(|(k, v)| format!("{k}={}", percent_encode(v)))
+        .collect();
+    format!("{base}?{}", q.join("&"))
 }
 
 /// Handle to the running tasks. Dropping it asks them to stop.
@@ -222,6 +312,30 @@ pub fn start(
                 .name(name)
                 .spawn(move || supervise(&spec, &cache, &tx, &stop_rx, &fetch, offline))
                 .expect("spawn source thread"),
+        );
+        stops.push(stop_tx);
+    }
+    for v in &cfg.vehicles {
+        let Some(kind) = v.schedule.clone() else {
+            continue;
+        };
+        let (cfg, tx, fetch, cache) = (cfg.clone(), tx.clone(), cfg.fetch.clone(), cache.clone());
+        let (stop_tx, stop_rx) = sync_channel::<()>(1);
+        let id = v.id.clone();
+        threads.push(
+            std::thread::Builder::new()
+                .name(format!("src-schedule-{id}"))
+                .spawn(move || {
+                    crate::schedules::run(
+                        &cfg,
+                        (&id, &kind),
+                        &cache,
+                        (&tx, &stop_rx),
+                        &fetch,
+                        offline,
+                    )
+                })
+                .expect("spawn schedule thread"),
         );
         stops.push(stop_tx);
     }
@@ -358,7 +472,7 @@ fn supervise(
             spec.min_refresh_s
         };
         let (mut done, mut errors) = (false, Vec::new());
-        for url in &spec.urls {
+        for url in &spec.urls_at(Utc(now)) {
             match cache.refresh(&spec.cache_key, url, interval, now) {
                 Ok(Refresh::NotDue | Refresh::NotModified) => {
                     done = true;
@@ -432,7 +546,7 @@ pub fn check(cfg: &Config, cache_dir: std::path::PathBuf) -> Result<Vec<CheckLin
         .map(|spec| {
             let name = format!("{:?}", spec.key);
             let mut errors = Vec::new();
-            for url in &spec.urls {
+            for url in &spec.urls_at(Utc(now)) {
                 match cache.refresh(&spec.cache_key, url, 0.0, now) {
                     Ok(r) => {
                         let how = match r {
@@ -486,6 +600,12 @@ fn summarise(p: &Payload) -> String {
             o.span().1.iso(),
             o.creation_date.iso()
         ),
+        Payload::Horizons(o) => format!(
+            "{} states, {} .. {}",
+            o.states.len(),
+            o.span().0.iso(),
+            o.span().1.iso()
+        ),
         Payload::Eop(t) => format!("covers MJD {:.0} .. {:.0}", t.coverage().0, t.coverage().1),
     }
 }
@@ -538,6 +658,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let set = start(&cfg, dir.clone(), true).unwrap();
         let mut offline = 0;
+        // One per trajectory source plus one per vehicle that has an observing schedule.
+        let expected =
+            specs(&cfg).len() + cfg.vehicles.iter().filter(|v| v.schedule.is_some()).count();
         while let Ok(e) = set.events.recv_timeout(Duration::from_secs(2)) {
             match e {
                 Event::Health {
@@ -551,13 +674,14 @@ mod tests {
                 | Event::Telemetry { .. }
                 | Event::Observer(_)
                 | Event::ObserverNote(_) => {}
+                Event::Ops { .. } => panic!("no schedule can exist with an empty cache"),
                 Event::TelemetryHealth(h) => assert_eq!(h, Health::Offline),
             }
-            if offline == specs(&cfg).len() {
+            if offline == expected {
                 break;
             }
         }
-        assert_eq!(offline, specs(&cfg).len());
+        assert_eq!(offline, expected);
         std::fs::remove_dir_all(dir).ok();
     }
 

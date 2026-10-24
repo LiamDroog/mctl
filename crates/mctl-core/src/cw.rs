@@ -699,6 +699,11 @@ mod tests {
             name: "ISS".into(),
             norad: 25544,
             telemetry: None,
+            regime: crate::config::Regime::Earth,
+            schedule: None,
+            deep: None,
+            ops: None,
+            ops_health: None,
             met_epoch: None,
             sources: vec![SourceView {
                 kind: SourceKind::Gp,
