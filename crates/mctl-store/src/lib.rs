@@ -10,7 +10,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use mctl_core::time::Utc;
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 /// Schema version stored in `PRAGMA user_version`; a different value is refused, not migrated silently.
 pub const SCHEMA_VERSION: i64 = 1;
@@ -99,6 +99,9 @@ impl Record {
         }
     }
 }
+
+/// Position (km) and velocity (km/s).
+pub type PosVel = ([f64; 3], [f64; 3]);
 
 /// A recorded state row as read back for trends and replay.
 #[derive(Debug, Clone, PartialEq)]
@@ -218,6 +221,78 @@ impl Store {
         }
         out.sort_by(|a, b| a.t.0.total_cmp(&b.t.0));
         Ok(out)
+    }
+
+    /// First and last recorded state time for `vehicle`, if any.
+    pub fn state_span(&self, vehicle: &str) -> Result<Option<(Utc, Utc)>, StoreError> {
+        let (lo, hi): (Option<f64>, Option<f64>) = self.conn.query_row(
+            "SELECT min(t_utc), max(t_utc) FROM state WHERE vehicle = ?1",
+            params![vehicle],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        Ok(lo.zip(hi).map(|(a, b)| (Utc(a), Utc(b))))
+    }
+
+    /// The recorded state of `vehicle` from `source` at `t`, linearly interpolated between the two
+    /// samples that bracket it. `None` when the recording has a gap there (neighbours more than
+    /// `max_gap_s` apart, or on one side only): replay never invents a state across a gap.
+    pub fn state_at(
+        &self,
+        vehicle: &str,
+        source: &str,
+        t: Utc,
+        max_gap_s: f64,
+    ) -> Result<Option<PosVel>, StoreError> {
+        let one = |sql: &str| -> Result<Option<(f64, [f64; 6])>, StoreError> {
+            Ok(self
+                .conn
+                .query_row(sql, params![vehicle, source, t.0], |r| {
+                    Ok((
+                        r.get::<_, f64>(0)?,
+                        [
+                            r.get(1)?,
+                            r.get(2)?,
+                            r.get(3)?,
+                            r.get(4)?,
+                            r.get(5)?,
+                            r.get(6)?,
+                        ],
+                    ))
+                })
+                .optional()?)
+        };
+        let before = one(
+            "SELECT t_utc, rx, ry, rz, vx, vy, vz FROM state WHERE vehicle = ?1 AND source = ?2 AND t_utc <= ?3 ORDER BY t_utc DESC LIMIT 1",
+        )?;
+        let after = one(
+            "SELECT t_utc, rx, ry, rz, vx, vy, vz FROM state WHERE vehicle = ?1 AND source = ?2 AND t_utc >= ?3 ORDER BY t_utc ASC LIMIT 1",
+        )?;
+        let (Some((ta, a)), Some((tb, b))) = (before, after) else {
+            return Ok(None);
+        };
+        if tb - ta > max_gap_s || t.0 - ta > max_gap_s || tb - t.0 > max_gap_s {
+            return Ok(None);
+        }
+        let f = if tb > ta { (t.0 - ta) / (tb - ta) } else { 0.0 };
+        let l = |i: usize| a[i] + (b[i] - a[i]) * f;
+        Ok(Some(([l(0), l(1), l(2)], [l(3), l(4), l(5)])))
+    }
+
+    /// The latest recorded value of every telemetry item at or before `t`, not older than `window_s`:
+    /// `(item, value, text, time received)`.
+    #[allow(clippy::type_complexity)]
+    pub fn telemetry_at(
+        &self,
+        t: Utc,
+        window_s: f64,
+    ) -> Result<Vec<(String, Option<f64>, Option<String>, Utc)>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT item_id, value_real, value_text, max(t_rx) FROM telemetry WHERE t_rx <= ?1 AND t_rx > ?2 GROUP BY item_id",
+        )?;
+        let rows = stmt.query_map(params![t.0, t.0 - window_s], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, Utc(r.get(3)?)))
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     /// `(source, epoch)` of every recorded element set of `vehicle` with an epoch in the range.
@@ -845,5 +920,76 @@ mod tests {
         drop(Store::open(&p).unwrap());
         let ro = Store::open_readonly(&p).unwrap();
         assert_eq!(ro.count("state").unwrap(), 0);
+    }
+
+    #[test]
+    fn replay_queries_interpolate_across_samples_and_refuse_gaps() {
+        let (_d, mut store) = store();
+        let st = |t: f64, x: f64| Record::State {
+            vehicle: "iss".into(),
+            source: "OEM".into(),
+            t: Utc(t),
+            frame: "GCRF",
+            r_km: [x, 0.0, 0.0],
+            v_km_s: [0.0, x / 1000.0, 0.0],
+            quality: "PRED".into(),
+        };
+        let mut batch = vec![st(100.0, 7000.0), st(101.0, 7010.0), st(500.0, 8000.0)];
+        batch.push(Record::Telemetry {
+            item_id: "A".into(),
+            t_rx: Utc(100.0),
+            value: Some(1.0),
+            text: None,
+        });
+        batch.push(Record::Telemetry {
+            item_id: "A".into(),
+            t_rx: Utc(105.0),
+            value: Some(2.0),
+            text: None,
+        });
+        batch.push(Record::Telemetry {
+            item_id: "B".into(),
+            t_rx: Utc(50.0),
+            value: None,
+            text: Some("open".into()),
+        });
+        store.write(&batch).unwrap();
+        let ro = Store::open_readonly(store.path()).unwrap();
+        assert_eq!(
+            ro.state_span("iss").unwrap(),
+            Some((Utc(100.0), Utc(500.0)))
+        );
+        assert_eq!(ro.state_span("nobody").unwrap(), None);
+        let (r, v) = ro.state_at("iss", "OEM", Utc(100.5), 5.0).unwrap().unwrap();
+        assert_eq!(r[0], 7005.0);
+        assert!((v[1] - 7.005).abs() < 1e-12);
+        assert!(
+            ro.state_at("iss", "OEM", Utc(300.0), 5.0)
+                .unwrap()
+                .is_none(),
+            "a gap is not bridged"
+        );
+        assert!(
+            ro.state_at("iss", "GP/SGP4", Utc(100.5), 5.0)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            ro.state_at("iss", "OEM", Utc(99.0), 5.0).unwrap().is_none(),
+            "before the first sample"
+        );
+        let mut t = ro.telemetry_at(Utc(104.0), 600.0).unwrap();
+        t.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(
+            t[0].1,
+            Some(1.0),
+            "the value in force at 104 s is the one received at 100 s"
+        );
+        assert_eq!(t[1].2.as_deref(), Some("open"));
+        assert_eq!(
+            ro.telemetry_at(Utc(104.0), 30.0).unwrap().len(),
+            1,
+            "B is outside the window"
+        );
     }
 }

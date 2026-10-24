@@ -66,6 +66,10 @@ pub const COMMANDS: &[(&str, &str)] = &[
         "ack",
         "ack                acknowledge the master caution/warning latch",
     ),
+    (
+        "replay",
+        "replay [<time>]    play back the recording from its start, an epoch, or an offset such as -2h",
+    ),
     ("pause", "pause              freeze the simulation clock"),
     ("resume", "resume             continue from a pause"),
     ("live", "live               return to wall-clock time"),
@@ -102,6 +106,22 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("help", "help               key and command reference"),
     ("quit", "quit               leave mctl"),
 ];
+
+/// Where a replay starts: nothing or `start` is the beginning of the recording, an offset (`-2h`) is
+/// relative to now, anything else must be an ISO epoch.
+pub fn parse_replay_start(arg: Option<&str>) -> Result<Option<mctl_core::time::Utc>, String> {
+    match arg {
+        None | Some("start") => Ok(None),
+        Some(a) if a.starts_with(['-', '+']) => {
+            let secs = mctl_core::command::parse_offset(a).map_err(|e| e.to_string())?;
+            let now = mctl_core::time::Utc::now().map_err(|e| e.to_string())?;
+            Ok(Some(now.plus(secs)))
+        }
+        Some(a) => mctl_core::time::Utc::parse(a)
+            .map(Some)
+            .map_err(|e| format!("replay: {e}")),
+    }
+}
 
 fn one_arg<'a>(cmd: &str, args: &'a [&'a str]) -> Result<&'a str, String> {
     match args {
@@ -312,6 +332,7 @@ pub fn parse(line: &str, names: &Names<'_>) -> Result<Action, String> {
             "ecef" | "itrf" => ui(UiAction::StateEcef(true)),
             o => Err(format!("frame: expected eci or ecef, got {o:?}")),
         },
+        "replay" => eng(Command::Replay(parse_replay_start(args.first().copied())?)),
         "burn" => {
             use mctl_core::plan::{BurnDef, BurnFrame, PlanCommand};
             let num = |a: &str| {
@@ -780,6 +801,7 @@ mod tests {
                 "focus" => " earth",
                 "frame" => " eci",
                 "burn" => " clear",
+                "replay" => " start",
                 "plan" => " run",
                 _ => "",
             };

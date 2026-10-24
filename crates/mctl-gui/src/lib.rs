@@ -34,5 +34,6 @@ pub fn check_keys(keys: &std::collections::BTreeMap<String, Vec<String>>) -> Res
     keys::KeyMap::from_config(keys).map(|_| ())
 }
 
+pub use commands::parse_replay_start;
 pub use offline::{BenchOptions, Live, ShotOptions, bench, parse_size, shots};
 pub use theme::{Theme, ThemeError, embedded as embedded_themes, from_dir as themes_from_dir};

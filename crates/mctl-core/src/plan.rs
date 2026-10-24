@@ -199,6 +199,16 @@ impl PlanDef {
     }
 }
 
+/// A maneuver mentioned in the ISS OEM's comments: read-only, shown for reference (FR-33). The comment
+/// format is not specified (DESIGN.md R3), so everything but the raw text is best effort.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReferenceBurn {
+    pub raw: String,
+    pub epoch: Option<Utc>,
+    /// Magnitude, m/s, when the comment gave one with a recognised unit.
+    pub dv_m_s: Option<f64>,
+}
+
 /// A burn with its trigger resolved to an epoch.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BurnView {

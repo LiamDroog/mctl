@@ -728,6 +728,7 @@ mod tests {
             regime: crate::config::Regime::Earth,
             schedule: None,
             deep: None,
+            reference_burns: vec![],
             ops: None,
             ops_health: None,
             met_epoch: None,

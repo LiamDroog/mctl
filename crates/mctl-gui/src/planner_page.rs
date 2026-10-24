@@ -22,7 +22,39 @@ fn plan_of<'a>(inp: &'a PageInput<'_>) -> Option<&'a PlanView> {
         .map(|(_, p)| &**p)
 }
 
-fn burns_panel(grid: &mut Grid, rect: CellRect, plan: Option<&PlanView>) {
+fn reference_lines(l: &mut Lines<'_>, refs: &[mctl_core::plan::ReferenceBurn], oem: bool) {
+    let dim = Style::new(Role::Dim);
+    l.row += 1;
+    if !oem {
+        return;
+    }
+    if refs.is_empty() {
+        l.line(
+            "OEM REFERENCE BURNS: NONE (THE FILE'S COMMENTS MENTION NO MANEUVER)",
+            dim,
+        );
+        return;
+    }
+    l.line(
+        "OEM REFERENCE BURNS (READ-ONLY, FORMAT UNSPECIFIED)",
+        Style::new(Role::Bright),
+    );
+    for r in refs {
+        let ep = r
+            .epoch
+            .map_or("--".to_owned(), |t| t.iso()[..19].to_owned());
+        let dv = r.dv_m_s.map_or("--".to_owned(), |d| format!("{d:.3} m/s"));
+        l.line(&format!("{ep}  {dv}  {}", r.raw), Style::new(Role::Fg));
+    }
+}
+
+fn burns_panel(
+    grid: &mut Grid,
+    rect: CellRect,
+    plan: Option<&PlanView>,
+    refs: &[mctl_core::plan::ReferenceBurn],
+    oem: bool,
+) {
     boxed(grid, rect, "BURNS");
     let mut l = Lines::new(grid, rect);
     let (dim, fg, bright) = (
@@ -92,6 +124,7 @@ fn burns_panel(grid: &mut Grid, rect: CellRect, plan: Option<&PlanView>) {
         "EDIT: burn add|del|clear   plan horizon|force|drag|run|save|load",
         dim,
     );
+    reference_lines(&mut l, refs, oem);
 }
 
 fn elements_rows(l: &mut Lines<'_>, n: &Elements, p: &Elements) {
@@ -206,7 +239,19 @@ pub(crate) fn planner(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     let plan = plan_of(inp);
     let lw = cols * 58 / 100;
     let left = column(0, lw, top, &split(h, &[44, 56]));
-    burns_panel(grid, left[0], plan);
+    let v = inp.vehicle;
+    let has_oem = v.is_some_and(|v| {
+        v.sources
+            .iter()
+            .any(|s| s.kind == mctl_core::state::SourceKind::Oem)
+    });
+    burns_panel(
+        grid,
+        left[0],
+        plan,
+        v.map_or(&[][..], |v| &v.reference_burns[..]),
+        has_oem,
+    );
     let half = lw / 2;
     plot(
         grid,

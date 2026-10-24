@@ -22,6 +22,8 @@ pub enum Command {
     SeekRelative(f64),
     /// Advance by this many seconds and stay paused (entering SIM mode if live).
     Step(f64),
+    /// Play back the recording from this epoch (`None`: from its start) at 1x.
+    Replay(Option<Utc>),
     /// Return to wall-clock time at 1x.
     Live,
     /// Make the named site the active observer site.

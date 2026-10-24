@@ -27,6 +27,10 @@ pub struct Clock {
     anchor: Instant,
     rate: f64,
     paused: bool,
+    /// SIM mechanics, but showing recorded data (see `Command::Replay`).
+    replay: bool,
+    /// Recording span; the clock pauses at its ends while replaying.
+    replay_span: Option<(Utc, Utc)>,
 }
 
 impl Clock {
@@ -37,12 +41,18 @@ impl Clock {
             anchor: wall,
             rate: 1.0,
             paused: false,
+            replay: false,
+            replay_span: None,
         }
     }
 
     pub fn view(&self) -> ClockView {
         ClockView {
-            mode: self.mode,
+            mode: if self.replay && self.mode == ClockMode::Sim {
+                ClockMode::Replay
+            } else {
+                self.mode
+            },
             rate: if self.mode == ClockMode::Live {
                 1.0
             } else {
@@ -56,8 +66,8 @@ impl Clock {
     pub fn now(&self, wall: Instant, wall_utc: Utc) -> Utc {
         match self.mode {
             ClockMode::Live => wall_utc,
-            ClockMode::Sim if self.paused => self.sim_epoch,
-            ClockMode::Sim => self
+            ClockMode::Sim | ClockMode::Replay if self.paused => self.sim_epoch,
+            ClockMode::Sim | ClockMode::Replay => self
                 .sim_epoch
                 .plus(wall.saturating_duration_since(self.anchor).as_secs_f64() * self.rate),
         }
@@ -70,7 +80,10 @@ impl Clock {
             return None;
         }
         let t = self.now(wall, wall_utc);
-        let (lo, hi) = (bound(MIN_EPOCH), bound(MAX_EPOCH));
+        let (lo, hi) = match (self.replay, self.replay_span) {
+            (true, Some(span)) => span,
+            _ => (bound(MIN_EPOCH), bound(MAX_EPOCH)),
+        };
         let hit = if t.0 < lo.0 {
             Some(lo)
         } else if t.0 > hi.0 {
@@ -81,6 +94,11 @@ impl Clock {
         self.sim_epoch = hit;
         self.paused = true;
         Some(format!("clock reached its limit {} and paused", hit.iso()))
+    }
+
+    /// The span of the recording, when there is one.
+    pub fn set_replay_span(&mut self, span: Option<(Utc, Utc)>) {
+        self.replay_span = span;
     }
 
     fn enter_sim_at(&mut self, t: Utc, wall: Instant) {
@@ -125,6 +143,16 @@ impl Clock {
                         bound(MAX_EPOCH).iso()
                     ));
                 }
+                if let (true, Some((lo, hi))) = (self.replay, self.replay_span)
+                    && (t.0 < lo.0 || t.0 > hi.0)
+                {
+                    return Err(format!(
+                        "{} is outside the recording {} .. {}",
+                        t.iso(),
+                        lo.iso(),
+                        hi.iso()
+                    ));
+                }
                 let was_live = self.mode == ClockMode::Live;
                 self.enter_sim_at(*t, wall);
                 if was_live {
@@ -142,6 +170,25 @@ impl Clock {
                 self.enter_sim_at(t, wall);
                 self.paused = true;
                 Ok(format!("clock: step {dt:+} s to {}", t.iso()))
+            }
+            Command::Replay(from) => {
+                let (lo, hi) = self
+                    .replay_span
+                    .ok_or("there is no recording to replay (recording is off or empty)")?;
+                let t = from.unwrap_or(lo);
+                if t.0 < lo.0 || t.0 > hi.0 {
+                    return Err(format!(
+                        "{} is outside the recording {} .. {}",
+                        t.iso(),
+                        lo.iso(),
+                        hi.iso()
+                    ));
+                }
+                self.enter_sim_at(t, wall);
+                self.rate = 1.0;
+                self.paused = false;
+                self.replay = true;
+                Ok(format!("clock: REPLAY from {}", t.iso()))
             }
             Command::Live => {
                 *self = Self::live(wall);

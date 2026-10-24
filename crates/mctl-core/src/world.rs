@@ -155,6 +155,8 @@ pub struct VehicleView {
     pub schedule: Option<String>,
     /// L2 vehicles only, once a state exists.
     pub deep: Option<DeepView>,
+    /// Maneuvers mentioned in the OEM header comments (read-only reference burns).
+    pub reference_burns: Vec<crate::plan::ReferenceBurn>,
     /// Latest observing schedule or daily report, when the vehicle has one and it has arrived.
     pub ops: Option<crate::schedule::Ops>,
     /// Fetch health of the schedule source; `None` for a vehicle without one.
@@ -255,11 +257,13 @@ pub enum EopView {
     },
 }
 
-/// Simulation clock mode (DESIGN.md FR-20). REPLAY joins with the recording store.
+/// Clock mode (DESIGN.md FR-20).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClockMode {
     Live,
     Sim,
+    /// Playing back the recording: states and telemetry come from the store.
+    Replay,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -45,6 +45,9 @@ struct Cli {
     /// Do not record to the database this run.
     #[arg(long, global = true)]
     no_record: bool,
+    /// Start in REPLAY of the recording: `start`, an ISO epoch, or an offset from now such as `-2h`.
+    #[arg(long, global = true, value_name = "WHEN")]
+    replay: Option<String>,
     #[command(subcommand)]
     command: Option<Command>,
     #[command(flatten)]
@@ -522,6 +525,12 @@ fn main() -> Result<()> {
         None => {
             let (live, _engine) =
                 start_live(&cfg, cli.vehicle.as_deref(), cli.offline, !cli.no_record)?;
+            if let Some(when) = &cli.replay {
+                let from = mctl_gui::parse_replay_start(Some(when)).map_err(anyhow::Error::msg)?;
+                live.commands
+                    .send(mctl_core::command::Command::Replay(from))
+                    .map_err(|_| anyhow::anyhow!("the engine stopped before replay could start"))?;
+            }
             let g = cli.gui;
             mctl_gui::run(
                 load_themes(&cli.themes_dir)?,

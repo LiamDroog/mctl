@@ -49,6 +49,8 @@ pub enum Quality {
     Live,
     Pred,
     Sim,
+    /// Read back from the recording while replaying.
+    Rec,
     Stale,
     NoData,
 }
@@ -59,6 +61,7 @@ impl Quality {
             Self::Live => "LIVE",
             Self::Pred => "PRED",
             Self::Sim => "SIM",
+            Self::Rec => "REC",
             Self::Stale => "STALE",
             Self::NoData => "NO DATA",
         }

@@ -33,6 +33,11 @@ fn clock_text(inp: &PageInput<'_>) -> (String, Style) {
     let c = inp.world.clock;
     match c.mode {
         ClockMode::Live => ("LIVE 1x".into(), Style::new(Role::Bright)),
+        ClockMode::Replay if c.paused => ("REPLAY PAUSED".into(), Style::limit(Limit::Caution)),
+        ClockMode::Replay => (
+            format!("REPLAY {:+}x", c.rate),
+            Style::limit(Limit::Caution),
+        ),
         ClockMode::Sim if c.paused => (
             format!("SIM PAUSED {:+}x", c.rate),
             Style::limit(Limit::Caution),
@@ -719,7 +724,12 @@ fn telemetry_banner(l: &mut Lines<'_>, inp: &PageInput<'_>) {
             Style::limit(Limit::Caution),
         );
     }
-    if !inp.world.clock.is_live() {
+    if inp.world.clock.mode == mctl_core::world::ClockMode::Replay {
+        l.line(
+            "REPLAY: RECORDED TELEMETRY AT THE CLOCK TIME",
+            Style::new(Role::Info),
+        );
+    } else if !inp.world.clock.is_live() {
         l.line(
             "NOT LIVE: TELEMETRY IS CURRENT, NOT AT SIM TIME",
             Style::limit(Limit::Caution),
@@ -875,7 +885,9 @@ fn group_table_reserved(
         (None, Some(lo), Some(hi)) => format!("UPDATED {} .. {} AGO", fmt_dur(lo), fmt_dur(hi)),
         _ => "NOTHING RECEIVED".to_owned(),
     };
-    let live = if inp.world.clock.is_live() {
+    let live = if inp.world.clock.is_live()
+        || inp.world.clock.mode == mctl_core::world::ClockMode::Replay
+    {
         String::new()
     } else {
         "  NOT LIVE: TELEMETRY IS CURRENT, NOT AT SIM TIME".to_owned()

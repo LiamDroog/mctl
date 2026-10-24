@@ -46,6 +46,12 @@ const EVENT_STEPS_PER_REV: f64 = 200.0;
 const TRACK_REBUILD_S: f64 = 1.0;
 /// Track window for an L2 vehicle, days either side of now (a halo orbit takes about six months).
 const DEEP_TRACK_DAYS: f64 = 90.0;
+/// Recorded states further apart than this are a gap in the recording; replay falls back to the sources.
+const REPLAY_MAX_GAP_S: f64 = 5.0;
+/// Replayed telemetry is re-read from the store when the clock has moved this far, seconds.
+const REPLAY_TELEMETRY_REFRESH_S: f64 = 1.0;
+/// Telemetry older than this at the replay time is not shown, seconds.
+const REPLAY_TELEMETRY_WINDOW_S: f64 = 6.0 * 3600.0;
 /// A telemetry value older than this is not added to the item's recent history, seconds.
 const HISTORY_STALE_S: f64 = 120.0;
 
@@ -89,6 +95,8 @@ struct VehicleModel {
     supgp_health: Health,
     horizons: Option<Loaded<Oem>>,
     horizons_health: Health,
+    /// While replaying: the recorded state in force now and the source it was recorded from.
+    recorded_now: Option<(SourceKind, State)>,
     ops: Option<mctl_core::schedule::Ops>,
     ops_health: Option<Health>,
     track: Option<(Utc, SourceKind, Arc<Track>)>,
@@ -128,6 +136,12 @@ pub struct Model {
     trends_latest: Option<Arc<mctl_core::world::TrendSet>>,
     pass_worker: Option<crate::passes::Worker>,
     plan_worker: Option<crate::planner::Worker>,
+    /// The recording, opened read-only on the first replay.
+    db_path: Option<std::path::PathBuf>,
+    replay_store: Option<mctl_store::Store>,
+    replay_tel: HashMap<String, (Option<String>, Utc)>,
+    replay_tel_t: f64,
+    replay_newest_rx: Option<Utc>,
     plans: HashMap<String, PlanState>,
     plan_job_counter: u64,
     pass_entries: HashMap<String, PassEntry>,
@@ -290,6 +304,7 @@ impl Model {
                 supgp_health: Health::Starting,
                 horizons: None,
                 horizons_health: Health::Starting,
+                recorded_now: None,
                 ops: None,
                 ops_health: d.schedule.as_ref().map(|_| Health::Starting),
                 oem_health: Health::Starting,
@@ -333,6 +348,11 @@ impl Model {
             trends_latest: None,
             pass_worker: None,
             plan_worker: None,
+            db_path: None,
+            replay_store: None,
+            replay_tel: HashMap::new(),
+            replay_tel_t: f64::NEG_INFINITY,
+            replay_newest_rx: None,
             plans: HashMap::new(),
             plan_job_counter: 0,
             pass_entries: HashMap::new(),
@@ -437,6 +457,7 @@ impl Model {
 
     /// Serve trend requests from the recording at `db`.
     pub fn enable_trends(&mut self, db: std::path::PathBuf) {
+        self.db_path = Some(db.clone());
         self.trend_worker = Some(crate::trends::Worker::start(db));
     }
 
@@ -453,6 +474,68 @@ impl Model {
                 wall,
                 "trends need the recording, which is off or unavailable",
             ),
+        }
+    }
+
+    /// Open the recording and tell the clock its span. Returns a reason when replay is impossible.
+    pub fn prepare_replay(&mut self, clock: &mut Clock) -> Result<(), String> {
+        let path = self
+            .db_path
+            .clone()
+            .ok_or("recording is off; there is nothing to replay")?;
+        let store = mctl_store::Store::open_readonly(&path).map_err(|e| e.to_string())?;
+        let mut span: Option<(Utc, Utc)> = None;
+        for v in &self.vehicles {
+            if let Some((a, b)) = store.state_span(&v.def.id).map_err(|e| e.to_string())? {
+                span = Some(span.map_or((a, b), |(x, y)| (Utc(x.0.min(a.0)), Utc(y.0.max(b.0)))));
+            }
+        }
+        let span = span.ok_or("the recording has no vehicle states yet")?;
+        self.replay_store = Some(store);
+        self.replay_tel_t = f64::NEG_INFINITY;
+        clock.set_replay_span(Some(span));
+        Ok(())
+    }
+
+    /// Load what the recording says at `t`: each vehicle's state (first source in priority order that
+    /// has one) and the telemetry values in force. Re-queries telemetry at most once per
+    /// `REPLAY_TELEMETRY_REFRESH_S` of clock time.
+    fn refresh_replay(&mut self, t: Utc, wall: Utc) {
+        let Some(store) = &self.replay_store else {
+            return;
+        };
+        let mut failures = Vec::new();
+        for v in &mut self.vehicles {
+            v.recorded_now = None;
+            for k in &v.def.sources {
+                match store.state_at(&v.def.id, k.label(), t, REPLAY_MAX_GAP_S) {
+                    Ok(Some((r, vel))) => {
+                        v.recorded_now = Some((*k, State::new(r, vel)));
+                        break;
+                    }
+                    Ok(None) => {}
+                    Err(e) => failures.push(e.to_string()),
+                }
+            }
+        }
+        if (t.0 - self.replay_tel_t).abs() >= REPLAY_TELEMETRY_REFRESH_S {
+            match store.telemetry_at(t, REPLAY_TELEMETRY_WINDOW_S) {
+                Ok(rows) => {
+                    self.replay_newest_rx =
+                        rows.iter().map(|r| r.3).max_by(|a, b| a.0.total_cmp(&b.0));
+                    self.replay_tel = rows
+                        .into_iter()
+                        .map(|(id, value, text, rx)| {
+                            (id, (text.or_else(|| value.map(|v| v.to_string())), rx))
+                        })
+                        .collect();
+                    self.replay_tel_t = t.0;
+                }
+                Err(e) => failures.push(e.to_string()),
+            }
+        }
+        for f in failures {
+            self.note(wall, format!("replay read failed: {f}"));
         }
     }
 
@@ -1353,6 +1436,14 @@ impl Model {
             self.cfg.engine.track_future_rev,
             self.cfg.engine.track_samples,
         );
+        let replaying = clock.mode == mctl_core::world::ClockMode::Replay;
+        if replaying {
+            self.refresh_replay(t, wall);
+        } else {
+            for v in &mut self.vehicles {
+                v.recorded_now = None;
+            }
+        }
         let eop = self.eop.as_ref().map(|l| l.data.clone());
         let mut revision = self.track_revision;
         let mut vehicles = self
@@ -1398,17 +1489,33 @@ impl Model {
                 }
             }
         }
-        self.sample_history(wall);
+        if !replaying {
+            self.sample_history(wall);
+        }
+        // Replaying, "now" is the replay time and the stream clock is the newest recorded value.
+        let (tel_map, tel_now, feed_age_s) = if replaying {
+            (
+                &self.replay_tel,
+                t,
+                Some(self.replay_newest_rx.map_or(f64::INFINITY, |r| t.minus(r))),
+            )
+        } else {
+            (
+                &self.telemetry,
+                wall,
+                self.feed_clock.map(|c| wall.minus(c)),
+            )
+        };
         let telemetry = self.telemetry_health.clone().map(|health| TelemetryView {
             health,
             subscribed: self.telemetry_meta.len(),
             group_totals: group_totals(&self.telemetry_meta),
-            feed_age_s: self.feed_clock.map(|c| wall.minus(c)),
+            feed_age_s,
             items: self
                 .telemetry_meta
                 .iter()
                 .filter_map(|m| {
-                    let (text, rx) = self.telemetry.get(&m.id)?;
+                    let (text, rx) = tel_map.get(&m.id)?;
                     Some(TelemetryItem {
                         id: m.id.clone(),
                         group: m.group.clone(),
@@ -1421,8 +1528,12 @@ impl Model {
                         value: text.as_deref().and_then(|t| t.trim().parse().ok()),
                         text: text.clone(),
                         rx: *rx,
-                        age_s: wall.minus(*rx),
-                        history: self.history_view.get(&m.id).cloned().unwrap_or_default(),
+                        age_s: tel_now.minus(*rx),
+                        history: if replaying {
+                            Default::default()
+                        } else {
+                            self.history_view.get(&m.id).cloned().unwrap_or_default()
+                        },
                     })
                 })
                 .collect(),
@@ -1587,6 +1698,15 @@ fn vehicle_view(
             .as_ref()
             .and_then(|r| r.as_ref().ok().copied())
     });
+    // Replaying: what was recorded beats what the sources say now (FR-21); a gap falls back to them.
+    let (active, quality, active_state) = match v.recorded_now {
+        Some((kind, st)) => (
+            samples.iter().position(|s| s.kind == kind),
+            Quality::Rec,
+            Some(st),
+        ),
+        None => (active, quality, active_state),
+    };
 
     let sources: Vec<SourceView> = samples
         .iter()
@@ -1710,6 +1830,11 @@ fn vehicle_view(
         regime: v.def.regime,
         schedule: v.def.schedule.clone(),
         deep: deep_view,
+        reference_burns: v
+            .oem
+            .as_ref()
+            .map(|o| o.data.reference_burns())
+            .unwrap_or_default(),
         ops: v.ops.clone(),
         ops_health: v.ops_health.clone(),
         met_epoch: v.def.met_epoch.as_deref().and_then(|m| Utc::parse(m).ok()),
@@ -1863,6 +1988,12 @@ fn drain_commands(rx: &Receiver<Command>, clock: &mut Clock, model: &mut Model, 
             Command::Ack => {
                 model.ack(wall_utc);
                 continue;
+            }
+            Command::Replay(_) => {
+                if let Err(e) = model.prepare_replay(clock) {
+                    model.note(wall_utc, format!("command rejected: {e}"));
+                    continue;
+                }
             }
             Command::Plan { vehicle, edit } => {
                 model.plan_edit(vehicle, edit.clone(), wall_utc);
@@ -2098,6 +2229,95 @@ mod tests {
         let v = w.vehicles.iter().find(|v| v.id == "jwst").unwrap();
         assert!(v.solution.is_none());
         assert_eq!(v.sources[0].status, SourceStatus::OutOfSpan);
+    }
+
+    #[test]
+    fn replay_serves_recorded_states_and_telemetry_and_falls_back_across_gaps() {
+        use mctl_core::world::ClockMode;
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("mctl.db");
+        let t0 = t_in_oem();
+        {
+            let mut store = mctl_store::Store::open(&db).unwrap();
+            let mut batch = Vec::new();
+            for k in 0..=10 {
+                // A recorded ISS state that deliberately differs from every source: 1000 km on x.
+                batch.push(Record::State {
+                    vehicle: "iss".into(),
+                    source: "OEM".into(),
+                    t: t0.plus(f64::from(k)),
+                    frame: "GCRF",
+                    r_km: [1000.0 + f64::from(k), 6900.0, 0.0],
+                    v_km_s: [0.0, 0.0, 7.6],
+                    quality: "PRED".into(),
+                });
+            }
+            batch.push(Record::Telemetry {
+                item_id: "USLAB000058".into(),
+                t_rx: t0.plus(2.0),
+                value: Some(741.5),
+                text: None,
+            });
+            store.write(&batch).unwrap();
+        }
+        let mut m = model();
+        feed(&mut m, true, true);
+        m.set_telemetry(vec![meta("USLAB000058")]);
+        m.enable_trends(db);
+        let mut clock = Clock::live(Instant::now());
+        // No replay span yet: the clock refuses.
+        assert!(
+            clock
+                .apply(&Command::Replay(None), Instant::now(), t0)
+                .is_err()
+        );
+        m.prepare_replay(&mut clock).unwrap();
+        clock
+            .apply(&Command::Replay(Some(t0.plus(5.0))), Instant::now(), t0)
+            .unwrap();
+        assert_eq!(clock.view().mode, ClockMode::Replay);
+        let view = clock.view();
+        let w = m.world_at(t0.plus(5.5), view, t0);
+        let sol = w.vehicles[0].solution.as_ref().unwrap();
+        assert_eq!(sol.quality, Quality::Rec);
+        assert_eq!(sol.source, SourceKind::Oem);
+        assert!(
+            (sol.state_gcrf.r.x - 1005.5).abs() < 1e-9,
+            "{}",
+            sol.state_gcrf.r.x
+        );
+        let tel = w.telemetry.unwrap();
+        assert_eq!(tel.get("USLAB000058").unwrap().value, Some(741.5));
+        assert_eq!(
+            tel.get("USLAB000058").unwrap().age_s,
+            3.5,
+            "age is relative to the replay time"
+        );
+        assert!(!tel.signal_lost());
+        // A minute later the recording ends; the arbiter's sources answer, labelled SIM, not REC.
+        let w = m.world_at(t0.plus(60.0), view, t0);
+        assert_ne!(
+            w.vehicles[0].solution.as_ref().unwrap().quality,
+            Quality::Rec
+        );
+        assert!(
+            w.telemetry.unwrap().signal_lost(),
+            "no recorded value for a minute means signal lost"
+        );
+        // The clock pauses at the end of the recording rather than running off it.
+        let mut c = Clock::live(Instant::now());
+        m.prepare_replay(&mut c).unwrap();
+        let wall = Instant::now();
+        c.apply(&Command::Replay(Some(t0.plus(9.0))), wall, t0)
+            .unwrap();
+        c.apply(&Command::SetRate(100.0), wall, t0).unwrap();
+        let later = wall + std::time::Duration::from_secs(5);
+        assert!(c.enforce_bounds(later, t0).is_some());
+        assert!(
+            c.apply(&Command::Seek(t0.plus(10_000.0)), later, t0)
+                .unwrap_err()
+                .contains("outside the recording")
+        );
     }
 
     #[test]

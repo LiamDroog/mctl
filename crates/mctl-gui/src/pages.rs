@@ -204,6 +204,7 @@ mod tests {
             regime: Default::default(),
             schedule: None,
             deep: None,
+            reference_burns: vec![],
             ops: None,
             ops_health: None,
             met_epoch: None,

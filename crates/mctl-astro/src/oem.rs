@@ -219,6 +219,23 @@ impl Oem {
             .collect()
     }
 
+    /// Maneuver mentions in the header comments, with an epoch and a delta-v when they can be read.
+    ///
+    /// The comment format is not specified, and the real file at the time of writing has no maneuver
+    /// comments at all, so the recognised forms are an ISO epoch anywhere in the text and a number
+    /// after `DV` or `DELTA-V`/`DELTA_V`/`DELTA V` with unit m/s, cm/s, mm/s, km/s, ft/s or fps. Anything
+    /// else is kept as raw text only.
+    pub fn reference_burns(&self) -> Vec<mctl_core::plan::ReferenceBurn> {
+        self.maneuver_notes()
+            .into_iter()
+            .map(|n| mctl_core::plan::ReferenceBurn {
+                raw: n.to_owned(),
+                epoch: find_epoch(n),
+                dv_m_s: find_dv_m_s(n),
+            })
+            .collect()
+    }
+
     pub fn span(&self) -> (Utc, Utc) {
         (self.states[0].t, self.states[self.states.len() - 1].t)
     }
@@ -321,11 +338,91 @@ impl Oem {
     }
 }
 
+/// First `YYYY-MM-DDThh:mm:ss[.fff]` in `text`.
+fn find_epoch(text: &str) -> Option<Utc> {
+    let b = text.as_bytes();
+    (0..b.len().saturating_sub(18)).find_map(|i| {
+        let w = text.get(i..i + 19)?;
+        let digits = |r: std::ops::Range<usize>| w.as_bytes()[r].iter().all(u8::is_ascii_digit);
+        let shaped = digits(0..4)
+            && &w[4..5] == "-"
+            && digits(5..7)
+            && &w[7..8] == "-"
+            && digits(8..10)
+            && &w[10..11] == "T"
+            && digits(11..13)
+            && &w[13..14] == ":"
+            && digits(14..16)
+            && &w[16..17] == ":"
+            && digits(17..19);
+        if !shaped {
+            return None;
+        }
+        // Take fractional seconds when present.
+        let frac_len = text[i + 19..]
+            .strip_prefix('.')
+            .map_or(0, |r| 1 + r.bytes().take_while(u8::is_ascii_digit).count());
+        Utc::parse(&text[i..i + 19 + frac_len]).ok()
+    })
+}
+
+/// A delta-v magnitude in m/s from `DV = 1.25 m/s`, `DELTA-V: 4 ft/s`, and similar.
+fn find_dv_m_s(text: &str) -> Option<f64> {
+    let upper = text.to_ascii_uppercase();
+    let key = ["DELTA-V", "DELTA_V", "DELTA V", "DV"]
+        .iter()
+        .filter_map(|k| upper.find(k).map(|i| i + k.len()))
+        .min()?;
+    let rest = upper[key..].trim_start_matches([' ', '=', ':']);
+    let num_len = rest
+        .find(|c: char| !(c.is_ascii_digit() || matches!(c, '.' | '-' | '+' | 'E')))
+        .unwrap_or(rest.len());
+    let value: f64 = rest[..num_len].parse().ok()?;
+    let unit = rest[num_len..].split_whitespace().next()?;
+    let scale = match unit.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '/') {
+        "M/S" => 1.0,
+        "CM/S" => 0.01,
+        "MM/S" => 0.001,
+        "KM/S" => 1000.0,
+        "FT/S" | "FPS" => 0.3048,
+        _ => return None,
+    };
+    Some(value.abs() * scale)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const REAL: &str = include_str!("../fixtures/iss-oem-sample.txt");
+
+    #[test]
+    fn reference_burns_are_read_from_maneuver_comments_defensively() {
+        let mut o = Oem::parse(REAL).unwrap();
+        assert!(
+            o.reference_burns().is_empty(),
+            "the real file has no maneuver comments"
+        );
+        o.notes = vec![
+            "Reboost: EPOCH = 2026-10-25T12:00:00.500 $ DV = 1.25 m/s".into(),
+            "Maneuver at 2026-10-26T01:02:03, DELTA-V: 4 ft/s".into(),
+            "Possible burn, details to follow".into(),
+            "Maneuver DV 2 parsecs".into(),
+            "ISS first asc. node : EPOCH = 2026-10-21T13:32:13.213".into(),
+        ];
+        let b = o.reference_burns();
+        assert_eq!(b.len(), 4, "the ascending-node line is not a maneuver");
+        assert_eq!(
+            b[0].epoch,
+            Some(Utc::parse("2026-10-25T12:00:00.5").unwrap())
+        );
+        assert_eq!(b[0].dv_m_s, Some(1.25));
+        assert!((b[1].dv_m_s.unwrap() - 1.2192).abs() < 1e-9);
+        assert_eq!(b[1].epoch, Some(Utc::parse("2026-10-26T01:02:03").unwrap()));
+        assert_eq!((b[2].epoch, b[2].dv_m_s), (None, None), "kept as raw text");
+        assert_eq!(b[3].dv_m_s, None, "an unknown unit is not guessed");
+        assert_eq!(b[2].raw, "Possible burn, details to follow");
+    }
 
     fn synthetic(n: usize) -> String {
         // A circular orbit sampled every 240 s, so the exact answer is known analytically.
