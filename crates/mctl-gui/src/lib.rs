@@ -5,6 +5,7 @@
 
 mod adi;
 mod app;
+mod art;
 mod assets;
 mod coast;
 mod commands;
@@ -26,6 +27,7 @@ mod sky;
 mod telemetry_view;
 mod theme;
 mod trendplot;
+mod vehicle_pages;
 mod widgets;
 
 pub use app::{Options, Present, run};

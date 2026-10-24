@@ -21,6 +21,7 @@ use mctl_core::command::Command;
 use mctl_core::config::{Config, Regime, VehicleDef};
 use mctl_core::cw::{Condition, Latch, Metric, RuleDef, Sample as CwSample, Tracker};
 use mctl_core::plan::{PlanCommand, PlanDef, PlanStatus, PlanView};
+use mctl_core::prox::{ProxPoint, ProxView};
 use mctl_core::schedule::{FieldRequest, FieldState, FieldView, Ops};
 use mctl_core::state::{Elements, Geodetic, Quality, SourceKind, State};
 use mctl_core::time::{EopTable, Utc};
@@ -47,6 +48,8 @@ const EVENT_STEPS_PER_REV: f64 = 200.0;
 const TRACK_REBUILD_S: f64 = 1.0;
 /// Track window for an L2 vehicle, days either side of now (a halo orbit takes about six months).
 const DEEP_TRACK_DAYS: f64 = 90.0;
+/// The predicted relative path is recomputed when the clock has moved this far, seconds.
+const PROX_PREDICT_REFRESH_S: f64 = 30.0;
 /// Pictures shown per vehicle: JWST's current and next targets, or Hubble's first programs.
 const FIELDS_PER_VEHICLE: usize = 4;
 /// A picture that could not be had is asked for again after this long, seconds.
@@ -141,6 +144,9 @@ pub struct Model {
     trends_latest: Option<Arc<mctl_core::world::TrendSet>>,
     pass_worker: Option<crate::passes::Worker>,
     plan_worker: Option<crate::planner::Worker>,
+    /// Recorded relative positions and the cached prediction per visiting vehicle.
+    prox_hist: HashMap<String, VecDeque<ProxPoint>>,
+    prox_pred: HashMap<String, (f64, Arc<Vec<ProxPoint>>)>,
     field_tx: Option<std::sync::mpsc::Sender<(String, FieldRequest)>>,
     /// Picture requests: state and when it was last asked for (a failure is retried after a while).
     fields: HashMap<(String, String), (FieldState, Instant)>,
@@ -174,6 +180,28 @@ struct Observed {
 }
 
 /// The value a rule watches right now, and its data quality.
+/// The trajectory a vehicle has from one source, for pairing two vehicles on the same kind.
+fn traj_of(vm: &VehicleModel, kind: SourceKind) -> Option<Arc<dyn Trajectory>> {
+    match kind {
+        SourceKind::Gp => vm
+            .gp
+            .as_ref()
+            .map(|l| l.data.clone() as Arc<dyn Trajectory>),
+        SourceKind::SupGp => vm
+            .supgp
+            .as_ref()
+            .map(|l| l.data.clone() as Arc<dyn Trajectory>),
+        SourceKind::Oem => vm
+            .oem
+            .as_ref()
+            .map(|l| l.data.clone() as Arc<dyn Trajectory>),
+        SourceKind::Horizons => vm
+            .horizons
+            .as_ref()
+            .map(|l| l.data.clone() as Arc<dyn Trajectory>),
+    }
+}
+
 fn empty_plan(def: &PlanDef) -> PlanView {
     PlanView {
         def: def.clone(),
@@ -356,6 +384,8 @@ impl Model {
             trends_latest: None,
             pass_worker: None,
             plan_worker: None,
+            prox_hist: HashMap::new(),
+            prox_pred: HashMap::new(),
             field_tx: None,
             fields: HashMap::new(),
             db_path: None,
@@ -626,6 +656,103 @@ impl Model {
                 views.push(Arc::new(FieldView { key, label, state }));
             }
             out.push(views);
+        }
+        out
+    }
+
+    /// Relative motion of each visiting vehicle about its target, from a source both vehicles have.
+    fn prox_views(&mut self, vehicles: &[VehicleView], t: Utc) -> Vec<Arc<ProxView>> {
+        let cfg = self.cfg.prox.clone();
+        let cap = (cfg.window_min * 60.0 / crate::prox::STEP_S) as usize + 1;
+        let mut out = Vec::new();
+        for ci in 0..self.vehicles.len() {
+            let Some(target_id) = self.vehicles[ci].def.visits.clone() else {
+                continue;
+            };
+            let chaser_id = self.vehicles[ci].def.id.clone();
+            let (Some(cv), Some(tv)) = (
+                vehicles.iter().find(|v| v.id == chaser_id),
+                vehicles.iter().find(|v| v.id == target_id),
+            ) else {
+                continue;
+            };
+            let (Some(csol), Some(tsol)) = (&cv.solution, &tv.solution) else {
+                continue;
+            };
+            // Compare like with like: the target's state from the visitor's own source when it has one.
+            let kind = csol.source;
+            let same = tv
+                .sources
+                .iter()
+                .find(|s| s.kind == kind)
+                .and_then(|s| s.state_gcrf);
+            let (tstate, note) = match same {
+                Some(st) => (
+                    State::new([st[0], st[1], st[2]], [st[3], st[4], st[5]]),
+                    format!("{} FOR BOTH VEHICLES", kind.label()),
+                ),
+                None => (
+                    tsol.state_gcrf,
+                    format!(
+                        "MIXED SOURCES: {} FOR THE VISITOR, {} FOR THE TARGET",
+                        kind.label(),
+                        tsol.source.label()
+                    ),
+                ),
+            };
+            let hist = self.prox_hist.entry(chaser_id.clone()).or_default();
+            if let Some((rel, _, _)) = crate::prox::relative(&tstate, &csol.state_gcrf) {
+                let last = hist.back().map(|p| p.t.0);
+                match last {
+                    Some(l) if t.0 - l < 0.0 || t.0 - l > 5.0 * crate::prox::STEP_S => hist.clear(),
+                    _ => {}
+                }
+                if hist
+                    .back()
+                    .is_none_or(|p| t.0 - p.t.0 >= crate::prox::STEP_S)
+                {
+                    hist.push_back(ProxPoint { t, lvlh_km: rel });
+                    while hist.len() > cap {
+                        hist.pop_front();
+                    }
+                }
+            }
+            let history = Arc::new(hist.iter().copied().collect::<Vec<_>>());
+            let cached = self.prox_pred.get(&chaser_id);
+            let predicted = match cached {
+                Some((at, p)) if (t.0 - at).abs() < PROX_PREDICT_REFRESH_S && t.0 >= *at => {
+                    p.clone()
+                }
+                _ => {
+                    let pair = (
+                        traj_of(&self.vehicles[ci], kind),
+                        self.vehicles
+                            .iter()
+                            .find(|v| v.def.id == target_id)
+                            .and_then(|v| traj_of(v, kind)),
+                    );
+                    let p = Arc::new(match pair {
+                        (Some(c), Some(tg)) => {
+                            crate::prox::predict(tg.as_ref(), c.as_ref(), t, cfg.window_min)
+                        }
+                        _ => Vec::new(),
+                    });
+                    self.prox_pred.insert(chaser_id.clone(), (t.0, p.clone()));
+                    p
+                }
+            };
+            if let Some(v) = crate::prox::view(
+                &chaser_id,
+                &target_id,
+                &tstate,
+                &csol.state_gcrf,
+                note,
+                history,
+                predicted,
+                &cfg,
+            ) {
+                out.push(Arc::new(v));
+            }
         }
         out
     }
@@ -1562,6 +1689,14 @@ impl Model {
             })
             .collect::<Vec<_>>();
         self.track_revision = revision;
+        for view in &mut vehicles {
+            view.visitors = self
+                .vehicles
+                .iter()
+                .filter(|m| m.def.visits.as_deref() == Some(view.id.as_str()))
+                .map(|m| m.def.id.clone())
+                .collect();
+        }
         self.seq += 1;
         self.observe(&vehicles, &eop_view, wall);
         // Only real time is recorded: a SIM state is a simulation, not an observation.
@@ -1638,6 +1773,7 @@ impl Model {
         });
         self.update_passes(&mut vehicles, t, orientation);
         self.update_plans(&vehicles, t, orientation, wall);
+        let prox = self.prox_views(&vehicles, t);
         let field_views = self.field_views(t);
         for (view, fields) in vehicles.iter_mut().zip(field_views) {
             view.fields = fields;
@@ -1666,6 +1802,7 @@ impl Model {
             observer,
             trends: self.trends_latest.clone(),
             plans: self.plans_view(),
+            prox,
             t,
             clock,
             log: self.log.iter().cloned().collect(),
@@ -1927,7 +2064,18 @@ fn vehicle_view(
     VehicleView {
         id: v.def.id.clone(),
         name: v.def.name.clone(),
-        norad: v.def.norad,
+        norad: if v.def.norad == 0 {
+            v.gp.as_ref().map_or(0, |g| g.data.norad)
+        } else {
+            v.def.norad
+        },
+        resolved_name: v
+            .gp
+            .as_ref()
+            .map(|g| g.data.name.clone())
+            .filter(|_| v.def.lookup.is_some()),
+        visits: v.def.visits.clone(),
+        visitors: vec![],
         telemetry: v.def.telemetry.clone(),
         regime: v.def.regime,
         schedule: v.def.schedule.clone(),
@@ -2325,7 +2473,14 @@ mod tests {
         let later = Utc(t.0 + 3.0 * 86_400.0);
         let w = m.world(t);
         assert_eq!(
-            w.vehicles[2].solution.as_ref().unwrap().quality,
+            w.vehicles
+                .iter()
+                .find(|v| v.id == "jwst")
+                .unwrap()
+                .solution
+                .as_ref()
+                .unwrap()
+                .quality,
             Quality::Pred
         );
         let w = m.world(later);
@@ -2333,6 +2488,67 @@ mod tests {
         let v = w.vehicles.iter().find(|v| v.id == "jwst").unwrap();
         assert!(v.solution.is_none());
         assert_eq!(v.sources[0].status, SourceStatus::OutOfSpan);
+    }
+
+    #[test]
+    fn a_visitor_on_the_stations_element_set_is_docked_and_one_a_little_ahead_is_near_on_the_v_bar()
+    {
+        use mctl_core::prox::ProxState;
+        let mut m = model();
+        feed(&mut m, true, true);
+        let dragon = |m: &mut Model, json: &str| {
+            m.apply(Event::Data {
+                key: SourceKey::Gp("dragon-crew".into()),
+                payload: Payload::Gp(GpModel::from_omm_json(json).unwrap()),
+                info: DataInfo {
+                    from_cache: false,
+                    fetched_at: Utc(0.0),
+                    raw: None,
+                },
+            });
+        };
+        dragon(&mut m, OMM);
+        let t = t_in_oem();
+        let w = m.world(t);
+        let p = w
+            .prox
+            .iter()
+            .find(|p| p.chaser == "dragon-crew")
+            .expect("a prox view");
+        assert_eq!(p.target, "iss");
+        assert_eq!(p.state, ProxState::Docked, "{:?}", p.rel_lvlh_km);
+        assert_eq!(
+            p.range_km, 0.0,
+            "the ISS GP is the visitor's GP, so the same-source difference is exactly zero"
+        );
+        assert!(
+            p.source_note.contains("GP/SGP4 FOR BOTH"),
+            "{}",
+            p.source_note
+        );
+        assert!(!p.ephemeris_grade);
+        // Advance the visitor's mean anomaly by 0.02 degrees: about 2.4 km further along the orbit.
+        let mut v: serde_json::Value = serde_json::from_str(OMM).unwrap();
+        let ma = v[0]["MEAN_ANOMALY"].as_f64().unwrap();
+        v[0]["MEAN_ANOMALY"] = serde_json::json!(ma + 0.02);
+        dragon(&mut m, &v.to_string());
+        let w = m.world(t.plus(1.0));
+        let p = w.prox.iter().find(|p| p.chaser == "dragon-crew").unwrap();
+        assert_eq!(p.state, ProxState::Near);
+        assert!(
+            (p.rel_lvlh_km[0] - 2.4).abs() < 0.2,
+            "ahead on V-bar: {:?}",
+            p.rel_lvlh_km
+        );
+        assert!(p.rel_lvlh_km[2].abs() < 0.2);
+        assert!(p.predicted.len() > 80, "{}", p.predicted.len());
+        assert!(p.history.len() <= 2);
+        // The cargo Dragon has no data yet and so no view; the ISS itself is not a visitor.
+        assert!(
+            w.prox
+                .iter()
+                .all(|p| p.chaser != "dragon-cargo" && p.chaser != "iss")
+        );
     }
 
     #[test]

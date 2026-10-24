@@ -582,10 +582,60 @@ mod tests {
             group_totals: totals,
             feed_age_s: Some(1.0),
         });
+        {
+            use mctl_core::prox::{ProxPoint, ProxState, ProxView};
+            // An invented approach along the V-bar from 3 km behind, for looking at the plot.
+            let path = |from: f64, to: f64| -> Vec<ProxPoint> {
+                (0..=40)
+                    .map(|k| {
+                        let f = f64::from(k) / 40.0;
+                        let x = from + (to - from) * f;
+                        ProxPoint {
+                            t: Utc(f64::from(k) * 60.0),
+                            lvlh_km: [x, 0.0, 0.25 * (f * 3.0).sin() + 0.4 * (1.0 - f)],
+                        }
+                    })
+                    .collect()
+            };
+            let now = [-1.1, 0.0, 0.30];
+            w.prox = vec![
+                std::sync::Arc::new(ProxView {
+                    chaser: "dragon-crew".into(),
+                    target: "iss".into(),
+                    state: ProxState::Docked,
+                    rel_lvlh_km: [0.0; 3],
+                    range_km: 0.0,
+                    range_rate_km_s: 0.0,
+                    source_note: "GP/SGP4 FOR BOTH VEHICLES".into(),
+                    ephemeris_grade: false,
+                    history: Default::default(),
+                    predicted: Default::default(),
+                    keep_out_km: 0.2,
+                    ellipsoid_semi_km: [2.0, 1.0],
+                }),
+                std::sync::Arc::new(ProxView {
+                    chaser: "dragon-cargo".into(),
+                    target: "iss".into(),
+                    state: ProxState::Near,
+                    rel_lvlh_km: now,
+                    range_km: 1.14,
+                    range_rate_km_s: -0.0004,
+                    source_note: "SYNTHETIC DATA FOR LOOKING AT THE PLOT".into(),
+                    ephemeris_grade: false,
+                    history: std::sync::Arc::new(path(-3.0, now[0])),
+                    predicted: std::sync::Arc::new(path(now[0], 0.0)),
+                    keep_out_km: 0.2,
+                    ellipsoid_semi_km: [2.0, 1.0],
+                }),
+            ];
+        }
         w.vehicles.push(VehicleView {
             id: "iss".into(),
             name: "ISS".into(),
             norad: 25544,
+            resolved_name: None,
+            visits: None,
+            visitors: vec!["dragon-crew".into(), "dragon-cargo".into()],
             telemetry: Some("isslive".into()),
             regime: mctl_core::config::Regime::Earth,
             schedule: None,
@@ -628,9 +678,11 @@ mod tests {
             out_dir: dir.into(),
             effects_off: false,
             warmup_frames: 40,
-            pages: ["gnc:2", "gnc:3", "eps", "tcs", "tcs:2", "comm"]
-                .map(String::from)
-                .to_vec(),
+            pages: [
+                "gnc:2", "gnc:3", "eps", "tcs", "tcs:2", "comm", "prox", "sys:5",
+            ]
+            .map(String::from)
+            .to_vec(),
             low_power: false,
             exec: vec![],
         };

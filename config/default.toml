@@ -12,6 +12,8 @@ backoff_max_s = 1800
 [sources.celestrak_gp]
 # One request per vehicle. FORMAT=JSON is explicit: CelesTrak's default is CSV.
 url_template = "https://celestrak.org/NORAD/elements/gp.php?CATNR={norad}&FORMAT=JSON"
+# For vehicles with `lookup` (Dragon): substring match on the object name; the newest object is used.
+name_url_template = "https://celestrak.org/NORAD/elements/gp.php?NAME={name}&FORMAT=JSON"
 min_refresh_s = 7200      # polite default: once per 2 h per object
 stale_after_s = 259200    # an element set older than this is STALE (assumption: 3 days)
 
@@ -109,6 +111,16 @@ state_hz = 1.0
 retention_days = 30.0
 max_size_mb = 2048.0
 
+[prox]
+# The PROX page (F8). These zone sizes are CONFIGURED ASSUMPTIONS, not values taken from a source: the
+# design asks for public values to be sourced. Dimensions here are a 200 m keep-out sphere and an approach
+# ellipsoid of 2 km along-track by 1 km radial semi-axes.
+keep_out_m = 200.0
+ellipsoid_semi_km = [2.0, 1.0]
+docked_range_m = 50.0     # identical element sets (a docked visitor) separate by ~0; below this is DOCKED
+near_km = 100.0
+window_min = 90.0         # history kept and prediction shown, minutes
+
 [engine]
 tick_hz = 50
 # Orbit/ground-track window around now, in revolutions, and sample count.
@@ -139,6 +151,23 @@ schedule = "hst"
 # STS-31 liftoff, 1990-04-24 12:33:51 UTC (assumption; verify).
 met_epoch = "1990-04-24T12:33:51"
 horizons = { id = "-48", step_s = 120, past_days = 1, future_days = 3, stale_after_s = 172800 }
+
+# Visiting vehicles. CelesTrak's number for a Dragon changes every mission, so each is found by name. While
+# docked, CelesTrak publishes the station's own element set for the visitor (identical epoch and motion), so
+# the PROX page shows DOCKED rather than a meaningless zero-range track.
+[[vehicle]]
+id = "dragon-crew"
+name = "CREW DRAGON"
+lookup = "CREW DRAGON"
+visits = "iss"
+sources = ["gp"]
+
+[[vehicle]]
+id = "dragon-cargo"
+name = "CARGO DRAGON"
+lookup = "DRAGON CRS"
+visits = "iss"
+sources = ["gp"]
 
 [[vehicle]]
 id = "jwst"

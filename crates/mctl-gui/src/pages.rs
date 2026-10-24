@@ -101,7 +101,13 @@ impl Page {
             Self::Pass => &["SKY PLOT", "PASS LIST", "SITES"],
             Self::Prox => &["R-BAR/V-BAR"],
             Self::View => &["WINDOW VIEW"],
-            Self::Sys => &["EVENT LOG", "SOURCE HEALTH", "SETTINGS", "C&W RULES"],
+            Self::Sys => &[
+                "EVENT LOG",
+                "SOURCE HEALTH",
+                "SETTINGS",
+                "C&W RULES",
+                "VEHICLE",
+            ],
             Self::Ops => &["OBSERVING SCHEDULE"],
         }
     }
@@ -186,7 +192,14 @@ pub fn availability(page: Page, sub: usize, vehicle: Option<&VehicleView>) -> Av
             Some(_) => Available,
             None => NoSource("no vehicle data yet".into()),
         },
-        Page::Prox => NoSource("no visiting vehicle is defined; prox-ops arrive in M6".into()),
+        Page::Prox => match vehicle {
+            None => NoSource("no vehicle data yet".into()),
+            Some(v) if v.visits.is_some() || !v.visitors.is_empty() => Available,
+            Some(v) => NoSource(format!(
+                "{} neither visits nor is visited by a configured vehicle",
+                v.name
+            )),
+        },
         Page::View => NoSource("window view arrives in M7".into()),
     }
 }
@@ -200,6 +213,9 @@ mod tests {
             id: "x".into(),
             name: "X".into(),
             norad: 1,
+            resolved_name: None,
+            visits: None,
+            visitors: vec![],
             telemetry: telemetry.map(str::to_owned),
             regime: Default::default(),
             schedule: None,

@@ -6,4 +6,5 @@ pub mod clock;
 pub mod engine;
 pub mod passes;
 pub mod planner;
+pub mod prox;
 pub mod trends;

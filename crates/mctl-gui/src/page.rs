@@ -671,6 +671,9 @@ mod tests {
             name: "ISS".into(),
             norad: 25544,
             telemetry: None,
+            resolved_name: None,
+            visits: None,
+            visitors: vec![],
             regime: mctl_core::config::Regime::Earth,
             schedule: None,
             deep: None,
@@ -941,6 +944,91 @@ mod tests {
             ["target:M31"],
             "only a ready picture gets an image widget"
         );
+    }
+
+    #[test]
+    fn the_prox_page_shows_docked_and_near_visitors_with_the_tle_warning_and_art() {
+        use crate::grid::{PlotKind, Widget};
+        use mctl_core::prox::{ProxPoint, ProxState, ProxView};
+        use std::sync::Arc;
+        let pv = |chaser: &str, state, rel: [f64; 3]| {
+            Arc::new(ProxView {
+                chaser: chaser.into(),
+                target: "iss".into(),
+                state,
+                rel_lvlh_km: rel,
+                range_km: (rel[0] * rel[0] + rel[1] * rel[1] + rel[2] * rel[2]).sqrt(),
+                range_rate_km_s: -0.0005,
+                source_note: "GP/SGP4 FOR BOTH VEHICLES".into(),
+                ephemeris_grade: false,
+                history: Arc::new(vec![ProxPoint {
+                    t: Utc(1.0),
+                    lvlh_km: [1.0, 0.0, 0.1],
+                }]),
+                predicted: Arc::new(vec![ProxPoint {
+                    t: Utc(2.0),
+                    lvlh_km: [0.8, 0.0, 0.1],
+                }]),
+                keep_out_km: 0.2,
+                ellipsoid_semi_km: [2.0, 1.0],
+            })
+        };
+        let mut w = bare_world();
+        w.prox = vec![
+            pv("dragon-crew", ProxState::Docked, [0.0; 3]),
+            pv("dragon-cargo", ProxState::Near, [1.234, 0.0, -0.321]),
+        ];
+        let mut iss = view(SourceStatus::Active, Health::Ok, None);
+        iss.visitors = vec!["dragon-crew".into(), "dragon-cargo".into()];
+        let (g, layout) = render_page(&w, Some(&iss), Page::Prox, 0, 160, 45);
+        let t = g.text();
+        assert!(t.contains("TLE-DERIVED: NOT VALID INSIDE ~5 KM"), "{t}");
+        assert!(t.contains("DOCKED") && t.contains("NEAR"), "{t}");
+        assert!(t.contains("+1.234") && t.contains("-0.321"), "{t}");
+        assert!(
+            t.contains("SAME ELEMENT SET"),
+            "a docked visitor says so instead of printing zeros: {t}"
+        );
+        let plots = layout
+            .widgets
+            .iter()
+            .filter(|w| {
+                matches!(
+                    w,
+                    Widget::Plot {
+                        kind: PlotKind::Prox,
+                        ..
+                    }
+                )
+            })
+            .count();
+        let art = layout
+            .widgets
+            .iter()
+            .filter(|w| matches!(w, Widget::Art { .. }))
+            .count();
+        assert_eq!((plots, art), (1, 2));
+    }
+
+    #[test]
+    fn the_vehicle_page_draws_art_when_there_is_some_and_says_so_when_there_is_not() {
+        use crate::grid::Widget;
+        let w = bare_world();
+        let mut v = view(SourceStatus::Active, Health::Ok, None);
+        v.id = "hubble".into();
+        v.name = "HUBBLE".into();
+        let (g, layout) = render_page(&w, Some(&v), Page::Sys, 4, 160, 45);
+        assert!(g.text().contains("LINE ART IS STYLISED"), "{}", g.text());
+        assert!(
+            layout
+                .widgets
+                .iter()
+                .any(|w| matches!(w, Widget::Art { id, .. } if id == "hubble"))
+        );
+        v.id = "mystery".into();
+        let (g, layout) = render_page(&w, Some(&v), Page::Sys, 4, 160, 45);
+        assert!(g.text().contains("NO ARTWORK FOR THIS VEHICLE"));
+        assert!(layout.widgets.is_empty());
     }
 
     fn l2_view() -> VehicleView {

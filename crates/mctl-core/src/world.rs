@@ -148,6 +148,12 @@ pub struct VehicleView {
     pub id: String,
     pub name: String,
     pub norad: u32,
+    /// The catalogue name a `lookup` resolved to, e.g. `CREW DRAGON 13`.
+    pub resolved_name: Option<String>,
+    /// The vehicle this one visits, for the PROX page.
+    pub visits: Option<String>,
+    /// Vehicles configured as visiting this one.
+    pub visitors: Vec<String>,
     /// Telemetry source this vehicle has, if any (pages that need one are greyed without it).
     pub telemetry: Option<String>,
     pub regime: crate::config::Regime,
@@ -465,6 +471,8 @@ pub struct World {
     pub trends: Option<Arc<TrendSet>>,
     /// Maneuver plans by vehicle id, for vehicles that have one.
     pub plans: Vec<(String, Arc<crate::plan::PlanView>)>,
+    /// Relative motion of each visiting vehicle about the vehicle it visits.
+    pub prox: Vec<Arc<crate::prox::ProxView>>,
     pub vehicles: Vec<VehicleView>,
 }
 
@@ -483,6 +491,7 @@ impl World {
             cw: CwView::default(),
             trends: None,
             plans: Vec::new(),
+            prox: Vec::new(),
             observer: ObserverView {
                 sites: Vec::new(),
                 active: 0,

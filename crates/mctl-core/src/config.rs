@@ -29,6 +29,8 @@ pub enum ConfigError {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
+    #[serde(default)]
+    pub prox: ProxConfig,
     pub fetch: Fetch,
     pub sources: Sources,
     pub limits: Limits,
@@ -45,6 +47,34 @@ pub struct Config {
     /// Caution and warning threshold rules (FR-40).
     #[serde(rename = "rule", default)]
     pub rules: Vec<crate::cw::RuleDef>,
+}
+
+/// Proximity-operations display (DESIGN.md 9.6 F8). The zone sizes are configured, not sourced.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct ProxConfig {
+    /// Keep-out sphere radius, m.
+    pub keep_out_m: f64,
+    /// Approach ellipsoid semi-axes: along-track and radial, km.
+    pub ellipsoid_semi_km: [f64; 2],
+    /// Below this separation the two element sets are treated as the same (docked), m.
+    pub docked_range_m: f64,
+    /// Below this separation the R-bar/V-bar view is shown as NEAR, km.
+    pub near_km: f64,
+    /// Minutes of relative motion predicted ahead and kept as history.
+    pub window_min: f64,
+}
+
+impl Default for ProxConfig {
+    fn default() -> Self {
+        Self {
+            keep_out_m: 200.0,
+            ellipsoid_semi_km: [2.0, 1.0],
+            docked_range_m: 50.0,
+            near_km: 100.0,
+            window_min: 90.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -113,6 +143,9 @@ pub struct ScheduleSources {
 #[serde(deny_unknown_fields)]
 pub struct GpSource {
     pub url_template: String,
+    /// Query by object name (`{name}`), for vehicles that use `lookup`.
+    #[serde(default)]
+    pub name_url_template: Option<String>,
     pub min_refresh_s: f64,
     pub stale_after_s: f64,
 }
@@ -241,6 +274,13 @@ pub struct VehicleDef {
     /// Kepler orbit means nothing there, so those vehicles get a different display).
     #[serde(default)]
     pub regime: Regime,
+    /// Resolve the NORAD object by name at fetch time instead of a fixed number (Dragon's number changes
+    /// every mission). The newest matching object is used; its number is then shown in the header.
+    #[serde(default)]
+    pub lookup: Option<String>,
+    /// Vehicle this one visits (`iss`): the PROX page shows its motion relative to that vehicle.
+    #[serde(default)]
+    pub visits: Option<String>,
     /// Request for the `horizons` source; required when that source is listed.
     #[serde(default)]
     pub horizons: Option<HorizonsDef>,
@@ -426,6 +466,15 @@ impl Config {
                 return bad(format!("rule {}: unknown vehicle {v:?}", r.id));
             }
         }
+        let px = &self.prox;
+        if !(px.keep_out_m > 0.0
+            && px.ellipsoid_semi_km.iter().all(|a| *a > 0.0)
+            && px.docked_range_m > 0.0
+            && px.near_km > 0.0
+            && (10.0..=600.0).contains(&px.window_min))
+        {
+            return bad("prox: keep_out_m, ellipsoid_semi_km, docked_range_m, near_km must be > 0 and window_min 10..=600".into());
+        }
         let f = &self.fetch;
         if !(f.timeout_s > 0.0
             && f.backoff_initial_s > 0.0
@@ -497,9 +546,21 @@ impl Config {
             if v.sources.is_empty() {
                 return bad(format!("vehicle {:?} has no sources", v.id));
             }
-            if v.sources.contains(&SourceKind::Gp) && v.norad == 0 {
+            if v.sources.contains(&SourceKind::Gp) && v.norad == 0 && v.lookup.is_none() {
                 return bad(format!(
-                    "vehicle {:?} uses gp but has no norad number",
+                    "vehicle {:?} uses gp but has neither a norad number nor a lookup name",
+                    v.id
+                ));
+            }
+            if v.lookup.is_some()
+                && !s
+                    .celestrak_gp
+                    .name_url_template
+                    .as_deref()
+                    .is_some_and(|t| t.contains("{name}"))
+            {
+                return bad(format!(
+                    "vehicle {:?} has a lookup but sources.celestrak_gp.name_url_template (with {{name}}) is missing",
                     v.id
                 ));
             }
@@ -549,6 +610,21 @@ impl Config {
                 .any(|(i, k)| v.sources[..i].contains(k))
             {
                 return bad(format!("vehicle {:?} lists a source twice", v.id));
+            }
+        }
+        for v in &self.vehicles {
+            if let Some(target) = &v.visits {
+                let ok = target != &v.id
+                    && self
+                        .vehicles
+                        .iter()
+                        .any(|t| &t.id == target && t.regime == Regime::Earth);
+                if !ok || v.regime != Regime::Earth {
+                    return bad(format!(
+                        "vehicle {:?}: visits {target:?} must name a different Earth-orbit vehicle",
+                        v.id
+                    ));
+                }
             }
         }
         if self

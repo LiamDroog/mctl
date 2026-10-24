@@ -39,6 +39,7 @@ fn rect_of(px: [u32; 4]) -> Rect {
 }
 
 /// Paint one widget. `px` is its pixel rectangle `[x, y, w, h]`.
+#[allow(clippy::too_many_arguments)]
 pub fn paint(
     painter: &Painter,
     theme: &Theme,
@@ -46,8 +47,17 @@ pub fn paint(
     w: &Widget,
     vehicle: Option<&VehicleView>,
     plan: Option<&mctl_core::plan::PlanView>,
+    prox: &[std::sync::Arc<mctl_core::prox::ProxView>],
     now: Utc,
 ) {
+    if let Widget::Plot {
+        kind: PlotKind::Prox,
+        ..
+    } = w
+    {
+        prox_plot(painter, theme, px, prox);
+        return;
+    }
     if let Widget::Plot {
         kind: k @ (PlotKind::PlanAltitude | PlotKind::PlanSeparation),
         ..
@@ -66,6 +76,12 @@ pub fn paint(
             ticks,
             ..
         } => bar(painter, theme, px, *frac, *centered, *limit, ticks),
+        Widget::Art { id, .. } => {
+            if let Some(m) = crate::art::model(id) {
+                let t = painter.ctx().input(|i| i.time);
+                crate::art::paint(painter, theme, px, &m, t);
+            }
+        }
         // Pictures are textures: the console paints them.
         Widget::Image { .. } => {}
         Widget::Chart { series, .. } => chart(painter, theme, px, series),
@@ -79,6 +95,7 @@ pub fn paint(
                 PlotKind::TopView => top_view(painter, theme, px, v, now),
                 PlotKind::DeepSeries(s) => deep_series(painter, theme, px, v, now, *s),
                 PlotKind::PlanAltitude | PlotKind::PlanSeparation => {}
+                PlotKind::Prox => prox_plot(painter, theme, px, prox),
                 PlotKind::Timeline => timeline(painter, theme, px, v, now),
                 PlotKind::InstrumentShare => instrument_share(painter, theme, px, v, now),
             }
@@ -997,6 +1014,184 @@ fn plan_plot(
         return;
     }
     time_plot(painter, theme, px, &series, now);
+}
+
+/// The R-bar/V-bar picture: the station at the centre, the keep-out sphere and approach ellipsoid, and each
+/// visitor's recent path, predicted path and position. Axes follow the station's LVLH frame: V-bar to the
+/// right, R-bar (toward the Earth) down.
+fn prox_plot(
+    painter: &Painter,
+    theme: &Theme,
+    px: [u32; 4],
+    views: &[std::sync::Arc<mctl_core::prox::ProxView>],
+) {
+    let r = rect_of(px).shrink(10.0);
+    if r.width() < 120.0 || r.height() < 80.0 || views.is_empty() {
+        return;
+    }
+    let p = &theme.palette;
+    let font = crate::fonts::font_id(theme);
+    let c = r.center();
+    let moving: Vec<_> = views
+        .iter()
+        .filter(|v| v.state != mctl_core::prox::ProxState::Docked)
+        .collect();
+    let (keep_out, [ae_x, ae_z]) = (views[0].keep_out_km, views[0].ellipsoid_semi_km);
+    // Fit everything that moves, never closer than the approach ellipsoid.
+    let extent = moving
+        .iter()
+        .flat_map(|v| {
+            v.history
+                .iter()
+                .chain(v.predicted.iter())
+                .map(|q| q.lvlh_km)
+                .chain([v.rel_lvlh_km])
+        })
+        .flat_map(|q| [q[0].abs(), q[2].abs()])
+        .fold(ae_x.max(ae_z) * 1.2, f64::max)
+        * 1.1;
+    let scale = (r.width().min(r.height()) / 2.0 - 16.0) as f64 / extent;
+    let at = |x: f64, z: f64| Pos2::new(c.x + (x * scale) as f32, c.y + (z * scale) as f32);
+    let (dim, bright, info, fg) = (
+        p.dim.to_egui(),
+        p.bright.to_egui(),
+        p.info.to_egui(),
+        p.foreground.to_egui(),
+    );
+    // Axes and ticks.
+    let axis = Stroke::new(1.0, fade(p.border.to_egui(), 200));
+    painter.line_segment([Pos2::new(r.left(), c.y), Pos2::new(r.right(), c.y)], axis);
+    painter.line_segment([Pos2::new(c.x, r.top()), Pos2::new(c.x, r.bottom())], axis);
+    let step = nice_step(extent);
+    let mut k = step;
+    while k < extent {
+        for (x, z) in [(k, 0.0), (-k, 0.0), (0.0, k), (0.0, -k)] {
+            let t = at(x, z);
+            painter.circle_filled(t, 1.8, dim);
+        }
+        painter.text(
+            at(k, 0.0) + vec2(2.0, 3.0),
+            Align2::LEFT_TOP,
+            format!("{k} km"),
+            font.clone(),
+            dim,
+        );
+        painter.text(
+            at(0.0, k) + vec2(4.0, -2.0),
+            Align2::LEFT_CENTER,
+            format!("{k} km"),
+            font.clone(),
+            dim,
+        );
+        k += step;
+    }
+    painter.text(
+        Pos2::new(r.right(), c.y - 4.0),
+        Align2::RIGHT_BOTTOM,
+        "+V-BAR (FORWARD) ->",
+        font.clone(),
+        dim,
+    );
+    painter.text(
+        Pos2::new(c.x + 6.0, r.bottom()),
+        Align2::LEFT_BOTTOM,
+        "R-BAR, TOWARD EARTH",
+        font.clone(),
+        dim,
+    );
+    // Approach ellipsoid and keep-out sphere.
+    let ellipse: Vec<Pos2> = (0..=96)
+        .map(|i| {
+            let a = i as f64 / 96.0 * std::f64::consts::TAU;
+            at(ae_x * a.cos(), ae_z * a.sin())
+        })
+        .collect();
+    painter.add(Shape::dashed_line(&ellipse, Stroke::new(1.2, fg), 6.0, 5.0));
+    painter.text(
+        at(0.0, -ae_z) + vec2(0.0, -4.0),
+        Align2::CENTER_BOTTOM,
+        "APPROACH ELLIPSOID (CONFIGURED)",
+        font.clone(),
+        dim,
+    );
+    painter.circle_stroke(
+        c,
+        (keep_out * scale) as f32,
+        Stroke::new(1.5, p.caution.to_egui()),
+    );
+    painter.text(
+        c + vec2(
+            (keep_out * scale) as f32 * 0.72 + 4.0,
+            (keep_out * scale) as f32 * 0.72 + 2.0,
+        ),
+        Align2::LEFT_TOP,
+        "KEEP-OUT",
+        font.clone(),
+        p.caution.to_egui(),
+    );
+    // The station.
+    painter.rect_filled(Rect::from_center_size(c, vec2(10.0, 10.0)), 0.0, info);
+    painter.text(
+        c + vec2(8.0, 8.0),
+        Align2::LEFT_TOP,
+        views[0].target.to_uppercase(),
+        font.clone(),
+        info,
+    );
+    for v in views {
+        if v.state == mctl_core::prox::ProxState::Docked {
+            continue;
+        }
+        let hist: Vec<Pos2> = v
+            .history
+            .iter()
+            .map(|q| at(q.lvlh_km[0], q.lvlh_km[2]))
+            .collect();
+        if hist.len() >= 2 {
+            painter.add(Shape::line(hist, Stroke::new(1.5, fg)));
+        }
+        let pred: Vec<Pos2> = v
+            .predicted
+            .iter()
+            .map(|q| at(q.lvlh_km[0], q.lvlh_km[2]))
+            .collect();
+        if pred.len() >= 2 {
+            painter.add(Shape::dashed_line(&pred, Stroke::new(1.5, info), 6.0, 4.0));
+        }
+        let now = at(v.rel_lvlh_km[0], v.rel_lvlh_km[2]);
+        painter.add(Shape::convex_polygon(
+            vec![
+                now + vec2(0.0, -6.0),
+                now + vec2(6.0, 0.0),
+                now + vec2(0.0, 6.0),
+                now + vec2(-6.0, 0.0),
+            ],
+            bright,
+            Stroke::new(1.0, p.background.to_egui()),
+        ));
+        // Labels go on the side away from the station's own label.
+        let (off, anchor) = if v.rel_lvlh_km[0] < 0.0 {
+            (vec2(-9.0, -9.0), Align2::RIGHT_BOTTOM)
+        } else {
+            (vec2(9.0, -9.0), Align2::LEFT_BOTTOM)
+        };
+        painter.text(
+            now + off,
+            anchor,
+            v.chaser.to_uppercase(),
+            font.clone(),
+            bright,
+        );
+    }
+    if moving.is_empty() {
+        painter.text(
+            c + vec2(0.0, 40.0),
+            Align2::CENTER_TOP,
+            "ALL VISITORS DOCKED: NO RELATIVE MOTION TO SHOW",
+            font,
+            bright,
+        );
+    }
 }
 
 #[cfg(test)]

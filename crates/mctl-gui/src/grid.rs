@@ -128,6 +128,8 @@ pub enum Widget {
         rect: CellRect,
         series: Vec<(String, std::sync::Arc<[f32]>)>,
     },
+    /// Rotating wireframe art of a vehicle (`id` is the vehicle id).
+    Art { rect: CellRect, id: String },
     /// A survey picture of a field (`key` is the field request key on the selected vehicle).
     Image { rect: CellRect, key: String },
     /// Circular angle dial with a needle at `deg` (0 at the top, clockwise).
@@ -147,6 +149,7 @@ impl Widget {
             | Self::DataBar { rect, .. }
             | Self::Chart { rect, .. }
             | Self::Image { rect, .. }
+            | Self::Art { rect, .. }
             | Self::Spark { rect, .. }
             | Self::Dial { rect, .. }
             | Self::Plot { rect, .. } => *rect,
@@ -162,6 +165,8 @@ pub enum PlotKind {
     TopView,
     /// Distance, off-axis angle, Y/Z offsets or range rate against time, from the track.
     DeepSeries(DeepSeries),
+    /// R-bar/V-bar relative motion of the visiting vehicles about the station.
+    Prox,
     /// Altitude of the nominal and planned orbits against time.
     PlanAltitude,
     /// Distance between the planned and nominal vehicle against time.

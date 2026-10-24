@@ -7,6 +7,7 @@ pub mod command;
 pub mod config;
 pub mod cw;
 pub mod plan;
+pub mod prox;
 pub mod schedule;
 pub mod state;
 pub mod time;

@@ -3,7 +3,7 @@
 Mission control display for the ISS, Hubble, JWST and Roman, styled after a flight control console. Design and
 requirements: [`DESIGN.md`](DESIGN.md). Decisions: [`docs/adr/`](docs/adr/). Status: M0-M4 done (core and sources, MASTER/TRAJ with store-backed trends, live telemetry, C&W,
 recording, observer sites and passes), plus JWST and Roman at Sun-Earth L2 from Horizons, STScI observing
-schedules and survey pictures of the targets (OPS page), telemetry visuals, and M5 (numerical propagator, maneuver planner, replay); next is M6. See "What is real" below.
+schedules and survey pictures of the targets (OPS page), telemetry visuals, and M5 (numerical propagator, maneuver planner, replay); M6 (Dragon, proximity operations, line art); next is M7. See "What is real" below.
 
 ## Running
 
@@ -66,7 +66,8 @@ implementation to milliseconds (`docs/step4/pass-verification.md`) but have not 
 published predictor. SUP-GP (ISS-E) is implemented but off by default (`docs/step4/supgp-evaluation.md`). The observer site is the configured one, else GeoClue, else (optional, off by
 default) an IP lookup, else the NASA HQ fallback; `:site save` keeps one. The maneuver planner (TRAJ sub-page 4: `burn add`, `plan ...`) propagates numerically (DOP853, J2-J4, Sun and Moon, exponential-atmosphere drag, optional SRP);
 it was checked against the NASA ISS ephemeris (3.1 km after a day without drag, 7.3 km with the static drag model, so the drag scale is a control).
-REPLAY plays states and telemetry back from the recording. Not yet: visiting vehicles and proximity operations (M6).
+REPLAY plays states and telemetry back from the recording.
+Crew and Cargo Dragon are found by name on CelesTrak (their NORAD numbers change every mission). The PROX page (F8) shows each visitor's motion about the station in R-bar/V-bar from a source both vehicles share; while docked CelesTrak gives a visitor the station's own element set, so it reads DOCKED. It is TLE-derived and says not valid inside ~5 km; the keep-out and approach-ellipsoid sizes are configured assumptions (`[prox]`). SYS / VEHICLE (sub-page 5) shows each vehicle's wireframe art and facts.
 The OPS page pictures are DSS2 sky-survey cutouts around the target (CDS Sesame + hips2fits), not Hubble or JWST images.
 
 ## Layout

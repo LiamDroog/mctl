@@ -139,27 +139,57 @@ pub fn specs(cfg: &Config) -> Vec<Spec> {
     let mut out = Vec::new();
     for v in &cfg.vehicles {
         if v.sources.contains(&SourceKind::Gp) {
-            let (id, norad) = (v.id.clone(), v.norad);
-            out.push(Spec {
-                url_gen: None,
-                key: SourceKey::Gp(v.id.clone()),
-                cache_key: format!("gp-{}.json", v.norad),
-                urls: vec![
+            let (id, norad, lookup) = (v.id.clone(), v.norad, v.lookup.clone());
+            let (url, cache_key) = match &v.lookup {
+                Some(name) => (
+                    cfg.sources
+                        .celestrak_gp
+                        .name_url_template
+                        .as_deref()
+                        .unwrap_or_default()
+                        .replace("{name}", &percent_encode(name)),
+                    format!("gp-name-{}.json", v.id),
+                ),
+                None => (
                     cfg.sources
                         .celestrak_gp
                         .url_template
                         .replace("{norad}", &v.norad.to_string()),
-                ],
+                    format!("gp-{}.json", v.norad),
+                ),
+            };
+            out.push(Spec {
+                url_gen: None,
+                key: SourceKey::Gp(v.id.clone()),
+                cache_key,
+                urls: vec![url],
                 min_refresh_s: cfg.sources.celestrak_gp.min_refresh_s,
                 parse: Arc::new(move |body| {
-                    let m = GpModel::from_omm_json(body).map_err(|e| e.to_string())?;
-                    // A response for the wrong object must never be accepted as this vehicle's data.
-                    if m.norad != norad {
-                        return Err(format!(
-                            "response is for NORAD {} but vehicle {id} is {norad}",
-                            m.norad
-                        ));
-                    }
+                    let m = match &lookup {
+                        // A name search can match several objects; the newest (highest number) is the
+                        // current mission's.
+                        Some(name) => GpModel::all_from_omm_json(body)
+                            .map_err(|e| e.to_string())?
+                            .into_iter()
+                            .filter(|m| {
+                                m.name
+                                    .to_ascii_uppercase()
+                                    .contains(&name.to_ascii_uppercase())
+                            })
+                            .max_by_key(|m| m.norad)
+                            .ok_or_else(|| format!("no object named like {name:?} in the reply"))?,
+                        None => {
+                            let m = GpModel::from_omm_json(body).map_err(|e| e.to_string())?;
+                            // A response for the wrong object must never be accepted as this vehicle's data.
+                            if m.norad != norad {
+                                return Err(format!(
+                                    "response is for NORAD {} but vehicle {id} is {norad}",
+                                    m.norad
+                                ));
+                            }
+                            m
+                        }
+                    };
                     Ok(Payload::Gp(m))
                 }),
             });

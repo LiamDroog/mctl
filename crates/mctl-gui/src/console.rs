@@ -741,11 +741,21 @@ impl Console {
                     egui::StrokeKind::Outside,
                 );
             }
+            let prox_views: Vec<_> = vehicle
+                .map(|v| {
+                    world
+                        .prox
+                        .iter()
+                        .filter(|p| p.chaser == v.id || p.target == v.id)
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default();
             for (px, w) in &widget_px {
                 let plan = vehicle
                     .and_then(|v| world.plans.iter().find(|(id, _)| *id == v.id))
                     .map(|(_, p)| &**p);
-                crate::widgets::paint(&painter, &theme, *px, w, vehicle, plan, now);
+                crate::widgets::paint(&painter, &theme, *px, w, vehicle, plan, &prox_views, now);
             }
             if let Some(px) = sky_px {
                 let site = world.observer.active_site();
