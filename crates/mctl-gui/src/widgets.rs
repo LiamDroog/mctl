@@ -193,7 +193,11 @@ fn chart(
             }
         }
         if legend_x < r.right() - 30.0 {
-            let galley = painter.text(
+            let clip = painter.with_clip_rect(Rect::from_min_max(
+                r.min,
+                Pos2::new(r.right(), r.top() + 24.0),
+            ));
+            let galley = clip.text(
                 Pos2::new(legend_x, r.top()),
                 Align2::LEFT_TOP,
                 name,

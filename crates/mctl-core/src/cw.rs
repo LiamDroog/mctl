@@ -131,6 +131,10 @@ pub struct RuleDef {
     pub units: String,
     /// Why these limits: "illustrative", "user", or a citation. Shown with the rule, never omitted.
     pub basis: String,
+    /// The vehicle the rule is about, for rules whose metric does not name one (an `item:` rule is
+    /// about whichever vehicle owns the feed). Rules about no vehicle in particular apply everywhere.
+    #[serde(default)]
+    pub vehicle: Option<String>,
 }
 
 fn default_stale_after() -> f64 {
@@ -143,6 +147,14 @@ fn de_metric<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Metric, D::Error>
 }
 
 impl RuleDef {
+    /// The vehicle this rule is shown for: the explicit `vehicle`, else the one in the metric.
+    pub fn scope(&self) -> Option<&str> {
+        self.vehicle.as_deref().or(match &self.metric {
+            Metric::GpAgeHours(v) | Metric::ResidualKm(v) => Some(v.as_str()),
+            _ => None,
+        })
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         let id = &self.id;
         if self.caution.is_none() && self.warning.is_none() {
@@ -443,7 +455,21 @@ mod tests {
             stale_after_s: 60.0,
             units: "u".into(),
             basis: "test".into(),
+            vehicle: None,
         }
+    }
+
+    #[test]
+    fn a_rules_scope_is_its_explicit_vehicle_else_the_one_in_its_metric() {
+        let mut r = rule(Direction::Above, Some(1.0), None, 0.0, 0.0);
+        assert_eq!(r.scope(), None, "an item rule names no vehicle by itself");
+        r.vehicle = Some("iss".into());
+        assert_eq!(r.scope(), Some("iss"));
+        r.vehicle = None;
+        r.metric = Metric::GpAgeHours("hubble".into());
+        assert_eq!(r.scope(), Some("hubble"));
+        r.metric = Metric::TelemetryFeedDown;
+        assert_eq!(r.scope(), None);
     }
 
     fn run(t: &mut Tracker, d: &RuleDef, steps: &[(f64, f64)]) -> Vec<CwState> {

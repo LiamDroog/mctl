@@ -80,6 +80,10 @@ pub enum Event {
         rx: Utc,
     },
     TelemetryHealth(Health),
+    /// The telemetry stream's own clock advanced to `data_time`. It freezes when the signal is lost.
+    TelemetryClock {
+        data_time: Utc,
+    },
     /// A refreshed observing schedule or daily report for a vehicle.
     Ops {
         vehicle: String,
@@ -675,6 +679,7 @@ mod tests {
                 | Event::Observer(_)
                 | Event::ObserverNote(_) => {}
                 Event::Ops { .. } => panic!("no schedule can exist with an empty cache"),
+                Event::TelemetryClock { .. } => {}
                 Event::TelemetryHealth(h) => assert_eq!(h, Health::Offline),
             }
             if offline == expected {

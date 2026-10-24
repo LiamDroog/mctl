@@ -15,4 +15,11 @@ for f in "$out"/*.png; do
 done
 distinct=$(md5sum "$out"/*.png | cut -d' ' -f1 | sort -u | wc -l)
 [ "$distinct" -eq "$count" ] || echo "note: $distinct distinct images among $count pages (pages with no source can look alike)"
-echo "OK: $count pages rendered"
+# An L2 vehicle has its own pages (halo plots, OPS timeline); render them too.
+"$bin" --offline --no-record --vehicle jwst shot --out-dir "$out/jwst" --theme phosphor --pages master,traj,traj:3,ops,pass --wait-s 5 --warmup 30 >/dev/null 2>&1
+jcount=$(ls "$out"/jwst/*.png | wc -l)
+[ "$jcount" -eq 5 ] || { echo "FAIL: only $jcount JWST pages rendered"; exit 1; }
+for f in "$out"/jwst/*.png; do
+  [ "$(stat -c %s "$f")" -gt 20000 ] || { echo "FAIL: JWST $(basename "$f") looks blank"; exit 1; }
+done
+echo "OK: $count pages rendered, $jcount JWST pages rendered"

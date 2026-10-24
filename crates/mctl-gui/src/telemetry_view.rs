@@ -164,7 +164,11 @@ pub fn fmt_value(v: f64, units: &str) -> String {
 
 /// Sections of `group` in the order their first item appears. Items that have not arrived are absent;
 /// a matrix cell with no item is `None` (shown as a dash, never as zero).
-pub fn sections(items: &[TelemetryItem], group: &str, stale_after_s: f64) -> Vec<Section> {
+pub fn sections(
+    items: &[TelemetryItem],
+    group: &str,
+    is_stale: &dyn Fn(&TelemetryItem) -> bool,
+) -> Vec<Section> {
     let mut out: Vec<Section> = Vec::new();
     let in_group: Vec<&TelemetryItem> = items.iter().filter(|i| i.group == group).collect();
     let mut titles: Vec<&str> = Vec::new();
@@ -198,7 +202,7 @@ pub fn sections(items: &[TelemetryItem], group: &str, stale_after_s: f64) -> Vec
                                     || i.text.clone().unwrap_or_else(|| "--".into()),
                                     |v| fmt_value(v, &i.units),
                                 ),
-                                stale: i.age_s > stale_after_s,
+                                stale: is_stale(i),
                                 value: i.value,
                                 history: i.history.clone(),
                             })
@@ -328,12 +332,9 @@ pub fn render(grid: &mut Grid, rect: CellRect, sec: &Section) {
                     limit: None,
                     ticks: Vec::new(),
                 });
-                l.put(
-                    x + CENTER_BAR_CELLS + 1,
-                    &format!("+-{}", fmt_value(scale, "")),
-                    dim,
-                );
-                x += CENTER_BAR_CELLS + 6;
+                let label = format!("+-{}", fmt_value(scale, ""));
+                l.put(x + CENTER_BAR_CELLS + 1, &label, dim);
+                x += CENTER_BAR_CELLS + label.chars().count() + 2;
             }
             let room = l.rect.cols.saturating_sub(x + 1);
             if room >= MIN_SPARK_CELLS && cell.history.len() >= 3 {
@@ -835,7 +836,7 @@ mod tests {
             item("c", "Health", "Vibration", "CMG 1", "g", Some(0.0107), 1.0),
             item("d", "Other", "Mode", "", "", Some(2.0), 1.0),
         ];
-        let s = sections(&items, "g", 30.0);
+        let s = sections(&items, "g", &|i| i.age_s > 30.0);
         assert_eq!(s.len(), 2);
         assert_eq!(s[0].title, "Health");
         assert_eq!(s[0].cols, vec!["CMG 1", "CMG 2"]);
@@ -859,8 +860,8 @@ mod tests {
     fn only_the_requested_group_and_only_received_items_appear() {
         let mut other = item("x", "S", "r", "", "", Some(1.0), 0.0);
         other.group = "other".into();
-        assert!(sections(&[other], "g", 30.0).is_empty());
-        assert!(sections(&[], "g", 30.0).is_empty());
+        assert!(sections(&[other], "g", &|i| i.age_s > 30.0).is_empty());
+        assert!(sections(&[], "g", &|i| i.age_s > 30.0).is_empty());
     }
 
     #[test]
@@ -871,7 +872,7 @@ mod tests {
                 item("b", "S", "q", "", "u", Some(1.0), 5.0),
             ],
             "g",
-            30.0,
+            &|i| i.age_s > 30.0,
         );
         assert!(s[0].rows[0].cells[0].as_ref().unwrap().stale);
         assert!(!s[0].rows[1].cells[0].as_ref().unwrap().stale);
@@ -937,7 +938,7 @@ mod tests {
                 1.0,
             ),
         ];
-        let s = &sections(&items, "g", 30.0)[0];
+        let s = &sections(&items, "g", &|i| i.age_s > 30.0)[0];
         let mut g = Grid::new(60, 8);
         render(&mut g, CellRect::new(0, 0, width(s).min(60), s.height()), s);
         let t = g.text();

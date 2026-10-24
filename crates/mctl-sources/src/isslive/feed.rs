@@ -25,6 +25,27 @@ fn stopped(stop: &Receiver<()>) -> bool {
     )
 }
 
+/// Wall-clock time of an ISSLIVE `TimeStamp`: decimal hours counted from the start of the UTC year with
+/// day 1 at hour 24 (so DOY 297 at 01:42 is 297 * 24 + 1.7). A stamp more than a day ahead of `now`
+/// belongs to the previous year (the stream can span New Year).
+pub fn data_time(stamp_hours: f64, now: Utc) -> Option<Utc> {
+    if !stamp_hours.is_finite() || stamp_hours < 0.0 {
+        return None;
+    }
+    let year = now.to_ymd_hms().0;
+    let at = |y: i32| {
+        Utc::from_ymd_hms(y, 1, 1, 0, 0, 0.0)
+            .ok()
+            .map(|jan1| jan1.plus((stamp_hours / 24.0 - 1.0) * 86_400.0))
+    };
+    let t = at(year)?;
+    if t.0 > now.0 + 86_400.0 {
+        at(year - 1)
+    } else {
+        Some(t)
+    }
+}
+
 pub fn run(
     mut cfg: Config,
     tx: &SyncSender<Event>,
@@ -40,6 +61,7 @@ pub fn run(
     }
     tracing::info!(url = %cfg.server.url, "telemetry feed starting");
     cfg.run.duration_s = SESSION_SECONDS;
+    let time_id = cfg.time_item.id.clone();
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -69,10 +91,21 @@ pub fn run(
                     .iter()
                     .position(|f| f == "Value")
                     .and_then(|i| u.values[i].clone());
+                let rx = Utc::now().unwrap_or(Utc(0.0));
+                // The TIME item is the stream's own clock: it stops advancing when the signal is lost.
+                if u.item_id == time_id
+                    && let Some(i) = u.fields.iter().position(|f| f == "TimeStamp")
+                    && let Some(hours) = u.values[i]
+                        .as_deref()
+                        .and_then(|v| v.trim().parse::<f64>().ok())
+                    && let Some(data_time) = data_time(hours, rx)
+                {
+                    let _ = tx.send(Event::TelemetryClock { data_time });
+                }
                 let _ = tx.send(Event::Telemetry {
                     id: u.item_id.to_owned(),
                     text,
-                    rx: Utc::now().unwrap_or(Utc(0.0)),
+                    rx,
                 });
             });
             tokio::pin!(sess);
@@ -109,6 +142,27 @@ pub fn run(
 mod tests {
     use super::*;
     use mctl_core::config::Config as AppConfig;
+
+    #[test]
+    fn stamps_are_hours_of_the_year_with_day_one_at_hour_24() {
+        // Real value from the feed on 2026-10-24: the TIME item read 7129.707222... at 01:42:26 UTC.
+        let now = Utc::parse("2026-10-24T01:57:00").unwrap();
+        let t = data_time(7_129.707_222_222_222, now).unwrap();
+        assert!(
+            (t.0 - Utc::parse("2026-10-24T01:42:26").unwrap().0).abs() < 1.0,
+            "{}",
+            t.iso()
+        );
+        // Jan 1 00:00 is 24.0.
+        let jan = Utc::parse("2026-01-01T00:00:00").unwrap();
+        assert_eq!(data_time(24.0, jan.plus(10.0)).unwrap(), jan);
+        // Just after New Year, a stamp from the last hours of December is the previous year.
+        let now = Utc::parse("2027-01-01T00:05:00").unwrap();
+        let t = data_time(365.0 * 24.0 + 23.5, now).unwrap();
+        assert_eq!(t.to_ymd_hms().0, 2026, "{}", t.iso());
+        assert_eq!(data_time(f64::NAN, now), None);
+        assert_eq!(data_time(-1.0, now), None);
+    }
     use std::sync::mpsc::sync_channel;
 
     /// Network test: run with `cargo test -p mctl-sources feed_delivers -- --ignored --nocapture`.

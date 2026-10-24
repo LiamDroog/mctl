@@ -434,7 +434,11 @@ pub(crate) fn cw_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
         );
         shown += 1;
     }
-    for r in cw.rules.iter().filter(|r| r.state != CwState::Nom) {
+    for r in cw
+        .rules
+        .iter()
+        .filter(|r| r.applies_to(vehicle) && r.state != CwState::Nom)
+    {
         let v = r
             .value
             .map_or(String::new(), |v| format!(" {v:.2} {}", r.units));
@@ -452,9 +456,10 @@ pub(crate) fn cw_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
         );
     }
     l.row = l.rect.rows.saturating_sub(1);
-    let nom = cw.rules.iter().filter(|r| r.state == CwState::Nom).count();
+    let mine: Vec<_> = cw.rules.iter().filter(|r| r.applies_to(vehicle)).collect();
+    let nom = mine.iter().filter(|r| r.state == CwState::Nom).count();
     l.line(
-        &format!("{nom}/{} RULES NOM  (F10 TAB: DETAIL)", cw.rules.len()),
+        &format!("{nom}/{} RULES NOM  (F10 TAB: DETAIL)", mine.len()),
         dim,
     );
 }
@@ -685,6 +690,17 @@ const ADI_CONSISTENCY_TOL_DEG: f64 = 0.5;
 /// seconds at most, so this is generous (DESIGN.md FR-6 defines the STALE quality).
 const TELEMETRY_STALE_S: f64 = 30.0;
 
+/// Whether an item shows as stale on this page: the signal is lost, or (without the stream's clock)
+/// the item itself is old.
+fn stale_fn<'a>(inp: &'a PageInput<'_>) -> impl Fn(&mctl_core::world::TelemetryItem) -> bool + 'a {
+    move |i| {
+        inp.world
+            .telemetry
+            .as_ref()
+            .is_some_and(|t| t.is_stale(i, TELEMETRY_STALE_S))
+    }
+}
+
 fn telemetry_banner(l: &mut Lines<'_>, inp: &PageInput<'_>) {
     match inp.world.telemetry.as_ref().map(|t| &t.health) {
         None => l.line("NO TELEMETRY FEED", Style::limit(Limit::Caution)),
@@ -693,6 +709,15 @@ fn telemetry_banner(l: &mut Lines<'_>, inp: &PageInput<'_>) {
             &format!("FEED {h:?}").to_uppercase(),
             Style::limit(Limit::Caution),
         ),
+    }
+    if let Some(t) = inp.world.telemetry.as_ref().filter(|t| t.signal_lost()) {
+        l.line(
+            &format!(
+                "SIGNAL LOST: VALUES FROZEN {} AGO",
+                fmt_dur(t.feed_age_s.unwrap_or(0.0))
+            ),
+            Style::limit(Limit::Caution),
+        );
     }
     if !inp.world.clock.is_live() {
         l.line(
@@ -755,7 +780,7 @@ fn gnc_adi(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
         .telemetry
         .as_ref()
         .map_or(&[][..], |t| &t.items[..]);
-    let secs = telemetry_view::sections(items, "attitude", TELEMETRY_STALE_S);
+    let secs = telemetry_view::sections(items, "attitude", &stale_fn(inp));
     for (idx, rect) in telemetry_view::pack(&secs, right, 1) {
         telemetry_view::render(grid, rect, &secs[idx]);
     }
@@ -812,8 +837,12 @@ fn group_table_reserved(
             t.total_in(group),
         )
     });
+    let lost = t.is_some_and(|t| t.signal_lost());
     let feed = match t.map(|t| &t.health) {
         None => ("NO TELEMETRY FEED".to_owned(), Style::limit(Limit::Caution)),
+        Some(mctl_core::world::Health::Ok) if lost => {
+            ("SIGNAL LOST".to_owned(), Style::limit(Limit::Caution))
+        }
         Some(mctl_core::world::Health::Ok) => ("FEED OK".to_owned(), Style::new(Role::Nominal)),
         Some(h) => (
             format!("FEED {h:?}").to_uppercase(),
@@ -829,11 +858,21 @@ fn group_table_reserved(
                 .collect()
         })
         .unwrap_or_default();
+    // The stream's own clock says whether data is flowing; per-item ages only say when a value last
+    // changed, and many items never change for hours.
     let fresh = match (
+        t.and_then(|t| t.feed_age_s),
         ages.iter().cloned().reduce(f64::min),
         ages.iter().cloned().reduce(f64::max),
     ) {
-        (Some(lo), Some(hi)) => format!("UPDATED {} .. {} AGO", fmt_dur(lo), fmt_dur(hi)),
+        (Some(a), Some(_), _) if lost => format!("VALUES FROZEN {} AGO", fmt_dur(a)),
+        (Some(a), Some(lo), Some(hi)) => format!(
+            "STREAM CLOCK {} BEHIND  LAST CHANGE {} .. {} AGO",
+            fmt_dur(a.max(0.0)),
+            fmt_dur(lo),
+            fmt_dur(hi)
+        ),
+        (None, Some(lo), Some(hi)) => format!("UPDATED {} .. {} AGO", fmt_dur(lo), fmt_dur(hi)),
         _ => "NOTHING RECEIVED".to_owned(),
     };
     let live = if inp.world.clock.is_live() {
@@ -845,7 +884,7 @@ fn group_table_reserved(
     grid.put(1, top, &line, Style::new(Role::Bright));
     grid.put(1 + line.chars().count() + 3, top, &feed.0, feed.1);
     let items = t.map_or(&[][..], |t| &t.items[..]);
-    let secs = telemetry_view::sections(items, group, TELEMETRY_STALE_S);
+    let secs = telemetry_view::sections(items, group, &stale_fn(inp));
     let region = CellRect::new(0, top + 1, cols, h.saturating_sub(2));
     let columns = if cols >= 120 { 2 } else { 1 };
     let placed = telemetry_view::pack(&secs, region, columns);

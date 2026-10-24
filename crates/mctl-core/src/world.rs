@@ -327,9 +327,32 @@ pub struct TelemetryView {
     pub subscribed: usize,
     /// Subscribed item count per group.
     pub group_totals: Vec<(String, usize)>,
+    /// How far behind the wall clock the stream's own clock is: small while signal is held, growing
+    /// from the moment it is lost. `None` until the first clock tick has been seen.
+    pub feed_age_s: Option<f64>,
 }
 
+/// The stream's own clock lagging the wall clock by more than this means the signal is lost (the
+/// clock normally ticks about once a second; this cadence has not been verified, so the age itself is
+/// always shown beside the verdict).
+pub const SIGNAL_LOST_AFTER_S: f64 = 30.0;
+
 impl TelemetryView {
+    /// Signal lost: the stream's clock has stopped advancing, so every value is as old as the freeze.
+    pub fn signal_lost(&self) -> bool {
+        self.feed_age_s.is_some_and(|a| a > SIGNAL_LOST_AFTER_S)
+    }
+
+    /// Whether `item` should be shown as stale. With the stream's clock known, an item is stale only
+    /// when the signal is lost (many items legitimately never change for hours). Without it, fall back
+    /// to the item's own age.
+    pub fn is_stale(&self, item: &TelemetryItem, limit_s: f64) -> bool {
+        match self.feed_age_s {
+            Some(_) => self.signal_lost(),
+            None => item.age_s > limit_s,
+        }
+    }
+
     /// Items subscribed in `group`, received or not.
     pub fn total_in(&self, group: &str) -> usize {
         self.group_totals
@@ -383,6 +406,15 @@ pub struct CwRuleView {
     pub caution: Option<f64>,
     pub warning: Option<f64>,
     pub basis: String,
+    /// The vehicle this rule is about; `None` applies to every vehicle.
+    pub vehicle: Option<String>,
+}
+
+impl CwRuleView {
+    /// Whether the rule belongs on `vehicle`'s pages.
+    pub fn applies_to(&self, vehicle: Option<&str>) -> bool {
+        self.vehicle.is_none() || self.vehicle.as_deref() == vehicle
+    }
 }
 
 /// Caution and warning picture: rules, standing conditions and the master latches (FR-40..42).
@@ -396,7 +428,11 @@ pub struct CwView {
 impl CwView {
     /// Worst severity annunciating now, for the given vehicle (global conditions always count).
     pub fn worst_now(&self, vehicle: Option<&str>) -> Option<crate::cw::Severity> {
-        let r = self.rules.iter().filter_map(|r| r.state.severity());
+        let r = self
+            .rules
+            .iter()
+            .filter(|r| r.applies_to(vehicle))
+            .filter_map(|r| r.state.severity());
         let c = self
             .conditions
             .iter()
@@ -445,5 +481,60 @@ impl World {
             },
             vehicles: Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(age_s: f64) -> TelemetryItem {
+        TelemetryItem {
+            id: "A".into(),
+            group: "g".into(),
+            description: String::new(),
+            label: String::new(),
+            section: String::new(),
+            row: String::new(),
+            col: String::new(),
+            units: String::new(),
+            value: Some(1.0),
+            text: Some("1".into()),
+            rx: Utc(0.0),
+            age_s,
+            history: Arc::from(Vec::new()),
+        }
+    }
+
+    fn view(feed_age_s: Option<f64>) -> TelemetryView {
+        TelemetryView {
+            health: Health::Ok,
+            items: vec![],
+            subscribed: 1,
+            group_totals: vec![],
+            feed_age_s,
+        }
+    }
+
+    #[test]
+    fn with_the_stream_clock_an_item_is_stale_only_when_the_signal_is_lost() {
+        // An item that has not changed for an hour is not stale while the stream's clock is ticking...
+        let held = view(Some(1.0));
+        assert!(!held.signal_lost() && !held.is_stale(&item(3600.0), 30.0));
+        // ...and a brand-new snapshot is stale once the clock has frozen (the values are as old as the freeze).
+        let lost = view(Some(SIGNAL_LOST_AFTER_S + 1.0));
+        assert!(lost.signal_lost() && lost.is_stale(&item(0.5), 30.0));
+        assert!(
+            !view(Some(SIGNAL_LOST_AFTER_S)).signal_lost(),
+            "the limit itself is not yet lost"
+        );
+    }
+
+    #[test]
+    fn without_the_stream_clock_an_items_own_age_decides() {
+        let v = view(None);
+        assert!(!v.signal_lost());
+        assert!(!v.is_stale(&item(10.0), 30.0));
+        assert!(v.is_stale(&item(31.0), 30.0));
     }
 }

@@ -752,6 +752,7 @@ mod tests {
             items: vec![],
             subscribed: 5,
             group_totals: vec![("attitude".into(), 5)],
+            feed_age_s: None,
         });
         let hubble = view(SourceStatus::Active, Health::Ok, None);
         let (g, _) = render_page(&w, Some(&hubble), Page::Master, 0, 160, 45);
@@ -766,8 +767,56 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_lost_signal_is_said_on_the_master_page_and_the_telemetry_pages() {
+        let mut w = bare_world();
+        w.telemetry = Some(mctl_core::world::TelemetryView {
+            health: Health::Ok,
+            items: vec![],
+            subscribed: 5,
+            group_totals: vec![("attitude".into(), 5)],
+            feed_age_s: Some(900.0),
+        });
+        let mut iss = view(SourceStatus::Active, Health::Ok, None);
+        iss.telemetry = Some("isslive".into());
+        let (g, _) = render_page(&w, Some(&iss), Page::Master, 0, 160, 45);
+        assert!(
+            g.text().contains("SIGNAL LOST: VALUES FROZEN"),
+            "{}",
+            g.text()
+        );
+        let (g, _) = render_page(&w, Some(&iss), Page::Eps, 0, 160, 45);
+        assert!(g.text().contains("SIGNAL LOST"), "{}", g.text());
+    }
+
+    #[test]
+    fn a_rule_about_one_vehicle_is_not_shown_or_annunciated_on_another() {
+        let mut w = bare_world();
+        w.cw.rules.push(CwRuleView {
+            id: "iss-cabin-pressure".into(),
+            title: "Lab cabin pressure".into(),
+            state: CwState::Caution,
+            value: Some(690.0),
+            units: "mmHg".into(),
+            caution: Some(700.0),
+            warning: Some(650.0),
+            basis: "test".into(),
+            vehicle: Some("iss".into()),
+        });
+        let iss = view(SourceStatus::Active, Health::Ok, None);
+        let (g, _) = render_page(&w, Some(&iss), Page::Master, 0, 160, 45);
+        assert!(g.text().contains("Lab cabin pressure"));
+        assert!(g.row_text(0).contains("CAUT"));
+        let jwst = l2_view();
+        let (g, _) = render_page(&w, Some(&jwst), Page::Master, 0, 160, 45);
+        assert!(!g.text().contains("Lab cabin pressure"), "{}", g.text());
+        assert!(g.row_text(0).contains("NOM"), "{}", g.row_text(0));
+        assert_eq!(w.cw.worst_now(Some("jwst")), None);
+    }
+
     fn l2_view() -> VehicleView {
         let mut v = view(SourceStatus::Active, Health::Ok, None);
+        v.id = "jwst".into();
         v.name = "JWST".into();
         v.norad = 0;
         v.regime = mctl_core::config::Regime::L2;
@@ -870,6 +919,7 @@ mod tests {
                 caution: Some(700.0),
                 warning: Some(650.0),
                 basis: "illustrative".into(),
+                vehicle: None,
             }],
             conditions: vec![
                 Condition {
@@ -924,6 +974,7 @@ mod tests {
             caution: Some(6.0),
             warning: Some(8.0),
             basis: "illustrative, not a flight rule".into(),
+            vehicle: None,
         });
         let (g, _) = render_page(&w, Some(&v), Page::Sys, 3, 160, 45);
         let t = g.text();

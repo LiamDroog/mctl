@@ -80,6 +80,8 @@ pub struct Model {
     telemetry_meta: Vec<TelemetryMeta>,
     telemetry: HashMap<String, (Option<String>, Utc)>,
     telemetry_health: Option<Health>,
+    /// Latest tick of the telemetry stream's own clock.
+    feed_clock: Option<Utc>,
     /// Recent numeric samples per item, and the same as shared slices rebuilt only when sampled.
     history: HashMap<String, VecDeque<f32>>,
     history_view: HashMap<String, Arc<[f32]>>,
@@ -132,7 +134,9 @@ fn rule_sample(
         Metric::Item(id) => match telemetry.and_then(|t| t.get(id)) {
             None => (CwSample::Missing, None),
             Some(i) if i.value.is_none() => (CwSample::Missing, None),
-            Some(i) if i.age_s > def.stale_after_s => (CwSample::Stale, i.value),
+            Some(i) if telemetry.is_some_and(|t| t.is_stale(i, def.stale_after_s)) => {
+                (CwSample::Stale, i.value)
+            }
             Some(i) => (CwSample::Value(i.value.unwrap_or(f64::NAN)), i.value),
         },
         Metric::GpAgeHours(v) => {
@@ -256,6 +260,7 @@ impl Model {
             telemetry_meta: Vec::new(),
             telemetry: HashMap::new(),
             telemetry_health: None,
+            feed_clock: None,
             history: HashMap::new(),
             history_view: HashMap::new(),
             history_last: f64::NEG_INFINITY,
@@ -739,6 +744,7 @@ impl Model {
                 caution: def.caution,
                 warning: def.warning,
                 basis: def.basis.clone(),
+                vehicle: def.scope().map(str::to_owned),
             });
         }
         for (def, tr, value) in events {
@@ -836,6 +842,12 @@ impl Model {
                 self.telemetry.insert(id, (text, rx));
             }
             Event::TelemetryHealth(h) => self.telemetry_health = Some(h),
+            Event::TelemetryClock { data_time } => {
+                // Never move backwards: a reconnect snapshot can replay an older stamp.
+                if self.feed_clock.is_none_or(|c| data_time.0 > c.0) {
+                    self.feed_clock = Some(data_time);
+                }
+            }
             Event::Ops { vehicle, ops, .. } => {
                 if let Some(v) = self.vehicles.iter_mut().find(|v| v.def.id == vehicle) {
                     v.ops = Some(ops);
@@ -1099,6 +1111,7 @@ impl Model {
             health,
             subscribed: self.telemetry_meta.len(),
             group_totals: group_totals(&self.telemetry_meta),
+            feed_age_s: self.feed_clock.map(|c| wall.minus(c)),
             items: self
                 .telemetry_meta
                 .iter()
@@ -1782,6 +1795,41 @@ mod tests {
         let v = w.vehicles.iter().find(|v| v.id == "jwst").unwrap();
         assert!(v.solution.is_none());
         assert_eq!(v.sources[0].status, SourceStatus::OutOfSpan);
+    }
+
+    #[test]
+    fn a_frozen_stream_clock_makes_every_item_stale_and_never_runs_backwards() {
+        let mut m = model();
+        m.set_telemetry(vec![meta("A")]);
+        m.apply(Event::Telemetry {
+            id: "A".into(),
+            text: Some("1".into()),
+            rx: Utc(1000.0),
+        });
+        m.apply(Event::TelemetryClock {
+            data_time: Utc(990.0),
+        });
+        let view = |m: &mut Model, wall: f64| {
+            m.world_at(Utc(wall), ClockView::LIVE, Utc(wall))
+                .telemetry
+                .unwrap()
+        };
+        let v = view(&mut m, 1000.0);
+        assert_eq!(v.feed_age_s, Some(10.0));
+        assert!(!v.signal_lost());
+        // The clock stops; 100 s later everything is stale although the item was just "received".
+        let v = view(&mut m, 1090.0);
+        assert!(v.signal_lost());
+        assert!(v.is_stale(v.get("A").unwrap(), 30.0));
+        // A replayed older stamp does not move it back.
+        m.apply(Event::TelemetryClock {
+            data_time: Utc(500.0),
+        });
+        assert_eq!(view(&mut m, 1090.0).feed_age_s, Some(100.0));
+        m.apply(Event::TelemetryClock {
+            data_time: Utc(1085.0),
+        });
+        assert!(!view(&mut m, 1090.0).signal_lost());
     }
 
     #[test]

@@ -185,6 +185,7 @@ warning = 1.0
 persist_s = 30.0
 units = ""
 basis = "feed loss: any state other than delivering for 30 s"
+vehicle = "iss"
 
 [[rule]]
 id = "iss-cabin-pressure"
@@ -197,6 +198,7 @@ hysteresis = 5.0
 persist_s = 10.0
 units = "mmHg"
 basis = "illustrative, not a flight rule (nominal cabin is ~740-760 mmHg)"
+vehicle = "iss"
 
 [[rule]]
 id = "iss-ppco2"
@@ -209,6 +211,7 @@ hysteresis = 0.3
 persist_s = 30.0
 units = "mmHg"
 basis = "illustrative, not a flight rule"
+vehicle = "iss"
 
 [[rule]]
 id = "iss-cmgs-online"
@@ -220,6 +223,7 @@ warning = 2.0
 persist_s = 10.0
 units = ""
 basis = "illustrative, not a flight rule"
+vehicle = "iss"
 
 # ---- Key bindings (DESIGN.md 9.7) ------------------------------------------------------------------
 # Single characters, case-insensitive; an action may have several. Function keys, Tab, arrows, Enter

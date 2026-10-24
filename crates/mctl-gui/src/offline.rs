@@ -511,4 +511,114 @@ mod tests {
         assert!((s.median - 50.0).abs() <= 1.0);
         assert!((s.p95 - 95.0).abs() <= 1.0);
     }
+
+    /// A world whose ISS telemetry is synthetic (every item a slow wave with 15 minutes of history),
+    /// for looking at the telemetry visuals when the real feed is down. The numbers mean nothing.
+    fn synthetic_iss_world() -> mctl_core::world::World {
+        use mctl_core::time::Utc;
+        use mctl_core::world::{
+            HISTORY_LEN, Health, TelemetryItem, TelemetryView, VehicleView, World,
+        };
+        let cfg = mctl_sources::isslive::config::Config::parse(
+            "embedded",
+            mctl_sources::isslive::config::DEFAULT_CONFIG,
+        )
+        .unwrap();
+        let mut items = Vec::new();
+        let mut totals: Vec<(String, usize)> = Vec::new();
+        for (k, i) in cfg.items.iter().enumerate() {
+            match totals.iter_mut().find(|(g, _)| *g == i.group) {
+                Some((_, n)) => *n += 1,
+                None => totals.push((i.group.clone(), 1)),
+            }
+            let (base, amp) = match i.units.as_str() {
+                "deg" => (120.0 + 30.0 * k as f64 % 200.0, 0.15),
+                "deg/s" => (0.0, 0.05),
+                "V" => (151.0, 0.3),
+                "A" => (3.0, 1.0),
+                "degC" => (22.0 + (k % 7) as f64, 0.6),
+                "mmHg" => (150.0 - (k % 5) as f64 * 30.0, 2.0),
+                "N\u{b7}m" => (0.0, 3.0),
+                _ => (1.0 + (k % 4) as f64, 0.0),
+            };
+            let phase = k as f64 * 0.7;
+            let hist: Vec<f32> = (0..HISTORY_LEN)
+                .map(|n| (base + amp * (n as f64 * 0.15 + phase).sin()) as f32)
+                .collect();
+            let value = f64::from(*hist.last().unwrap());
+            items.push(TelemetryItem {
+                id: i.id.clone(),
+                group: i.group.clone(),
+                description: i.description.clone(),
+                label: i.label.clone().unwrap_or_else(|| i.description.clone()),
+                section: i.section.clone().unwrap_or_else(|| i.group.clone()),
+                row: i.row.clone().unwrap_or_else(|| i.description.clone()),
+                col: i.col.clone().unwrap_or_default(),
+                units: i.units.clone(),
+                value: Some(value),
+                text: Some(value.to_string()),
+                rx: Utc(0.0),
+                age_s: 1.0,
+                history: hist.into(),
+            });
+        }
+        let mut w = World::empty(Utc::now().unwrap());
+        w.telemetry = Some(TelemetryView {
+            health: Health::Ok,
+            subscribed: items.len(),
+            items,
+            group_totals: totals,
+            feed_age_s: Some(1.0),
+        });
+        w.vehicles.push(VehicleView {
+            id: "iss".into(),
+            name: "ISS".into(),
+            norad: 25544,
+            telemetry: Some("isslive".into()),
+            regime: mctl_core::config::Regime::Earth,
+            schedule: None,
+            deep: None,
+            ops: None,
+            ops_health: None,
+            met_epoch: None,
+            sources: vec![],
+            solution: None,
+            track: None,
+            passes: vec![],
+            beta_series: Default::default(),
+        });
+        w
+    }
+
+    /// Writes PNGs of the telemetry pages with synthetic data into `$MCTL_SYNTH_DIR`. Needs a GPU
+    /// adapter: `MCTL_SYNTH_DIR=/tmp/x cargo test -p mctl-gui synthetic -- --ignored`.
+    #[test]
+    #[ignore = "needs a GPU adapter and an output directory"]
+    fn render_synthetic_telemetry_pages() {
+        let dir = std::env::var("MCTL_SYNTH_DIR").expect("set MCTL_SYNTH_DIR");
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let cfg = mctl_core::config::Config::from_layers(mctl_core::config::DEFAULT_CONFIG, None)
+            .unwrap();
+        let live = Live {
+            bus: Bus::new(synthetic_iss_world()),
+            limits: cfg.limits.clone(),
+            vehicle_id: "iss".into(),
+            commands: tx,
+            settings: vec![],
+            keys: cfg.keys.clone(),
+        };
+        let themes = crate::theme::embedded().unwrap();
+        let opts = ShotOptions {
+            size: [1920, 1080],
+            theme: Some("phosphor".into()),
+            out_dir: dir.into(),
+            effects_off: false,
+            warmup_frames: 40,
+            pages: ["gnc:2", "gnc:3", "eps", "tcs", "tcs:2", "comm"]
+                .map(String::from)
+                .to_vec(),
+            low_power: false,
+        };
+        shots(&live, themes, &opts).unwrap();
+    }
 }
