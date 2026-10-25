@@ -61,6 +61,8 @@ pub struct Layout {
     pub eclipse: Option<CellRect>,
     pub adi: Option<CellRect>,
     pub sky: Option<CellRect>,
+    /// The window view's picture: the globe pass drawn from the vehicle.
+    pub window: Option<CellRect>,
     /// Trend plots to draw: (pixel area, index into the trend set's plots).
     pub plots: Vec<(CellRect, usize)>,
     /// Pixel-drawn widgets queued by the panels (gauges, sparklines, dials, plots).
@@ -1103,8 +1105,9 @@ mod tests {
             "{t}"
         );
         assert!(layout.adi.is_none(), "no ADI without a telemetry source");
-        let (g, _) = render_page(&w, Some(&hubble), Page::View, 0, 160, 45);
-        assert!(g.text().contains("M7"));
+        let (g, layout) = render_page(&w, Some(&hubble), Page::View, 0, 160, 45);
+        assert!(g.text().contains("WINDOW VIEW  NADIR"), "{}", g.text());
+        assert!(layout.window.is_some(), "the picture is the globe pass");
     }
 
     #[test]

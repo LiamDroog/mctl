@@ -31,6 +31,7 @@ mod theme;
 mod trendplot;
 mod vehicle_pages;
 mod widgets;
+mod window;
 
 pub use app::{Options, Present, run};
 pub use kiosk::DEFAULT_DWELL_S as KIOSK_DEFAULT_DWELL_S;

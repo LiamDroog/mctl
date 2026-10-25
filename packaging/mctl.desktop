@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=mctl
+GenericName=Mission control console
+Comment=Mission control for the ISS, Hubble, JWST, Roman and Dragon
+Exec=mctl
+Icon=mctl
+Terminal=false
+Categories=Science;
+Keywords=ISS;Hubble;JWST;orbit;satellite;space;
+StartupWMClass=mctl

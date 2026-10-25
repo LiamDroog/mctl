@@ -13,7 +13,7 @@ use crate::coast::MaskLevel;
 use crate::theme::{GlobeMode, GlobeStyle};
 
 /// Earth equatorial radius, km (WGS-84): the scene's unit of length.
-const EARTH_RADIUS_KM: f32 = 6378.137;
+pub(crate) const EARTH_RADIUS_KM: f32 = 6378.137;
 
 /// Radial exaggeration steps for the orbit; always labelled in the panel title (DESIGN.md §9.6).
 pub const EXAGGERATION_STEPS: [f32; 4] = [1.0, 2.0, 5.0, 10.0];
@@ -140,6 +140,16 @@ pub(crate) fn segment_hits_unit_sphere(a: Vec3, b: Vec3) -> bool {
 }
 
 /// Scene for the camera and solution at aspect ratio `aspect`.
+/// The GCRF -> ITRF rotation of a solution as a matrix.
+pub(crate) fn ecef_of(sol: &Solution) -> Mat3 {
+    let m = sol.ecef_from_gcrf;
+    Mat3::from_cols(
+        Vec3::new(m[0][0] as f32, m[1][0] as f32, m[2][0] as f32),
+        Vec3::new(m[0][1] as f32, m[1][1] as f32, m[2][1] as f32),
+        Vec3::new(m[0][2] as f32, m[1][2] as f32, m[2][2] as f32),
+    )
+}
+
 pub fn build_scene(camera: &Camera, sol: &Solution, aspect: f32) -> GlobeScene {
     let k = camera.exaggeration();
     let vehicle = exaggerate(to_vec3(sol.state_gcrf.r.into()), k);
@@ -167,12 +177,7 @@ pub fn build_scene(camera: &Camera, sol: &Solution, aspect: f32) -> GlobeScene {
         near,
         FAR_RE,
     );
-    let m = sol.ecef_from_gcrf;
-    let ecef = Mat3::from_cols(
-        Vec3::new(m[0][0] as f32, m[1][0] as f32, m[2][0] as f32),
-        Vec3::new(m[0][1] as f32, m[1][1] as f32, m[2][1] as f32),
-        Vec3::new(m[0][2] as f32, m[1][2] as f32, m[2][2] as f32),
-    );
+    let ecef = ecef_of(sol);
     let sun = to_vec3(sol.sun_gcrf_km).normalize_or_zero();
     GlobeScene {
         view_proj: proj * view,

@@ -1582,7 +1582,6 @@ fn describe(page: Page, sub: usize) -> &'static [&'static str] {
         (Page::Prox, _) => &[
             "HILL-FRAME RELATIVE MOTION OF A VISITING VEHICLE: R-BAR/V-BAR, KEEP-OUT SPHERE, CORRIDOR.",
         ],
-        (Page::View, _) => &["PERSPECTIVE VIEW FROM THE VEHICLE: LIMB, TERMINATOR, SUN AND MOON."],
         _ => &[],
     }
 }
@@ -1682,6 +1681,7 @@ pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             (Page::Prox, _) => crate::vehicle_pages::prox(grid, inp),
             (Page::Sys, 4) => crate::vehicle_pages::vehicle_page(grid, inp),
             (Page::Sys, 5) => crate::vehicle_pages::gallery(grid, inp),
+            (Page::View, _) => crate::vehicle_pages::window(grid, inp),
             (Page::Master, _) => master(grid, inp),
             (Page::Traj, 0) => traj_orbit(grid, inp),
             (Page::Traj, 1) => traj_ground(grid, inp),
@@ -1706,7 +1706,6 @@ pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             (Page::Sys, 1) => sys_sources(grid, inp),
             (Page::Sys, 2) => sys_settings(grid, inp),
             (Page::Sys, _) => sys_rules(grid, inp),
-            (p, _) => no_source(grid, inp, &format!("{} is not implemented", p.title())),
         },
     };
     layout.legend = footer(grid, inp);

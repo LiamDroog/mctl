@@ -113,7 +113,7 @@ pub fn paint(
 const STARS_PER_MPX: f32 = 220.0;
 
 /// A cheap deterministic hash to scatter stars the same way every frame.
-fn hash01(n: u32, salt: u32) -> f32 {
+pub(crate) fn hash01(n: u32, salt: u32) -> f32 {
     let mut x = n.wrapping_mul(0x9E37_79B1) ^ salt.wrapping_mul(0x85EB_CA6B);
     x ^= x >> 15;
     x = x.wrapping_mul(0x2C1B_3C6D);

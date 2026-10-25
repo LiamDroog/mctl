@@ -752,7 +752,10 @@ impl Console {
                 },
             )
         };
-        let globe_px = layout.globe.map_or([0; 4], |r| cell_rect_px(&theme, r));
+        let globe_px = layout
+            .globe
+            .or(layout.window)
+            .map_or([0; 4], |r| cell_rect_px(&theme, r));
         let ground_px = layout.ground.map(|r| cell_rect_px(&theme, r));
         let eclipse_px = layout.eclipse.map(|r| cell_rect_px(&theme, r));
         let adi_px = layout.adi.map(|r| cell_rect_px(&theme, r));
@@ -796,11 +799,20 @@ impl Console {
         let has_area = globe_px[2] > 0 && globe_px[3] > 0;
         let aspect = globe_px[2] as f32 / globe_px[3].max(1) as f32;
         let sol = vehicle.and_then(|v| v.solution.as_ref());
-        let scene = sol
-            .filter(|_| has_area)
-            .map(|s| build_scene(&self.camera, s, aspect));
+        let window_look = layout
+            .window
+            .map(|_| crate::window::Look::from_sub(self.sub, &self.camera));
+        let scene = sol.filter(|_| has_area).map(|s| match window_look {
+            Some(look) => crate::window::build_scene(look, s, aspect),
+            None => build_scene(&self.camera, s, aspect),
+        });
+        let moon = window_look.and_then(|_| {
+            mctl_astro::moon::moon_gcrf(world.t)
+                .ok()
+                .map(|m| [m.x, m.y, m.z])
+        });
         let orbit = match (scene.as_ref(), vehicle.and_then(|v| v.track.as_ref())) {
-            (Some(_), Some(track)) => {
+            (Some(_), Some(track)) if window_look.is_none() => {
                 let key = track.revision * 8 + self.camera.exaggeration_idx as u64;
                 if self.orbit_cache.as_ref().is_none_or(|(k, _)| *k != key) {
                     self.orbit_cache = Some((
@@ -902,7 +914,11 @@ impl Console {
                     page::paint_eclipse_ring(&painter, &theme, px, v, now);
                 }
             }
-            if let (Some(sc), true) = (scene.as_ref(), has_area) {
+            if let (Some(sc), Some(sol), Some(_), true) =
+                (scene.as_ref(), sol, window_look, has_area)
+            {
+                crate::window::paint(&painter, &theme, globe_px, sc, sol, moon);
+            } else if let (Some(sc), true) = (scene.as_ref(), has_area) {
                 if let (Some(track), Some(sol)) = (vehicle.and_then(|v| v.track.as_ref()), sol) {
                     crate::overlays::paint(
                         &painter,

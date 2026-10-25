@@ -100,7 +100,7 @@ impl Page {
             Self::Comm => &["LINKS AND AOS/LOS", "TDRS COVERAGE"],
             Self::Pass => &["SKY PLOT", "PASS LIST", "SITES"],
             Self::Prox => &["R-BAR/V-BAR"],
-            Self::View => &["WINDOW VIEW"],
+            Self::View => &["NADIR", "RAM", "WAKE", "FREE LOOK"],
             Self::Sys => &[
                 "EVENT LOG",
                 "SOURCE HEALTH",
@@ -201,7 +201,16 @@ pub fn availability(page: Page, sub: usize, vehicle: Option<&VehicleView>) -> Av
                 v.name
             )),
         },
-        Page::View => NoSource("window view arrives in M7".into()),
+        Page::View if l2 => NoSource(
+            "from L2 the Earth is a small disc; the window view is for Earth orbit".into(),
+        ),
+        Page::View => match vehicle {
+            None => NoSource("no vehicle data yet".into()),
+            Some(v) if v.solution.is_none() => {
+                NoSource(format!("{} has no trajectory solution yet", v.name))
+            }
+            Some(_) => Available,
+        },
     }
 }
 
@@ -316,7 +325,15 @@ mod tests {
             availability(Page::Ops, 0, Some(&jwst)),
             Availability::Available
         );
+        assert!(
+            matches!(availability(Page::View, 0, Some(&jwst)), Availability::NoSource(r) if r.contains("L2")),
+            "the window view is for Earth orbit"
+        );
         let iss = vehicle(Some("isslive"));
+        assert!(
+            matches!(availability(Page::View, 0, Some(&iss)), Availability::NoSource(r) if r.contains("no trajectory solution")),
+            "and needs a solution"
+        );
         assert!(
             matches!(availability(Page::Ops, 0, Some(&iss)), Availability::NoSource(r) if r.contains("no public observing schedule"))
         );

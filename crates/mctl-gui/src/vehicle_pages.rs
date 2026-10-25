@@ -310,3 +310,64 @@ pub(crate) fn gallery(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     }
     Layout::default()
 }
+
+/// F9 VIEW: the Earth from the vehicle. The picture is the globe pass; the numbers are text over it.
+pub(crate) fn window(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
+    let (cols, rows) = (grid.cols, grid.rows);
+    let (top, h) = body(rows);
+    let rect = CellRect::new(0, top, cols, h);
+    let look = crate::window::Look::from_sub(inp.sub, inp.camera);
+    boxed(grid, rect, &format!("WINDOW VIEW  {}", look.label()));
+    let (dim, fg, bright) = (
+        Style::new(Role::Dim),
+        Style::new(Role::Fg),
+        Style::new(Role::Bright),
+    );
+    if let Some(s) = inp.vehicle.and_then(|v| v.solution.as_ref()) {
+        let g = &s.geodetic;
+        let mut l = Lines::new(grid, rect);
+        l.pair("ALT", &format!("{:>8.1}", g.alt_km), "km", bright);
+        l.pair(
+            "HORIZON",
+            &format!("{:>8.0}", crate::window::horizon_km(g.alt_km)),
+            "km away",
+            fg,
+        );
+        l.pair(
+            "EARTH",
+            &format!("{:>8.1}", crate::window::earth_diameter_deg(g.alt_km)),
+            "deg across",
+            fg,
+        );
+        l.pair(
+            "BELOW",
+            &format!(
+                "{:>5.1} {}  {:>6.1} {}",
+                g.lat_deg.abs(),
+                if g.lat_deg >= 0.0 { 'N' } else { 'S' },
+                g.lon_deg.abs(),
+                if g.lon_deg >= 0.0 { 'E' } else { 'W' }
+            ),
+            "",
+            fg,
+        );
+        l.line(
+            if s.illumination > 0.99 {
+                "SUNLIT"
+            } else if s.illumination < 0.01 {
+                "IN THE EARTH'S SHADOW"
+            } else {
+                "PENUMBRA"
+            },
+            dim,
+        );
+        if matches!(look, crate::window::Look::Free { .. }) {
+            l.row += 1;
+            l.line("DRAG OR ARROWS TO LOOK ROUND", dim);
+        }
+    }
+    Layout {
+        window: Some(rect.inner()),
+        ..Layout::default()
+    }
+}

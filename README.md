@@ -3,7 +3,7 @@
 Mission control display for the ISS, Hubble, JWST and Roman, styled after a flight control console. Design and
 requirements: [`DESIGN.md`](DESIGN.md). Decisions: [`docs/adr/`](docs/adr/). Status: M0-M4 done (core and sources, MASTER/TRAJ with store-backed trends, live telemetry, C&W,
 recording, observer sites and passes), plus JWST and Roman at Sun-Earth L2 from Horizons, STScI observing
-schedules and survey pictures of the targets (OPS page), telemetry visuals, and M5 (numerical propagator, maneuver planner, replay); M6 (Dragon, proximity operations, line art); next is M7. See "What is real" below.
+schedules and survey pictures of the targets (OPS page), telemetry visuals, and M5 (numerical propagator, maneuver planner, replay); M6 (Dragon, proximity operations, line art) and M7 (window view, packaging, the Pi/CRT display). See "What is real" below.
 
 ## Running
 
@@ -34,6 +34,18 @@ mctl --pi                        # the Raspberry Pi / CRT display, see docs/pi.m
 mctl --pi shot --out-dir /tmp/pi # one PNG per scene of that display
 ```
 
+To install a release build instead (the binary embeds its config, fonts, textures and coastlines, and needs
+only the GPU stack and libc):
+
+```
+packaging/install.sh                  # binary, desktop entries and icon into ~/.local
+packaging/install.sh --prefix /usr/local
+packaging/install.sh --uninstall
+```
+
+It refuses to replace `~/.local/bin/mctl` while that is the launcher symlink above. The two desktop entries
+start the console and the Pi display (`mctl --pi`).
+
 The launcher runs `cargo build --release` (a no-op in ~0.3 s when nothing changed) and refuses to run a
 stale binary if the build fails. `MCTL_NO_BUILD=1` skips the build.
 
@@ -44,6 +56,9 @@ Keys (all single-character keys are remappable under `[keys]` in the config): `F
 `W` cycles the trends window on TRAJ elements and trends. Orbit map only: drag with the left button inside the map to rotate, wheel to zoom there; arrows and
 `+`/`-` also work. `X` GCRF/ITRF, `Z` altitude exaggeration, `F` inertial/Earth-fixed, `C` focus,
 `1`-`4` effects, `E` all effects, `Q` quit.
+`F9` VIEW is the window view: the Earth from the vehicle's position with the limb curved at its true altitude,
+the terminator, Sun, Moon, stars and the sub-satellite point. `Tab` cycles nadir, ram (ahead), wake (behind)
+and free look, which you steer by dragging or with the arrow keys. It is for Earth orbit only.
 `SYS` sub-page 6 is a gallery of line art (Soyuz, Falcon 9, Cygnus, the Shuttle, Voyager, the Earth).
 
 ## Flags
@@ -70,14 +85,14 @@ CelesTrak GP with Horizons as a second opinion (Horizons' Hubble table is itself
 cross-check, not a better source). The OPS page shows the JWST weekly visit plan and the Hubble daily
 programme list from STScI; both are plans, not engineering telemetry, which neither observatory publishes.
 ISS telemetry (137 ISSLIVE items) feeds GNC/EPS/TCS/COMM, with recent-history sparklines and charts; units the live values disprove are corrected
-and documented in `docs/step3/attitude-verification.md`. Panels for later milestones say which milestone
-supplies them. Passes are predicted for each observer site (OEM then GP/SGP4); pass times match an independent
+and documented in `docs/step3/attitude-verification.md`. Passes are predicted for each observer site (OEM then GP/SGP4); pass times match an independent
 implementation to milliseconds (`docs/step4/pass-verification.md`) but have not been compared with a
 published predictor. SUP-GP (ISS-E) is implemented but off by default (`docs/step4/supgp-evaluation.md`). The observer site is the configured one, else GeoClue, else (optional, off by
 default) an IP lookup, else the NASA HQ fallback; `:site save` keeps one. The maneuver planner (TRAJ sub-page 4: `burn add`, `plan ...`) propagates numerically (DOP853, J2-J4, Sun and Moon, exponential-atmosphere drag, optional SRP);
 it was checked against the NASA ISS ephemeris (3.1 km after a day without drag, 7.3 km with the static drag model, so the drag scale is a control).
 REPLAY plays states and telemetry back from the recording.
 Crew and Cargo Dragon are found by name on CelesTrak (their NORAD numbers change every mission). The PROX page (F8) shows each visitor's motion about the station in R-bar/V-bar from a source both vehicles share; while docked CelesTrak gives a visitor the station's own element set, so it reads DOCKED. It is TLE-derived and says not valid inside ~5 km; the keep-out and approach-ellipsoid sizes are configured assumptions (`[prox]`). SYS / VEHICLE (sub-page 5) shows each vehicle's wireframe art and facts.
+The window view (F9) is the globe renderer placed at the vehicle: the limb curvature is the real geometry at the real altitude, but the Earth is the embedded static texture (no clouds), and the Moon is the analytic series (arcminute level).
 The OPS page pictures are DSS2 sky-survey cutouts around the target (CDS Sesame + hips2fits), not Hubble or JWST images.
 
 ## Layout
