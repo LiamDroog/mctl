@@ -11,6 +11,7 @@ mod coast;
 mod commands;
 mod console;
 mod deep;
+mod flags;
 mod fonts;
 mod globe;
 mod gpu;

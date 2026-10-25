@@ -1110,7 +1110,7 @@ fn prox_plot(
     painter.text(
         at(0.0, -ae_z) + vec2(0.0, -4.0),
         Align2::CENTER_BOTTOM,
-        "APPROACH ELLIPSOID (CONFIGURED)",
+        "APPROACH ELLIPSOID [EST]",
         font.clone(),
         dim,
     );
@@ -1125,7 +1125,7 @@ fn prox_plot(
             (keep_out * scale) as f32 * 0.72 + 2.0,
         ),
         Align2::LEFT_TOP,
-        "KEEP-OUT",
+        "KEEP-OUT [EST]",
         font.clone(),
         p.caution.to_egui(),
     );

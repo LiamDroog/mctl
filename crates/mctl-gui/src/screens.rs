@@ -318,10 +318,7 @@ pub(crate) fn state_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) 
     l.pair("LAT", &format!("{:>13.4}", s.geodetic.lat_deg), "deg", fg);
     l.pair("LON", &format!("{:>13.4}", s.geodetic.lon_deg), "deg", fg);
     if matches!(inp.world.eop, EopView::Assumed { .. }) {
-        l.line(
-            "UT1-UTC ASSUMED 0 (ITRF +-30 M)",
-            Style::limit(Limit::Caution),
-        );
+        l.line("ITRF [EST]", Style::limit(Limit::Caution));
     }
 }
 
@@ -483,9 +480,10 @@ pub(crate) fn sources_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>
                 EopView::Loaded { covers_to, .. } => {
                     (format!("EOP LOADED THRU {}", &covers_to.iso()[..10]), dim)
                 }
-                EopView::Assumed { .. } => {
-                    ("EOP ASSUMED 0".to_owned(), Style::limit(Limit::Caution))
-                }
+                EopView::Assumed { .. } => (
+                    format!("EOP {}", crate::flags::EST),
+                    Style::limit(Limit::Caution),
+                ),
             };
             l.put(1, &eop.0, eop.1);
         }
@@ -731,7 +729,7 @@ fn telemetry_banner(l: &mut Lines<'_>, inp: &PageInput<'_>) {
         );
     } else if !inp.world.clock.is_live() {
         l.line(
-            "NOT LIVE: TELEMETRY IS CURRENT, NOT AT SIM TIME",
+            &format!("TELEMETRY {}", crate::flags::NOW),
             Style::limit(Limit::Caution),
         );
     }
@@ -890,7 +888,7 @@ fn group_table_reserved(
     {
         String::new()
     } else {
-        "  NOT LIVE: TELEMETRY IS CURRENT, NOT AT SIM TIME".to_owned()
+        format!("  {}", crate::flags::NOW)
     };
     let line = format!("{title}   {got}/{total} ITEMS   {fresh}{live}");
     grid.put(1, top, &line, Style::new(Role::Bright));
@@ -1264,11 +1262,7 @@ fn comm_links(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
         .observer
         .active_site()
         .map_or("--", |s| s.name.as_str());
-    boxed(
-        grid,
-        rect,
-        &format!("AOS / LOS  OBSERVER SITE {site}  (NOT A GROUND-STATION OR TDRS SCHEDULE)"),
-    );
+    boxed(grid, rect, &format!("AOS / LOS  OBSERVER SITE {site}"));
     let mut l = Lines::new(grid, rect);
     let now = inp.world.t;
     match active_pass_set(inp).and_then(|set| current_or_next_pass(set, now)) {
@@ -1439,9 +1433,10 @@ fn sys_sources(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             }
         }
         EopView::Assumed { reason } => {
-            l.line("ASSUMED ZERO", Style::limit(Limit::Caution));
-            l.line("UT1-UTC AND POLAR MOTION ARE 0;", Style::new(Role::Dim));
-            l.line("ITRF POSITIONS CAN BE OFF BY ~30 M.", Style::new(Role::Dim));
+            l.line(
+                "UT1-UTC, POLAR MOTION 0 [EST]",
+                Style::limit(Limit::Caution),
+            );
             l.line(&reason.to_uppercase(), Style::new(Role::Dim));
         }
     }
@@ -1481,7 +1476,7 @@ fn sys_rules(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
                 r.title,
                 th(r.caution),
                 th(r.warning),
-                r.basis.to_uppercase()
+                basis_flag(&r.basis)
             ),
             style,
         );
@@ -1625,7 +1620,8 @@ fn help_overlay(grid: &mut Grid, k: &KeyMap) {
     );
     let keys: Vec<&str> = keys.iter().map(String::as_str).collect();
     let w = 100.min(cols.saturating_sub(4));
-    let h = (keys.len() + COMMANDS.len() + 7).min(rows.saturating_sub(4));
+    let h =
+        (keys.len() + COMMANDS.len() + crate::flags::LEGEND.len() + 9).min(rows.saturating_sub(4));
     if w < 20 || h < 6 {
         return;
     }
@@ -1650,6 +1646,20 @@ fn help_overlay(grid: &mut Grid, k: &KeyMap) {
     );
     for (_, usage) in COMMANDS {
         l.line(usage, solid_dim);
+    }
+    l.row += 1;
+    l.line("FLAGS", Style::new(Role::Bright).solid());
+    for (flag, meaning) in crate::flags::LEGEND {
+        l.line(&format!("{flag:<9} {meaning}"), solid_dim);
+    }
+}
+
+/// How a rule's basis is shown: an illustrative limit is flagged, a cited one is quoted.
+fn basis_flag(basis: &str) -> String {
+    if basis.to_ascii_lowercase().starts_with("illustrative") {
+        crate::flags::EST.to_owned()
+    } else {
+        basis.to_uppercase()
     }
 }
 
@@ -1679,34 +1689,16 @@ pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             (Page::Pass, 1) => pass_list(grid, inp),
             (Page::Pass, _) => pass_sites(grid, inp),
             (Page::Gnc, 0) => gnc_adi(grid, inp),
-            (Page::Gnc, 1) => group_table(
-                grid,
-                inp,
-                "GNC  ATTITUDE ITEMS",
-                "attitude",
-                "ERROR AND RATE ITEMS ARE deg AND deg/s (CHECKED: docs/step3/attitude-verification.md), NOT THE RAD THE SPREADSHEET SAYS.",
-            ),
-            (Page::Gnc, _) => group_table(
-                grid,
-                inp,
-                "GNC  CMG",
-                "cmg",
-                "THE PUBLIC FEED GIVES CMG MOMENTUM AS A MAGNITUDE ONLY; NO PER-AXIS MOMENTUM VECTOR IS PUBLISHED.",
-            ),
-            (Page::Eps, _) => group_table(
-                grid,
-                inp,
-                "EPS  ARRAYS, SARJ, BGA",
-                "eps",
-                "PVCU ARRAY NAMES ARE AS THE SPREADSHEET PUBLISHES THEM; A REPEATED NAME SHOWS AS #2, NOT CORRECTED.",
-            ),
+            (Page::Gnc, 1) => group_table(grid, inp, "GNC  ATTITUDE ITEMS", "attitude", ""),
+            (Page::Gnc, _) => group_table(grid, inp, "GNC  CMG", "cmg", ""),
+            (Page::Eps, _) => group_table(grid, inp, "EPS  ARRAYS, SARJ, BGA", "eps", ""),
             (Page::Tcs, 0) => group_table(grid, inp, "TCS  LOOPS AND COOLING", "tcs", ""),
             (Page::Tcs, _) => group_table(
                 grid,
                 inp,
                 "ECLSS  ATMOSPHERE, WATER, O2",
                 "eclss",
-                "UNITS: THE SPREADSHEET SAYS PSI/CNT; THE VALUES ARE mmHg AND degC (docs/step3/attitude-verification.md).",
+                "FLUID TEMPERATURE UNITS [EST]",
             ),
             (Page::Comm, _) => comm_links(grid, inp),
             (Page::Sys, 0) => sys_events(grid, inp),

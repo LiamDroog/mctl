@@ -29,14 +29,11 @@ fn reference_lines(l: &mut Lines<'_>, refs: &[mctl_core::plan::ReferenceBurn], o
         return;
     }
     if refs.is_empty() {
-        l.line(
-            "OEM REFERENCE BURNS: NONE (THE FILE'S COMMENTS MENTION NO MANEUVER)",
-            dim,
-        );
+        l.line("OEM REFERENCE BURNS: NONE", dim);
         return;
     }
     l.line(
-        "OEM REFERENCE BURNS (READ-ONLY, FORMAT UNSPECIFIED)",
+        &format!("OEM REFERENCE BURNS {}", crate::flags::EST),
         Style::new(Role::Bright),
     );
     for r in refs {
@@ -219,10 +216,6 @@ fn results_panel(grid: &mut Grid, rect: CellRect, plan: Option<&PlanView>) {
             Style::limit(Limit::Caution),
         );
     }
-    l.line(
-        "THE PLAN IS NUMERICAL (DOP853); DRAG IS A STATIC ORDER-OF-MAGNITUDE MODEL.",
-        dim,
-    );
 }
 
 fn plot(grid: &mut Grid, rect: CellRect, title: &str, kind: PlotKind) {

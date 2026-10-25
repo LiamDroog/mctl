@@ -918,9 +918,7 @@ mod tests {
             "the current visit's picture is NOW: {t}"
         );
         assert!(
-            t.contains("SURVEY CUTOUT")
-                && t.contains("OBSERVATORY IMAGE")
-                && t.contains("DSS2 COLOR 15' FIELD"),
+            t.contains("[SURVEY]") && t.contains("DSS2 COLOR 15' FIELD"),
             "{t}"
         );
         assert!(
@@ -982,7 +980,7 @@ mod tests {
         iss.visitors = vec!["dragon-crew".into(), "dragon-cargo".into()];
         let (g, layout) = render_page(&w, Some(&iss), Page::Prox, 0, 160, 45);
         let t = g.text();
-        assert!(t.contains("TLE-DERIVED: NOT VALID INSIDE ~5 KM"), "{t}");
+        assert!(t.contains("RELATIVE STATE  [TLE]"), "{t}");
         assert!(t.contains("DOCKED") && t.contains("NEAR"), "{t}");
         assert!(t.contains("+1.234") && t.contains("-0.321"), "{t}");
         assert!(
@@ -1018,7 +1016,11 @@ mod tests {
         v.id = "hubble".into();
         v.name = "HUBBLE".into();
         let (g, layout) = render_page(&w, Some(&v), Page::Sys, 4, 160, 45);
-        assert!(g.text().contains("LINE ART IS STYLISED"), "{}", g.text());
+        assert!(
+            g.text().contains("TRAJECTORY SOURCES") || g.text().contains("ID           hubble"),
+            "{}",
+            g.text()
+        );
         assert!(
             layout
                 .widgets
@@ -1196,9 +1198,7 @@ mod tests {
         let (g, _) = render_page(&w, Some(&v), Page::Sys, 3, 160, 45);
         let t = g.text();
         assert!(
-            t.contains("Lab ppCO2")
-                && t.contains("NO DATA")
-                && t.contains("ILLUSTRATIVE, NOT A FLIGHT RULE"),
+            t.contains("Lab ppCO2") && t.contains("NO DATA") && t.contains("[EST]"),
             "{t}"
         );
     }

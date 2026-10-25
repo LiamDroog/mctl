@@ -142,7 +142,7 @@ fn ops_one_liner(l: &mut Lines<'_>, v: &VehicleView, now: Utc) {
 }
 
 fn ops_summary_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
-    boxed(grid, rect, "OBSERVING  (PLAN, NOT TELEMETRY)");
+    boxed(grid, rect, &format!("OBSERVING  {}", crate::flags::PLAN));
     let mut l = Lines::new(grid, rect);
     match inp.vehicle {
         Some(v) if v.schedule.is_some() => ops_one_liner(&mut l, v, inp.world.t),
@@ -275,11 +275,13 @@ fn visit_table(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>, s: &JwstSch
     let (dim, fg) = (Style::new(Role::Dim), Style::new(Role::Fg));
     let now = inp.world.t;
     feed_line(&mut l, inp, s.fetched_at, "STSCI WEEKLY SCHEDULE");
-    l.line("TIMES ARE THE PLAN; EXECUTED OBSERVATIONS CAN DIFFER (UNPLANNED EVENTS, TARGETS OF OPPORTUNITY).", dim);
     l.row += 1;
     l.put(
         1,
-        "  GMT START      DUR     INSTRUMENT / MODE                      TARGET",
+        &format!(
+            "  GMT START      DUR     INSTRUMENT / MODE                {}",
+            crate::flags::PLAN
+        ),
         dim,
     );
     l.row += 1;
@@ -385,17 +387,18 @@ fn field_cell(grid: &mut Grid, rect: CellRect, f: &FieldView) {
             lines.push((truncate(target, w), bright));
             lines.push((format!("RA  {}", fmt_ra(*ra_deg)), fg));
             lines.push((format!("DEC {}", fmt_dec(*dec_deg)), fg));
-            lines.push((
-                format!("{} {:.0}' FIELD", survey.to_uppercase(), fov_deg * 60.0),
-                dim,
-            ));
             for l in wrap(
                 &format!(
-                    "SURVEY CUTOUT, NOT AN OBSERVATORY IMAGE. POSITION: {}",
-                    origin.to_uppercase()
+                    "{} {:.0}' FIELD {}",
+                    survey.to_uppercase(),
+                    fov_deg * 60.0,
+                    crate::flags::SURVEY
                 ),
                 w,
             ) {
+                lines.push((l, dim));
+            }
+            for l in wrap(&format!("POSITION: {}", origin.to_uppercase()), w) {
                 lines.push((l, dim));
             }
             widget_key = Some(f.key.clone());
@@ -491,7 +494,7 @@ pub(crate) fn ops(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             plot(
                 grid,
                 split_rows[0],
-                "TIMELINE  -6 H TO +42 H  BY INSTRUMENT  (PLAN)",
+                "TIMELINE  -6 H TO +42 H  BY INSTRUMENT  [PLAN]",
                 PlotKind::Timeline,
             );
             let (lw, fw) = (cols * 42 / 100, cols * 34 / 100);
@@ -533,7 +536,12 @@ pub(crate) fn ops(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             let fetched = r.fetched_at;
             feed_line(&mut l, inp, fetched, "STSCI DAILY REPORT");
             l.line(
-                "PROGRAMS IN THE PERIOD; NO VISIT TIMES OR TELEMETRY. PICTURES: THE FIRST FIXED TARGET OF EACH PROGRAM, NOT NECESSARILY WHAT IT IS POINTED AT NOW.",
+                &format!(
+                    "PROGRAMS IN THE PERIOD {}   PICTURES {} {}",
+                    crate::flags::PLAN,
+                    crate::flags::SURVEY,
+                    crate::flags::EST
+                ),
                 Style::new(Role::Dim),
             );
             let strip_h = (h.saturating_sub(5) * 42 / 100)

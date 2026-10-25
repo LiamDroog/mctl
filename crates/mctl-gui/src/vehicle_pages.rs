@@ -103,18 +103,13 @@ pub(crate) fn prox(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     let plot = CellRect::new(0, top, lw, h);
     boxed(grid, plot, "R-BAR / V-BAR  PAST SOLID, PREDICTED DASHED");
     let right = column(lw, cols - lw, top, &split(h, &[58, 42]));
-    boxed(grid, right[0], "RELATIVE STATE");
+    boxed(
+        grid,
+        right[0],
+        &format!("RELATIVE STATE  {}", crate::flags::TLE),
+    );
     {
         let mut l = Lines::new(grid, right[0]);
-        l.line(
-            "TLE-DERIVED: NOT VALID INSIDE ~5 KM",
-            Style::limit(Limit::Caution),
-        );
-        l.line(
-            "ZONE SIZES ARE CONFIGURED ASSUMPTIONS, NOT SOURCED VALUES.",
-            Style::new(Role::Dim),
-        );
-        l.row += 1;
         if views.is_empty() {
             l.no_data("NO RELATIVE STATE YET: A VEHICLE HAS NO SOLUTION");
         }
@@ -186,11 +181,7 @@ fn source_line(s: &mctl_core::world::SourceView) -> String {
 }
 
 fn facts(l: &mut Lines<'_>, v: &VehicleView, now: mctl_core::time::Utc) {
-    let (dim, fg, bright) = (
-        Style::new(Role::Dim),
-        Style::new(Role::Fg),
-        Style::new(Role::Bright),
-    );
+    let (fg, bright) = (Style::new(Role::Fg), Style::new(Role::Bright));
     l.line(
         &v.resolved_name.clone().unwrap_or_else(|| v.name.clone()),
         bright,
@@ -249,8 +240,6 @@ fn facts(l: &mut Lines<'_>, v: &VehicleView, now: mctl_core::time::Utc) {
             fg,
         );
     }
-    l.row += 1;
-    l.line("LINE ART IS STYLISED AND NOT TO SCALE.", dim);
 }
 
 pub(crate) fn vehicle_page(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {

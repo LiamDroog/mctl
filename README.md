@@ -43,6 +43,13 @@ Keys (all single-character keys are remappable under `[keys]` in the config): `F
 `+`/`-` also work. `X` GCRF/ITRF, `Z` altitude exaggeration, `F` inertial/Earth-fixed, `C` focus,
 `1`-`4` effects, `E` all effects, `Q` quit.
 
+## Flags
+
+Values that are not plain measurements carry a short flag instead of a caveat: `[EST]` estimated, assumed,
+inferred or configured (not measured or sourced); `[PLAN]` scheduled, not what is happening; `[TLE]`
+TLE-derived, not valid inside about 5 km; `[SURVEY]` a sky-survey cutout, not an observatory image;
+`[NOW]` the current value while the clock is not at the present. The legend is in `?` help.
+
 ## Configuration and data
 
 Defaults are embedded (`config/default.toml`); a file at `~/.config/mctl/config.toml` overrides any key,
