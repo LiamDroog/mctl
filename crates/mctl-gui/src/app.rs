@@ -40,7 +40,7 @@ pub struct Options {
     pub exit_after_frames: Option<u64>,
     pub start_theme: Option<String>,
     /// The Pi/CRT display: the seconds each scene stays up.
-    pub kiosk_dwell_s: Option<f64>,
+    pub kiosk: Option<crate::kiosk::KioskConfig>,
     /// The running engine this window displays.
     pub live: crate::offline::Live,
 }
@@ -130,7 +130,7 @@ impl App {
         }
         let window = Arc::new(event_loop.create_window(attrs).context("creating window")?);
         // Nobody is pointing at the Pi display.
-        window.set_cursor_visible(self.opts.kiosk_dwell_s.is_none());
+        window.set_cursor_visible(self.opts.kiosk.is_none());
         let instance = gpu::new_instance();
         let surface = instance
             .create_surface(window.clone())
@@ -166,8 +166,8 @@ impl App {
         console.set_keys(
             crate::keys::KeyMap::from_config(&self.opts.live.keys).map_err(anyhow::Error::msg)?,
         );
-        if let Some(d) = self.opts.kiosk_dwell_s {
-            console.set_kiosk(d);
+        if let Some(cfg) = self.opts.kiosk {
+            console.set_kiosk(cfg);
         }
         console.connect(
             Some(self.opts.live.commands.clone()),

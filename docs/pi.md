@@ -8,29 +8,45 @@ What it changes:
 
 - **Low resolution.** 640x480 by default (`--size WxH` overrides), a 12 x 24 px cell, so 53 x 20 character
   cells. Text keeps one row and two columns clear of the edge, because a CRT hides the border (overscan).
-- **No effects.** The `CRT` theme has scanlines, bloom, persistence and curvature all off, and keys `1`-`4`
-  and `E` do nothing: the tube provides them. The theme is not in the `T` cycle and `--themes-dir` is ignored.
-- **Cycling.** Each vehicle gets a run of scenes of `--dwell` seconds each (default 20), and one piece of
-  gallery art (Soyuz, Falcon 9, Cygnus, the Shuttle, the Earth with an orbit, Voyager) follows each
-  vehicle's art scene for 60 % of that time.
+- **No effects.** Every theme has scanlines, bloom, persistence and curvature off, and keys `1`-`4` and `E` do
+  nothing: the tube provides them. `--themes-dir` is ignored.
+- **Themes.** `T` cycles CRT (cyan, the default), Phosphor (green), Retro (amber) and Retrowave; `--theme NAME`
+  starts on one. They are the console's themes with the display's font and no effects.
+- **Cycling.** Each vehicle gets a run of scenes of `--dwell` seconds each (default 20; console pages stay up
+  1.5 times as long), and one piece of gallery art (Falcon 9, the Shuttle, the Earth with an orbit) follows
+  each vehicle's art scene for 60 % of that time.
 - **Full screen, no cursor.** `--pi` implies `--fullscreen`, unless you give `--size` or `--windowed`, which
   keep it in a window of that size (the cursor is still hidden over it).
 
-A vehicle's scenes are the console's visual pages in the console's own frames, redrawn at this size, for
-whichever the vehicle has data for:
+`--pi-style` picks the scenes: `mixed` (default), `pretty` (pictures only) or `dense` (console pages only).
 
-| Scene | From the console | For |
-|---|---|---|
-| line art | SYS / VEHICLE | every vehicle: turning over a starfield and the Earth's limb, with three readouts a side and two status lines |
-| ORBIT MAP | TRAJ orbit map (the 3D Earth, turning by itself); HALO ORBIT for JWST and Roman | Earth orbit, L2 |
-| GROUND TRACK | TRAJ ground track | Earth orbit |
-| SKY PLOT | PASS sky plot | when a pass is predicted |
-| R-BAR / V-BAR | PROX | when a visitor is not docked |
-| pictures | OPS survey pictures of the current and next target | when a picture has arrived |
+A vehicle's scenes are for whichever of these it has data for. **Pictures** use the console's pixel panels
+in big frames at 53 x 20 cells:
 
-Docked Dragons show only their art, since their maps would repeat the station's. The telemetry pages (GNC, EPS,
-TCS/ECLSS, COMM, SYS) and the tables are not reproduced: they are unreadable on a 15 kHz tube and no use to
-look at.
+| Scene | From the console |
+|---|---|
+| line art | SYS / VEHICLE: turning over a starfield and the Earth's limb, three readouts a side, two status lines |
+| ORBIT MAP | TRAJ orbit map: the 3D Earth with city lights, turning by itself; HALO ORBIT for JWST and Roman |
+| GROUND TRACK | TRAJ ground track |
+| SKY PLOT | PASS sky plot |
+| R-BAR / V-BAR | PROX, when a visitor is not docked |
+| pictures | OPS survey pictures of the current and next target, when they have arrived |
+
+**Console pages** are the console's own pages in the small 8 x 16 font, 80 x 30 cells (76 x 28 inside the
+overscan margin), so they are mission-control dense:
+
+| Scene | From the console |
+|---|---|
+| MASTER | the map, ground track, state vector, event timeline and eclipse ring (the halo-orbit MASTER at L2) |
+| ORBIT MAP | TRAJ sub-page 1: the map with state vector, elements and sources |
+| PASS | the sky plot and the next pass |
+| PROX | R-bar/V-bar and the relative state |
+| OPS | timeline, visit table, pictures; the Hubble report |
+| EVENT LOG | SYS event log, for a vehicle with telemetry (the ISS) |
+
+Docked Dragons show only their art, since their maps would repeat the station's. The telemetry pages (GNC,
+EPS, TCS/ECLSS, COMM) and the tables are not reproduced: they are no use to look at. Whether the 8 x 16 text
+is legible on a 1702 is untested; if it is not, use `--pi-style pretty`.
 
 Keys: `V` or Right next scene, Left previous, Space hold or resume the cycle, `Q` or Esc quit.
 

@@ -9,7 +9,8 @@ use mctl_core::world::{VehicleView, World};
 
 use crate::art::{EXTRAS, Extra};
 use crate::grid::{CellRect, Grid, Limit, PlotKind, Role, Style, Widget};
-use crate::page::{Layout, fmt_dur};
+use crate::page::{Layout, PageInput, fmt_dur};
+use crate::pages::Page;
 use crate::screens::boxed;
 
 /// Seconds each vehicle is shown, unless `--dwell` says otherwise.
@@ -24,7 +25,29 @@ const FOOTER_ROWS: usize = 4;
 const SAFE_ROWS: usize = 1;
 const SAFE_COLS: usize = 2;
 
-/// What a vehicle's scene shows: the line art, or one of the console's pictorial pages.
+/// Which scenes the display cycles through.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Mix {
+    /// Pictures and console pages in turn.
+    #[default]
+    Mixed,
+    /// Pictures only.
+    Pretty,
+    /// Console pages only.
+    Dense,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct KioskConfig {
+    /// Seconds a vehicle's scene stays up.
+    pub dwell_s: f64,
+    pub mix: Mix,
+}
+
+/// A dense scene stays up this much longer than a picture, since there is more to read.
+const DENSE_DWELL_FACTOR: f64 = 1.5;
+
+/// What a vehicle's scene shows: line art or a picture page, or one of the console's pages at 80 x 30.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum View {
     Art,
@@ -33,6 +56,17 @@ pub enum View {
     Sky,
     Prox,
     Ops,
+    /// The console's MASTER page.
+    DenseMaster,
+    /// TRAJ orbit map with the state vector, elements and sources (the halo orbit at L2).
+    DenseTraj,
+    /// PASS sky plot and the next pass.
+    DensePass,
+    DenseProx,
+    /// OPS: timeline, visit table, pictures; or the Hubble report.
+    DenseOps,
+    /// SYS event log.
+    DenseEvents,
 }
 
 impl View {
@@ -45,7 +79,39 @@ impl View {
             (Self::Sky, _) => "SKY PLOT",
             (Self::Prox, _) => "R-BAR / V-BAR",
             (Self::Ops, _) => "OBSERVING  [PLAN]",
+            (Self::DenseMaster, _) => "MASTER",
+            (Self::DenseTraj, Regime::L2) => "HALO ORBIT",
+            (Self::DenseTraj, _) => "ORBIT MAP",
+            (Self::DensePass, _) => "PASS",
+            (Self::DenseProx, _) => "PROX",
+            (Self::DenseOps, _) => "OPS",
+            (Self::DenseEvents, _) => "EVENT LOG",
         }
+    }
+
+    pub fn dense(self) -> bool {
+        matches!(
+            self,
+            Self::DenseMaster
+                | Self::DenseTraj
+                | Self::DensePass
+                | Self::DenseProx
+                | Self::DenseOps
+                | Self::DenseEvents
+        )
+    }
+
+    /// The console page a dense view draws.
+    fn page(self) -> Option<(Page, usize)> {
+        Some(match self {
+            Self::DenseMaster => (Page::Master, 0),
+            Self::DenseTraj => (Page::Traj, 0),
+            Self::DensePass => (Page::Pass, 0),
+            Self::DenseProx => (Page::Prox, 0),
+            Self::DenseOps => (Page::Ops, 0),
+            Self::DenseEvents => (Page::Sys, 0),
+            _ => return None,
+        })
     }
 }
 
@@ -59,15 +125,21 @@ impl Scene<'_> {
     /// How long the scene stays up, given the dwell for a vehicle.
     pub fn dwell_s(&self, dwell_s: f64) -> f64 {
         match self {
+            Self::Vehicle(_, v) if v.dense() => dwell_s * DENSE_DWELL_FACTOR,
             Self::Vehicle(..) => dwell_s,
             Self::Extra(_) => dwell_s * EXTRA_DWELL_FRACTION,
         }
     }
+
+    /// Whether the scene wants the dense (small) font.
+    pub fn dense(&self) -> bool {
+        matches!(self, Self::Vehicle(_, v) if v.dense())
+    }
 }
 
-/// The views a vehicle has data for, the art first. Telemetry-only pages (GNC, EPS, TCS, COMM, SYS) have no
-/// place on a display meant to be looked at.
-fn views_of(world: &World, v: &VehicleView) -> Vec<View> {
+/// The views a vehicle has data for, in the order shown: pictures and console pages interleaved. Pages
+/// that are only telemetry (GNC, EPS, TCS, COMM) have no place on a display meant to be looked at.
+fn views_of(world: &World, v: &VehicleView, mix: Mix) -> Vec<View> {
     let mut out = vec![View::Art];
     // A docked vehicle shares its host's orbit: the same maps would be shown twice.
     let docked = v.visits.is_some()
@@ -75,45 +147,56 @@ fn views_of(world: &World, v: &VehicleView) -> Vec<View> {
             .prox
             .iter()
             .any(|p| p.chaser == v.id && p.state == mctl_core::prox::ProxState::Docked);
-    match v.regime {
-        _ if docked => {}
-        Regime::Earth => {
-            if v.solution.is_some() {
-                out.extend([View::Orbit, View::Ground]);
-            }
-            if v.passes.iter().any(|set| !set.passes.is_empty()) {
-                out.push(View::Sky);
-            }
-        }
-        Regime::L2 => {
-            if v.deep.is_some() {
-                out.push(View::Orbit);
-            }
-        }
-    }
+    let placed = !docked
+        && match v.regime {
+            Regime::Earth => v.solution.is_some(),
+            Regime::L2 => v.deep.is_some(),
+        };
+    let passes = !docked && v.passes.iter().any(|set| !set.passes.is_empty());
     // A plot of vehicles that are all docked has nothing to show.
-    if world.prox.iter().any(|p| {
+    let relative = world.prox.iter().any(|p| {
         (p.chaser == v.id || p.target == v.id) && p.state != mctl_core::prox::ProxState::Docked
-    }) {
-        out.push(View::Prox);
-    }
-    // Pictures are the point of this view: without one there is nothing to look at.
-    if v.fields
+    });
+    // Pictures are the point of the picture view: without one there is nothing to look at.
+    let pictures = v
+        .fields
         .iter()
-        .any(|f| matches!(f.state, mctl_core::schedule::FieldState::Ready { .. }))
-    {
-        out.push(View::Ops);
-    }
+        .any(|f| matches!(f.state, mctl_core::schedule::FieldState::Ready { .. }));
+    let earth = v.regime == Regime::Earth;
+    let wanted = [
+        (View::DenseMaster, placed),
+        (View::Orbit, placed),
+        (View::Ground, placed && earth),
+        (View::DenseTraj, placed),
+        (View::Sky, passes),
+        (View::DensePass, passes),
+        (View::Prox, relative),
+        (View::DenseProx, relative),
+        (View::Ops, pictures),
+        (View::DenseOps, v.ops.is_some()),
+        (View::DenseEvents, v.telemetry.is_some()),
+    ];
+    out.extend(
+        wanted
+            .into_iter()
+            .filter(|(_, ok)| *ok)
+            .map(|(view, _)| view),
+    );
+    out.retain(|view| match mix {
+        Mix::Mixed => true,
+        Mix::Pretty => !view.dense(),
+        Mix::Dense => view.dense(),
+    });
     out
 }
 
 /// The cycle: each vehicle's views in turn, one piece of gallery art after each vehicle's art until the
-/// gallery runs out.
-pub fn scenes(world: &World) -> Vec<Scene<'_>> {
+/// gallery runs out (never in dense-only mode, which has no art).
+pub fn scenes(world: &World, mix: Mix) -> Vec<Scene<'_>> {
     let mut out = Vec::new();
     let mut extras = EXTRAS.iter();
     for v in &world.vehicles {
-        for view in views_of(world, v) {
+        for view in views_of(world, v, mix) {
             out.push(Scene::Vehicle(v, view));
             if view == View::Art
                 && let Some(e) = extras.next()
@@ -122,7 +205,9 @@ pub fn scenes(world: &World) -> Vec<Scene<'_>> {
             }
         }
     }
-    out.extend(extras.map(Scene::Extra));
+    if mix != Mix::Dense {
+        out.extend(extras.map(Scene::Extra));
+    }
     out
 }
 
@@ -130,6 +215,8 @@ pub struct KioskInput<'a> {
     pub world: &'a World,
     pub scene: Scene<'a>,
     pub held: bool,
+    /// The console's page input, which dense scenes re-aim at the page they draw.
+    pub base: &'a PageInput<'a>,
 }
 
 /// `text` cut to `width` characters.
@@ -361,6 +448,13 @@ fn view_body(grid: &mut Grid, rect: CellRect, v: &VehicleView, view: View) -> La
     let mut layout = Layout::default();
     match view {
         View::Art => {}
+        // Dense views are drawn by `render_dense`, never here.
+        View::DenseMaster
+        | View::DenseTraj
+        | View::DensePass
+        | View::DenseProx
+        | View::DenseOps
+        | View::DenseEvents => {}
         View::Orbit if v.regime == Regime::L2 => {
             crate::deep::plot(grid, rect, "HALO ORBIT  VIEW FROM EARTH", PlotKind::Halo);
         }
@@ -406,7 +500,89 @@ fn view_body(grid: &mut Grid, rect: CellRect, v: &VehicleView, view: View) -> La
     layout
 }
 
+/// One of the console's own pages, drawn inside the safe area with a header and a status line of the
+/// display's own.
+fn render_dense(grid: &mut Grid, inp: &KioskInput<'_>, v: &VehicleView, view: View) -> Layout {
+    let (cols, rows) = (grid.cols, grid.rows);
+    let (fg, bright, dim) = (
+        Style::new(Role::Fg),
+        Style::new(Role::Bright),
+        Style::new(Role::Dim),
+    );
+    let (inner_cols, inner_rows) = (
+        cols.saturating_sub(2 * SAFE_COLS),
+        rows.saturating_sub(2 * SAFE_ROWS),
+    );
+    let mut sub = Grid::new(inner_cols, inner_rows);
+    let (page, subpage) = view.page().expect("a dense view has a page");
+    let page_inp = inp.base.with_page(page, subpage);
+    // MASTER is laid out for a much wider screen; Earth orbit gets a version for this one.
+    let layout =
+        if view == View::DenseMaster && v.regime == Regime::Earth && v.solution.is_some() {
+            let mut layout = crate::screens::master_dense(&mut sub, &page_inp);
+            layout.widgets = sub.take_widgets();
+            layout
+        } else {
+            crate::screens::render_body(&mut sub, &page_inp)
+        }
+        .shifted(SAFE_COLS, SAFE_ROWS);
+    grid.blit(&sub, SAFE_COLS, SAFE_ROWS);
+
+    grid.put(SAFE_COLS, SAFE_ROWS, "MCTL", fg);
+    centre(
+        grid,
+        SAFE_ROWS,
+        &format!("{}  {}", vehicle_name(v), view.title(v.regime)),
+        bright,
+    );
+    let utc = inp.world.t.iso();
+    right(
+        grid,
+        SAFE_ROWS,
+        &format!("{} UTC", utc.get(11..19).unwrap_or("--:--:--")),
+        fg,
+    );
+    // Below the page: one status line and the marks, in the rows its body leaves free.
+    let status_row = rows.saturating_sub(SAFE_ROWS + 2);
+    let [(line, style), _] = status(inp.world, v, inner_cols);
+    centre(grid, status_row, &line, style);
+    centre(
+        grid,
+        status_row + 1,
+        &marks(inp.world, Some(&v.id), inp.held),
+        dim,
+    );
+    layout
+}
+
+/// One mark per vehicle, the current one filled; a held display says so.
+fn marks(world: &World, current: Option<&str>, held: bool) -> String {
+    let marks = world
+        .vehicles
+        .iter()
+        .map(|w| {
+            if Some(w.id.as_str()) == current {
+                "■ "
+            } else {
+                "· "
+            }
+        })
+        .collect::<String>()
+        .trim_end()
+        .to_owned();
+    if held {
+        format!("{marks}  HOLD")
+    } else {
+        marks
+    }
+}
+
 pub fn render(grid: &mut Grid, inp: &KioskInput<'_>) -> Layout {
+    if let Scene::Vehicle(v, view) = inp.scene
+        && view.dense()
+    {
+        return render_dense(grid, inp, v, view);
+    }
     let (cols, rows) = (grid.cols, grid.rows);
     let (bright, fg, dim, border) = (
         Style::new(Role::Bright),
@@ -495,22 +671,16 @@ pub fn render(grid: &mut Grid, inp: &KioskInput<'_>) -> Layout {
         }
     }
 
-    // One mark per vehicle; the current one is filled. A held display says so.
     let current = match inp.scene {
-        Scene::Vehicle(v, _) => inp.world.vehicles.iter().position(|w| w.id == v.id),
+        Scene::Vehicle(v, _) => Some(v.id.as_str()),
         Scene::Extra(_) => None,
     };
-    let marks = (0..inp.world.vehicles.len())
-        .map(|i| if Some(i) == current { "■ " } else { "· " })
-        .collect::<String>()
-        .trim_end()
-        .to_owned();
-    let marks = if inp.held {
-        format!("{marks}  HOLD")
-    } else {
-        marks
-    };
-    centre(grid, bottom.saturating_sub(1), &marks, dim);
+    centre(
+        grid,
+        bottom.saturating_sub(1),
+        &marks(inp.world, current, inp.held),
+        dim,
+    );
 
     layout.widgets = grid.take_widgets();
     layout
@@ -553,7 +723,7 @@ mod tests {
     #[test]
     fn the_cycle_visits_every_vehicle_and_every_piece_of_art_once() {
         let world = test_world(3);
-        let cycle = scenes(&world);
+        let cycle = scenes(&world, Mix::Mixed);
         let vehicles = cycle
             .iter()
             .filter(|s| matches!(s, Scene::Vehicle(..)))
@@ -574,15 +744,40 @@ mod tests {
     fn a_vehicle_gets_only_the_views_it_has_data_for() {
         let mut w = test_world(1);
         assert_eq!(
-            views_of(&w, &w.vehicles[0]),
+            views_of(&w, &w.vehicles[0], Mix::Mixed),
             [View::Art],
             "no data, no maps"
         );
         w.vehicles[0].schedule = Some("jwst".into());
         assert_eq!(
-            views_of(&w, &w.vehicles[0]),
+            views_of(&w, &w.vehicles[0], Mix::Mixed),
             [View::Art],
             "a schedule with no picture is not worth a scene"
+        );
+    }
+
+    #[test]
+    fn the_mix_picks_pictures_console_pages_or_both() {
+        let mut w = test_world(1);
+        w.vehicles[0].telemetry = Some("isslive".into());
+        let v = &w.vehicles[0];
+        assert_eq!(
+            views_of(&w, v, Mix::Mixed),
+            [View::Art, View::DenseEvents],
+            "a vehicle with telemetry has an event log"
+        );
+        assert_eq!(views_of(&w, v, Mix::Pretty), [View::Art]);
+        assert_eq!(views_of(&w, v, Mix::Dense), [View::DenseEvents]);
+        assert!(
+            scenes(&w, Mix::Dense)
+                .iter()
+                .all(|s| matches!(s, Scene::Vehicle(_, v) if v.dense())),
+            "dense-only has no art and no gallery"
+        );
+        assert!(Scene::Vehicle(v, View::DenseEvents).dense());
+        assert!(
+            Scene::Vehicle(v, View::DenseEvents).dwell_s(10.0)
+                > Scene::Vehicle(v, View::Art).dwell_s(10.0)
         );
     }
 

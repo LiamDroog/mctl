@@ -514,74 +514,6 @@ fn dragon_cargo() -> Model {
     m
 }
 
-/// A Soyuz: the orbital module, the bell-shaped descent module and the service module with its two wings.
-fn soyuz() -> Model {
-    let mut m = Model::default();
-    // Instrument module (cylinder), the tapered propulsion section below it, and the engine bell.
-    m.tube_y(14, 1.4, 1.4, -2.2, -0.2, (0.0, 0.0), true);
-    m.tube_y(14, 1.4, 1.0, -0.2, 0.5, (0.0, 0.0), false);
-    m.tube_y(12, 1.1, 1.4, -3.0, -2.2, (0.0, 0.0), true);
-    m.tube_y(10, 0.45, 0.7, -3.7, -3.0, (0.0, 0.0), false);
-    // Descent module: the rounded cone of the capsule.
-    m.ring_y(14, 1.1, 0.5, (0.0, 0.0), true);
-    m.ring_y(14, 1.15, 1.0, (0.0, 0.0), false);
-    m.tube_y(14, 1.15, 0.75, 1.0, 2.2, (0.0, 0.0), true);
-    // Orbital module: the sphere on top, with a hatch ring and the docking probe.
-    m.sphere([0.0, 3.5, 0.0], 1.25, 5, 8, true);
-    m.line([0.0, 4.75, 0.0], [0.0, 5.7, 0.0], true);
-    m.ring_y(8, 0.3, 5.7, (0.0, 0.0), false);
-    // Two solar panels in a line, each three leaves long.
-    for side in [-1.0f32, 1.0] {
-        m.line([side * 1.4, -1.2, 0.0], [side * 1.9, -1.2, 0.0], true);
-        m.panel(
-            [side * 1.9 - if side < 0.0 { 3.8 } else { 0.0 }, -2.2, 0.0],
-            [3.8, 0.0, 0.0],
-            [0.0, 2.0, 0.0],
-            3,
-            1,
-            true,
-        );
-    }
-    // Antennas: the whip and the Kurs dishes.
-    m.line([0.9, -0.4, 0.9], [1.7, 0.4, 1.7], false);
-    m.line([-0.9, -0.4, -0.9], [-1.7, 0.4, -1.7], false);
-    m
-}
-
-/// Cygnus (Enhanced): the two-segment cargo module over its service module, an octagonal array each side.
-fn cygnus() -> Model {
-    let mut m = Model::default();
-    // Pressurised cargo module: two cylinders, with the berthing ring and cone on top.
-    m.tube_y(16, 1.55, 1.55, -0.2, 2.2, (0.0, 0.0), true);
-    m.tube_y(16, 1.55, 1.55, 2.2, 4.6, (0.0, 0.0), true);
-    m.tube_y(16, 1.55, 0.9, 4.6, 5.2, (0.0, 0.0), true);
-    m.ring_y(12, 0.55, 5.5, (0.0, 0.0), false);
-    // Panels on the module: the blanket and bands.
-    for i in 0..16 {
-        let a = i as f32 / 16.0 * std::f32::consts::TAU;
-        m.line(
-            [1.56 * a.cos(), 0.0, 1.56 * a.sin()],
-            [1.56 * a.cos(), 4.6, 1.56 * a.sin()],
-            false,
-        );
-    }
-    // Service module with its engine bell.
-    m.tube_y(16, 1.45, 1.45, -3.0, -0.2, (0.0, 0.0), true);
-    m.tube_y(10, 0.45, 0.8, -3.7, -3.0, (0.0, 0.0), false);
-    // The octagonal arrays: rim, inner ring, spokes.
-    for side in [-1.0f32, 1.0] {
-        let cx = side * 4.6;
-        m.line([side * 1.45, -1.6, 0.0], [side * 2.4, -1.6, 0.0], true);
-        let rim = m.ring_z(8, 2.45, 0.0, (cx, -1.6), true);
-        m.ring_z(8, 1.4, 0.0, (cx, -1.6), false);
-        m.ring_z(8, 0.45, 0.0, (cx, -1.6), false);
-        for p in &rim {
-            m.line([cx, -1.6, 0.0], *p, false);
-        }
-    }
-    m
-}
-
 /// Falcon 9: nine engines, grid fins, landing legs, the interstage, second stage and fairing.
 fn falcon9() -> Model {
     let mut m = Model::default();
@@ -698,53 +630,6 @@ fn shuttle() -> Model {
     m
 }
 
-/// Voyager: the ten-sided bus under the 3.7 m dish, the RTG boom, the science boom with its scan platform,
-/// the long magnetometer boom and the two radio-antenna whips. One unit is a metre.
-fn voyager() -> Model {
-    let mut m = Model::default();
-    // Bus: a decagonal prism 1.8 m across and 0.5 m deep, lying along y.
-    let top = m.ring_y(10, 0.95, 0.0, (0.0, 0.0), true);
-    let bot = m.ring_y(10, 0.95, -0.5, (0.0, 0.0), true);
-    for (p, q) in top.iter().zip(&bot) {
-        m.line(*p, *q, false);
-    }
-    // The dish: rings climbing a paraboloid over the bus, with spokes.
-    let rings: Vec<Vec<P3>> = [0.25f32, 0.7, 1.15, 1.55, 1.85]
-        .iter()
-        .map(|&r| m.ring_y(20, r, 0.55 + 0.17 * r * r, (0.0, 0.0), r > 1.7))
-        .collect();
-    for i in (0..20).step_by(4) {
-        for w in rings.windows(2) {
-            m.line(w[0][i], w[1][i], false);
-        }
-    }
-    // Feed horn on three struts.
-    m.line([0.0, 0.6, 0.0], [0.0, 1.7, 0.0], true);
-    for i in 0..3 {
-        m.line(rings[4][i * 6 + 2], [0.0, 1.7, 0.0], false);
-    }
-    // RTG boom: three generators in a row on a truss, off one side of the bus.
-    m.line([0.95, -0.25, 0.0], [4.6, -0.25, 0.0], true);
-    for k in 0..3 {
-        let x = 2.0 + k as f32 * 0.95;
-        m.tube_x(6, 0.22, x, x + 0.8, (-0.45, 0.0));
-    }
-    // Science boom with the scan platform: two instrument boxes at the end.
-    m.line([-0.95, -0.25, 0.0], [-2.7, -0.7, 1.1], true);
-    m.cuboid([-3.3, -1.0, 0.9], [-2.7, -0.4, 1.5], false);
-    m.cuboid([-3.5, -0.7, 1.4], [-3.1, -0.3, 1.9], false);
-    // Magnetometer boom: a long truss out the back.
-    m.line([0.0, -0.5, 0.5], [-3.2, -1.6, 3.6], false);
-    m.line([-3.2, -1.6, 3.6], [-5.0, -2.2, 5.3], false);
-    m.line([-5.0, -2.2, 5.3], [-5.2, -2.3, 5.5], true);
-    // The two plasma-wave antenna whips, a pair 10 m long at right angles.
-    m.line([0.0, -0.5, -0.9], [3.5, -1.2, -4.4], false);
-    m.line([0.0, -0.5, -0.9], [-3.5, -1.2, -4.4], false);
-    // The low-gain antenna on the dish axis, below the bus.
-    m.line([0.0, -0.5, 0.0], [0.0, -1.2, 0.0], false);
-    m
-}
-
 /// Earth: the sphere, the equator, and an inclined orbit with a satellite on it.
 fn earth() -> Model {
     let mut m = Model::default();
@@ -771,7 +656,8 @@ fn earth() -> Model {
     m
 }
 
-/// Art that is not tied to a configured vehicle: the gallery and the kiosk's interludes.
+/// Art that is not tied to a configured vehicle: the gallery and the kiosk's interludes. Only vehicles
+/// the program has a use for are drawn; more come with the features that need them.
 #[derive(Debug, Clone, Copy)]
 pub struct Extra {
     pub id: &'static str,
@@ -781,19 +667,9 @@ pub struct Extra {
 
 pub const EXTRAS: &[Extra] = &[
     Extra {
-        id: "soyuz",
-        title: "SOYUZ",
-        caption: "CREW FERRY TO THE ISS",
-    },
-    Extra {
         id: "falcon9",
         title: "FALCON 9",
         caption: "LAUNCHES DRAGON",
-    },
-    Extra {
-        id: "cygnus",
-        title: "CYGNUS",
-        caption: "CARGO TO THE ISS",
     },
     Extra {
         id: "shuttle",
@@ -804,11 +680,6 @@ pub const EXTRAS: &[Extra] = &[
         id: "earth",
         title: "EARTH",
         caption: "ISS ORBIT 51.6 DEG",
-    },
-    Extra {
-        id: "voyager",
-        title: "VOYAGER",
-        caption: "LAUNCHED 1977",
     },
 ];
 
@@ -821,17 +692,13 @@ pub fn model(id: &str) -> Option<Model> {
         "roman" => roman(),
         "dragon-crew" => dragon_crew(),
         "dragon-cargo" => dragon_cargo(),
-        "soyuz" => soyuz(),
-        "cygnus" => cygnus(),
         "falcon9" => falcon9(),
         "shuttle" => shuttle(),
-        "voyager" => voyager(),
         "earth" => earth(),
         _ => return None,
     };
     m.zoom = match id {
         "falcon9" => 1.3,
-        "voyager" => 1.7,
         _ => 1.0,
     };
     Some(m)
@@ -960,19 +827,16 @@ pub fn paint(painter: &Painter, theme: &Theme, rect_px: [u32; 4], m: &Model, t_s
 mod tests {
     use super::*;
 
-    const IDS: [&str; 12] = [
+    const IDS: [&str; 9] = [
         "iss",
         "hubble",
         "jwst",
         "roman",
         "dragon-crew",
         "dragon-cargo",
-        "soyuz",
         "falcon9",
-        "cygnus",
         "shuttle",
         "earth",
-        "voyager",
     ];
 
     #[test]

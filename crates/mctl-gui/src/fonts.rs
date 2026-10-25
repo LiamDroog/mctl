@@ -56,6 +56,11 @@ pub fn verify_cell_metrics(ctx: &Context, themes: &[Theme]) -> Result<egui::Text
             let w = ui.ctx().fonts_mut(|f| f.glyph_width(&font_id(t), 'M'));
             measured.push((t.name.clone(), t.font.cell_w_px, w));
         }
+        // The Pi display's dense font is not a theme's, but it must fit its cells just the same.
+        let dense = crate::theme::dense_font();
+        let id = FontId::new(dense.size_px, FontFamily::Name("unscii".into()));
+        let w = ui.ctx().fonts_mut(|f| f.glyph_width(&id, 'M'));
+        measured.push(("dense display font".to_owned(), dense.cell_w_px, w));
     });
     for (name, want, got) in measured {
         if (want - got).abs() > CELL_WIDTH_TOLERANCE_PX {

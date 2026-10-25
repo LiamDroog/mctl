@@ -563,6 +563,27 @@ pub(crate) fn column(x: usize, w: usize, top: usize, heights: &[usize]) -> Vec<C
         .collect()
 }
 
+/// MASTER for the Pi display's 76 x 25 body: the maps on the left, the state vector, the next events and
+/// the eclipse ring on the right. The full page's other panels are on the display's other pages.
+pub(crate) fn master_dense(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
+    let (cols, rows) = (grid.cols, grid.rows);
+    let (top, h) = body(rows);
+    let lw = cols * 46 / 100;
+    let left = column(0, lw, top, &split(h, &[52, 48]));
+    let right = column(lw, cols - lw, top, &split(h, &[52, 24, 24]));
+    let globe = orbit_panel(grid, left[0], inp);
+    let ground = ground_panel(grid, left[1]);
+    state_panel(grid, right[0], inp);
+    timeline_panel(grid, right[1], inp);
+    let eclipse = eclipse_panel(grid, right[2], inp);
+    Layout {
+        globe: Some(globe),
+        ground: Some(ground),
+        eclipse: Some(eclipse),
+        ..Layout::default()
+    }
+}
+
 fn master(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     let (cols, rows) = (grid.cols, grid.rows);
     let (top, h) = body(rows);
@@ -1667,9 +1688,8 @@ fn is_l2(inp: &PageInput<'_>) -> bool {
         .is_some_and(|v| v.regime == mctl_core::config::Regime::L2)
 }
 
-/// Draw the header, the current page, the footer, and the help overlay when open.
-pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
-    header(grid, inp);
+/// The current page's body alone (no header, footer or help), for displays that frame it themselves.
+pub fn render_body(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     let mut layout = match availability(inp.page, inp.sub, inp.vehicle) {
         Availability::NoSource(why) => no_source(grid, inp, &why),
         Availability::Available => match (inp.page, inp.sub) {
@@ -1708,8 +1728,16 @@ pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             (Page::Sys, _) => sys_rules(grid, inp),
         },
     };
-    layout.legend = footer(grid, inp);
     layout.widgets = grid.take_widgets();
+    layout
+}
+
+/// Draw the header, the current page, the footer, and the help overlay when open.
+pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
+    header(grid, inp);
+    let mut layout = render_body(grid, inp);
+    layout.legend = footer(grid, inp);
+    layout.widgets.extend(grid.take_widgets());
     if inp.help {
         help_overlay(grid, inp.keys);
     }

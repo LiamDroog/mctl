@@ -91,6 +91,10 @@ impl CellRect {
             rows,
         }
     }
+    /// The same rectangle moved by (`dc`, `dr`) cells.
+    pub fn shifted(self, dc: usize, dr: usize) -> Self {
+        Self::new(self.col + dc, self.row + dr, self.cols, self.rows)
+    }
     /// The area inside a one-cell border.
     pub fn inner(self) -> Self {
         Self::new(
@@ -145,6 +149,23 @@ pub enum Widget {
 }
 
 impl Widget {
+    /// This widget moved by (`dc`, `dr`) cells.
+    pub fn shifted(mut self, dc: usize, dr: usize) -> Self {
+        let r = match &mut self {
+            Self::Bar { rect, .. }
+            | Self::DataBar { rect, .. }
+            | Self::Chart { rect, .. }
+            | Self::Image { rect, .. }
+            | Self::Art { rect, .. }
+            | Self::Backdrop { rect, .. }
+            | Self::Spark { rect, .. }
+            | Self::Dial { rect, .. }
+            | Self::Plot { rect, .. } => rect,
+        };
+        *r = r.shifted(dc, dr);
+        self
+    }
+
     pub fn rect(&self) -> CellRect {
         match self {
             Self::Bar { rect, .. }
@@ -206,6 +227,18 @@ impl Grid {
             rows,
             cells: vec![blank; cols * rows],
             widgets: Vec::new(),
+        }
+    }
+
+    /// Copy `src` into this grid with its top-left corner at (`col`, `row`); what falls outside is clipped.
+    pub fn blit(&mut self, src: &Grid, col: usize, row: usize) {
+        for r in 0..src.rows {
+            for c in 0..src.cols {
+                let (dc, dr) = (col + c, row + r);
+                if dc < self.cols && dr < self.rows {
+                    self.cells[dr * self.cols + dc] = src.cells[r * src.cols + c];
+                }
+            }
         }
     }
 

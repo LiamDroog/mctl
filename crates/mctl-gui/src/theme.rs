@@ -27,12 +27,42 @@ const EMBEDDED_THEMES: &[(&str, &str)] = &[
     ),
 ];
 
-/// The display theme for `--pi`: a small CRT fed by the Pi's composite output. It is not in the cycle.
+/// The display theme for `--pi`: a small CRT fed by the Pi's composite output.
 const CRT_THEME: (&str, &str) = ("crt.toml", include_str!("../../../config/themes/crt.toml"));
 
-/// The theme of the Raspberry Pi / CRT display, with every effect off.
-pub fn crt() -> Result<Theme, ThemeError> {
-    Theme::from_toml(CRT_THEME.0, CRT_THEME.1)
+/// The font of the Pi display's dense scenes: Unscii at its native 8 x 16, 80 x 30 cells at 640 x 480.
+pub fn dense_font() -> FontSpec {
+    FontSpec {
+        family: FontFamily::Unscii,
+        size_px: 16.0,
+        cell_w_px: 8.0,
+        cell_h_px: 16.0,
+    }
+}
+
+impl Theme {
+    /// This theme as the CRT shows it: the display font and no effects, since the tube supplies them.
+    fn for_crt(mut self, font: &FontSpec) -> Self {
+        self.font = font.clone();
+        self.effects.scanlines.enabled = false;
+        self.effects.bloom.enabled = false;
+        self.effects.persistence.enabled = false;
+        self.effects.curvature.enabled = false;
+        self
+    }
+}
+
+/// The themes of the Pi display, in `T` cycle order: its own cyan one, then the green phosphor, amber and
+/// retrowave looks of the console with the display font and every effect off.
+pub fn crt_themes() -> Result<Vec<Theme>, ThemeError> {
+    let crt = Theme::from_toml(CRT_THEME.0, CRT_THEME.1)?;
+    let mut out = vec![crt.clone()];
+    for (name, text) in EMBEDDED_THEMES {
+        if matches!(*name, "phosphor.toml" | "retro.toml" | "retrowave.toml") {
+            out.push(Theme::from_toml(name, text)?.for_crt(&crt.font));
+        }
+    }
+    Ok(out)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -323,11 +353,16 @@ mod tests {
     }
 
     #[test]
-    fn the_crt_theme_loads_with_every_effect_off() {
-        let t = crt().unwrap();
-        let e = t.effects;
-        assert!(!e.scanlines.enabled && !e.bloom.enabled);
-        assert!(!e.persistence.enabled && !e.curvature.enabled);
+    fn the_crt_themes_have_every_effect_off_and_the_display_font() {
+        let themes = crt_themes().unwrap();
+        let names: Vec<_> = themes.iter().map(|t| t.name.as_str()).collect();
+        assert_eq!(names, ["CRT", "Phosphor", "Retro", "Retrowave"]);
+        for t in &themes {
+            let e = t.effects;
+            assert!(!e.scanlines.enabled && !e.bloom.enabled, "{}", t.name);
+            assert!(!e.persistence.enabled && !e.curvature.enabled, "{}", t.name);
+            assert_eq!((t.font.cell_w_px, t.font.cell_h_px), (12.0, 24.0));
+        }
     }
 
     #[test]

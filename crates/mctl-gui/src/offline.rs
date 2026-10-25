@@ -233,8 +233,8 @@ pub struct ShotOptions {
     pub low_power: bool,
     /// Command lines run before the captures, e.g. `burn add apo vnb 1 0 0`.
     pub exec: Vec<String>,
-    /// Capture each scene of the Pi/CRT display instead of console pages.
-    pub kiosk: bool,
+    /// Capture each scene of the Pi/CRT display (with this mix of scenes) instead of console pages.
+    pub kiosk: Option<crate::kiosk::Mix>,
 }
 
 /// Expand `--pages` into (page, sub-page index) pairs.
@@ -279,7 +279,7 @@ pub fn shots(live: &Live, themes: Vec<Theme>, opts: &ShotOptions) -> Result<Vec<
                 .with_context(|| format!("unknown theme {name:?}"))?,
         ],
     };
-    let pages = if opts.kiosk {
+    let pages = if opts.kiosk.is_some() {
         Vec::new()
     } else {
         expand_pages(&opts.pages)?
@@ -295,10 +295,16 @@ pub fn shots(live: &Live, themes: Vec<Theme>, opts: &ShotOptions) -> Result<Vec<
         // Give the engine a moment to take the commands and publish the result.
         std::thread::sleep(std::time::Duration::from_secs(4));
     }
-    if opts.kiosk {
+    if let Some(mix) = opts.kiosk {
+        if let Some(&idx) = which.first() {
+            off.select_theme(idx);
+        }
         // Held, so nothing advances on its own while a scene settles.
-        off.console.set_kiosk(f64::MAX);
-        let count = crate::kiosk::scenes(&live.bus.latest()).len();
+        off.console.set_kiosk(crate::kiosk::KioskConfig {
+            dwell_s: f64::MAX,
+            mix,
+        });
+        let count = crate::kiosk::scenes(&live.bus.latest(), mix).len();
         for n in 0..count {
             off.console.set_kiosk_scene(n);
             for f in 0..opts.warmup_frames {
@@ -713,7 +719,7 @@ mod tests {
             .to_vec(),
             low_power: false,
             exec: vec![],
-            kiosk: false,
+            kiosk: None,
         };
         shots(&live, themes, &opts).unwrap();
     }

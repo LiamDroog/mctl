@@ -71,6 +71,56 @@ pub struct Layout {
     pub legend: Vec<(usize, usize, usize, crate::pages::Page)>,
 }
 
+impl Layout {
+    /// Every rectangle moved by (`dc`, `dr`) cells, for a page drawn into a smaller grid and placed in a bigger.
+    pub fn shifted(self, dc: usize, dr: usize) -> Self {
+        let mv = |r: CellRect| r.shifted(dc, dr);
+        Self {
+            globe: self.globe.map(mv),
+            ground: self.ground.map(mv),
+            eclipse: self.eclipse.map(mv),
+            adi: self.adi.map(mv),
+            sky: self.sky.map(mv),
+            window: self.window.map(mv),
+            plots: self.plots.into_iter().map(|(r, i)| (mv(r), i)).collect(),
+            widgets: self
+                .widgets
+                .into_iter()
+                .map(|w| w.shifted(dc, dr))
+                .collect(),
+            // The footer legend belongs to the console's own footer, which the display does not draw.
+            legend: Vec::new(),
+        }
+    }
+}
+
+impl<'a> PageInput<'a> {
+    /// The same input showing another page.
+    pub fn with_page(&self, page: crate::pages::Page, sub: usize) -> PageInput<'a> {
+        PageInput {
+            world: self.world,
+            vehicle: self.vehicle,
+            theme: self.theme,
+            toggles: self.toggles,
+            camera: self.camera,
+            show_ecef: self.show_ecef,
+            limits: self.limits,
+            frame_ms: self.frame_ms,
+            gpu_ms: self.gpu_ms,
+            adapter: self.adapter,
+            size_px: self.size_px,
+            page,
+            sub,
+            command: self.command,
+            status: self.status,
+            help: self.help,
+            trend_window_s: self.trend_window_s,
+            keys: self.keys,
+            settings: self.settings,
+        }
+    }
+}
+
 pub use mctl_core::time::fmt_dur;
 
 pub(crate) fn quality_text(sol: &mctl_core::world::Solution) -> String {

@@ -33,9 +33,29 @@ fn default_size(pi: bool) -> &'static str {
 /// The themes to run with: the CRT theme alone for `--pi`, else the embedded or `--themes-dir` set.
 fn themes_for(pi: bool, dir: &Option<PathBuf>) -> anyhow::Result<Vec<mctl_gui::Theme>> {
     if pi {
-        return Ok(vec![mctl_gui::crt_theme()?]);
+        return Ok(mctl_gui::crt_themes()?);
     }
     load_themes(dir)
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum PiStyleArg {
+    /// Pictures and console pages in turn.
+    Mixed,
+    /// Pictures only: line art, maps, sky plot, survey images.
+    Pretty,
+    /// Console pages only: the MASTER, TRAJ, PASS, PROX, OPS and event pages at 80 x 30.
+    Dense,
+}
+
+impl From<PiStyleArg> for mctl_gui::KioskStyle {
+    fn from(s: PiStyleArg) -> Self {
+        match s {
+            PiStyleArg::Mixed => Self::Mixed,
+            PiStyleArg::Pretty => Self::Pretty,
+            PiStyleArg::Dense => Self::Dense,
+        }
+    }
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -69,6 +89,9 @@ struct Cli {
     /// The Raspberry Pi / CRT display: low resolution, no effects, pictures cycling through the vehicles.
     #[arg(long, global = true)]
     pi: bool,
+    /// With `--pi`, which scenes to cycle through.
+    #[arg(long, global = true, value_enum, default_value = "mixed")]
+    pi_style: PiStyleArg,
     /// With `--pi`, seconds each vehicle stays up.
     #[arg(long, global = true, default_value_t = mctl_gui::KIOSK_DEFAULT_DWELL_S)]
     dwell: f64,
@@ -512,7 +535,7 @@ fn main() -> Result<()> {
             std::thread::sleep(Duration::from_secs_f64(settle_s.max(0.0)));
             let size = size.unwrap_or_else(|| default_size(cli.pi).to_owned());
             let opts = mctl_gui::ShotOptions {
-                kiosk: cli.pi,
+                kiosk: cli.pi.then(|| cli.pi_style.into()),
                 size: mctl_gui::parse_size(&size)?,
                 theme,
                 out_dir,
@@ -571,7 +594,10 @@ fn main() -> Result<()> {
                 mctl_gui::Options {
                     size: mctl_gui::parse_size(&size)?,
                     fullscreen,
-                    kiosk_dwell_s: cli.pi.then_some(cli.dwell),
+                    kiosk: cli.pi.then_some(mctl_gui::KioskConfig {
+                        dwell_s: cli.dwell,
+                        mix: cli.pi_style.into(),
+                    }),
                     present: match g.present {
                         PresentArg::Fifo => mctl_gui::Present::Fifo,
                         PresentArg::Immediate => mctl_gui::Present::Immediate,

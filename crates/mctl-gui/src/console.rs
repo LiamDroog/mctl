@@ -131,6 +131,7 @@ const KIOSK_DRIFT_DEG_S: f64 = 6.0;
 /// State of the kiosk display's cycle.
 struct Kiosk {
     dwell_s: f64,
+    mix: crate::kiosk::Mix,
     scene: usize,
     /// When the current scene came up, in the UI's elapsed seconds.
     since_s: f64,
@@ -585,9 +586,10 @@ impl Console {
     }
 
     /// Turn this console into the Pi/CRT display, changing scene every `dwell_s` seconds.
-    pub fn set_kiosk(&mut self, dwell_s: f64) {
+    pub fn set_kiosk(&mut self, cfg: crate::kiosk::KioskConfig) {
         self.kiosk = Some(Kiosk {
-            dwell_s,
+            dwell_s: cfg.dwell_s,
+            mix: cfg.mix,
             scene: 0,
             since_s: self.now_s,
             held: false,
@@ -600,7 +602,8 @@ impl Console {
     /// selects the scene's vehicle so pictures and the like follow it.
     fn advance_kiosk(&mut self, world: &World) -> Option<(usize, bool)> {
         let now = self.now_s;
-        let scenes = crate::kiosk::scenes(world);
+        let mix = self.kiosk.as_ref()?.mix;
+        let scenes = crate::kiosk::scenes(world, mix);
         let n = scenes.len().max(1);
         let k = self.kiosk.as_mut()?;
         // The orbit map turns slowly by itself, since nobody is there to drag it.
@@ -653,6 +656,10 @@ impl Console {
                 k.held = !k.held;
                 k.since_s = self.now_s;
             }
+            (_, Some(KeyAction::Theme)) => {
+                self.cycle_theme();
+                self.toggles = EffectToggles::all(false);
+            }
             _ => {}
         }
         Outcome::Continue
@@ -689,9 +696,17 @@ impl Console {
         world: &World,
         stats: &FrameStats,
     ) -> Prepared {
-        let theme = self.themes[self.theme_idx].clone();
+        let mut theme = self.themes[self.theme_idx].clone();
         self.now_s = stats.elapsed_s;
         let kiosk_scene = self.advance_kiosk(world);
+        // The dense scenes of the Pi display use a smaller font to fit a console's worth on the tube.
+        if let (Some((scene, _)), Some(k)) = (kiosk_scene, self.kiosk.as_ref())
+            && crate::kiosk::scenes(world, k.mix)
+                .get(scene)
+                .is_some_and(|s| s.dense())
+        {
+            theme.font = crate::theme::dense_font();
+        }
         let (cw, ch) = (theme.font.cell_w_px, theme.font.cell_h_px);
         let (cols, rows) = (
             (size_px[0] as f32 / cw) as usize,
@@ -713,8 +728,29 @@ impl Console {
         {
             self.status = None;
         }
-        let layout = if let Some((scene, held)) = kiosk_scene {
-            let scenes = crate::kiosk::scenes(world);
+        let page_input = PageInput {
+            world,
+            vehicle,
+            theme: &theme,
+            toggles: self.toggles,
+            camera: &self.camera,
+            show_ecef: self.show_ecef,
+            limits: &self.limits,
+            frame_ms: stats.frame_ms,
+            gpu_ms: stats.gpu_ms,
+            adapter: &self.adapter,
+            size_px,
+            page: self.page,
+            sub: self.sub,
+            command: cmd_view.as_ref(),
+            status: self.status.as_ref().map(|(m, _)| m),
+            help: self.help,
+            trend_window_s: self.trend_window_s,
+            keys: &self.keys,
+            settings: &self.settings,
+        };
+        let layout = if let (Some((scene, held)), Some(k)) = (kiosk_scene, self.kiosk.as_ref()) {
+            let scenes = crate::kiosk::scenes(world, k.mix);
             match scenes.get(scene) {
                 Some(sc) => crate::kiosk::render(
                     &mut grid,
@@ -722,35 +758,13 @@ impl Console {
                         world,
                         scene: *sc,
                         held,
+                        base: &page_input,
                     },
                 ),
                 None => Layout::default(),
             }
         } else {
-            screens::render(
-                &mut grid,
-                &PageInput {
-                    world,
-                    vehicle,
-                    theme: &theme,
-                    toggles: self.toggles,
-                    camera: &self.camera,
-                    show_ecef: self.show_ecef,
-                    limits: &self.limits,
-                    frame_ms: stats.frame_ms,
-                    gpu_ms: stats.gpu_ms,
-                    adapter: &self.adapter,
-                    size_px,
-                    page: self.page,
-                    sub: self.sub,
-                    command: cmd_view.as_ref(),
-                    status: self.status.as_ref().map(|(m, _)| m),
-                    help: self.help,
-                    trend_window_s: self.trend_window_s,
-                    keys: &self.keys,
-                    settings: &self.settings,
-                },
-            )
+            screens::render(&mut grid, &page_input)
         };
         let globe_px = layout
             .globe
@@ -1065,7 +1079,10 @@ mod tests {
     fn the_kiosk_cycles_on_its_dwell_and_ignores_the_operating_keys() {
         let (mut c, _rx) = console();
         let w = crate::kiosk::test_world(3);
-        c.set_kiosk(10.0);
+        c.set_kiosk(crate::kiosk::KioskConfig {
+            dwell_s: 10.0,
+            mix: crate::kiosk::Mix::Mixed,
+        });
         assert!(!c.toggles.any(), "the CRT does the effects");
         assert_eq!(c.advance_kiosk(&w).map(|s| s.0), Some(0));
         c.now_s = 9.0;
@@ -1086,6 +1103,11 @@ mod tests {
         c.handle_key(KeyInput::F(3), &w);
         assert!(!c.toggles.any());
         assert_eq!(c.page, Page::Master);
+        // T changes the look but never turns an effect on.
+        let look = c.theme_idx;
+        keys(&mut c, &w, "t");
+        assert_ne!(c.theme_idx, look);
+        assert!(!c.toggles.any());
         keys(&mut c, &w, " ");
         c.now_s = 1.0e6;
         let held = c.advance_kiosk(&w).unwrap();

@@ -31,6 +31,7 @@ mctl --no-record                 # do not record this run
 mctl --replay start              # play back the recording (start, an ISO epoch, or an offset such as -2h); also :replay in the console
 mctl shot --exec "burn add apo vnb 1 0 0;plan horizon 3" --pages traj:4   # set up console commands before a headless capture
 mctl --pi                        # the Raspberry Pi / CRT display, see docs/pi.md
+mctl --pi --pi-style dense --theme retrowave   # console pages only, in the retrowave colours
 mctl --pi shot --out-dir /tmp/pi # one PNG per scene of that display
 ```
 
@@ -59,7 +60,7 @@ Keys (all single-character keys are remappable under `[keys]` in the config): `F
 `F9` VIEW is the window view: the Earth from the vehicle's position with the limb curved at its true altitude,
 the terminator, Sun, Moon, stars and the sub-satellite point. `Tab` cycles nadir, ram (ahead), wake (behind)
 and free look, which you steer by dragging or with the arrow keys. It is for Earth orbit only.
-`SYS` sub-page 6 is a gallery of line art (Soyuz, Falcon 9, Cygnus, the Shuttle, Voyager, the Earth).
+`SYS` sub-page 6 is a gallery of line art (Falcon 9, the Shuttle, the Earth).
 
 ## Flags
 
