@@ -71,6 +71,24 @@ impl Model {
         }
     }
 
+    /// A tube about the x axis between two stations, centred at (y, z) = `c`.
+    fn tube_x(&mut self, n: usize, r: f32, x0: f32, x1: f32, c: (f32, f32)) {
+        let ring = |x: f32| -> Vec<P3> {
+            (0..n)
+                .map(|i| {
+                    let a = i as f32 / n as f32 * std::f32::consts::TAU;
+                    [x, c.0 + r * a.cos(), c.1 + r * a.sin()]
+                })
+                .collect()
+        };
+        let (a, b) = (ring(x0), ring(x1));
+        self.poly(&a, true, true);
+        self.poly(&b, true, true);
+        for (p, q) in a.iter().zip(&b) {
+            self.line(*p, *q, false);
+        }
+    }
+
     /// A tube about the z axis between two stations.
     fn tube_z(&mut self, n: usize, r: f32, z0: f32, z1: f32, c: (f32, f32), major: bool) {
         let a = self.ring_z(n, r, z0, c, major);
@@ -170,99 +188,136 @@ impl Model {
     }
 }
 
-/// The International Space Station: truss, four solar-array pairs, radiators and the module stack.
+/// The International Space Station: truss, four solar-array wing pairs (two blankets each, one wing up and
+/// one down from the mast), the white radiators, the Russian segment's small arrays and the module stack.
 fn iss() -> Model {
     let mut m = Model::default();
     // Integrated truss along x, a square section of 2.
     m.cuboid([-54.0, -1.0, -1.0], [54.0, 1.0, 1.0], true);
-    // Four solar-array wing pairs, two blades each, flat in the truss-radial plane.
-    for x in [-48.0, -30.0, 30.0, 48.0] {
+    // Solar arrays: at each of four stations a mast carries a wing up and a wing down, each of two
+    // 35 x 5.5 m blankets either side of the mast.
+    for x in [-47.0, -33.0, 33.0, 47.0] {
         for sign in [-1.0f32, 1.0] {
             let (z0, z1) = if sign < 0.0 {
-                (-35.0, -2.0)
+                (-36.0, -2.0)
             } else {
-                (2.0, 35.0)
+                (2.0, 36.0)
             };
+            for half in [-1.0f32, 1.0] {
+                let x0 = x + half * 0.5 - if half < 0.0 { 5.7 } else { 0.0 };
+                m.panel(
+                    [x0, 0.0, z0],
+                    [5.7, 0.0, 0.0],
+                    [0.0, 0.0, z1 - z0],
+                    2,
+                    10,
+                    sign > 0.0,
+                );
+            }
+            // The mast between the blankets.
+            m.line([x, 0.0, z0], [x, 0.0, z1], false);
+        }
+    }
+    // Thermal radiators on the inboard truss: big white panels in the plane of the arrays.
+    for side in [-1.0f32, 1.0] {
+        for k in 0..3 {
+            let x0 = side * (9.0 + k as f32 * 4.6);
             m.panel(
-                [x - 5.5, 0.0, z0],
-                [11.0, 0.0, 0.0],
-                [0.0, 0.0, z1 - z0],
+                [x0 - if side < 0.0 { 4.2 } else { 0.0 }, 0.0, 2.0],
+                [4.2, 0.0, 0.0],
+                [0.0, 0.0, 11.0],
+                1,
                 4,
-                8,
-                sign > 0.0,
+                false,
             );
         }
     }
-    // Radiators, offset along the truss.
-    for x in [-12.0, 12.0] {
+    // Pressurised stack along z, below the truss: Zarya and Zvezda one way, Unity, Destiny and Harmony
+    // the other.
+    m.tube_z(10, 2.0, -26.0, 24.0, (0.0, -5.0), true);
+    m.tube_z(10, 2.4, -6.0, 4.0, (0.0, -5.0), false);
+    m.tube_z(10, 2.0, -26.0, -20.0, (0.0, -5.0), true);
+    // Zvezda's two small arrays at the far end of the stack.
+    for side in [-1.0f32, 1.0] {
+        m.line([side * 2.0, -5.0, -23.0], [side * 3.0, -5.0, -23.0], false);
         m.panel(
-            [x - 3.0, -1.0, -1.0],
-            [6.0, 0.0, 0.0],
-            [0.0, -12.0, 0.0],
-            3,
+            [
+                side * 3.0 - if side < 0.0 { 11.0 } else { 0.0 },
+                -5.0,
+                -24.7,
+            ],
+            [11.0, 0.0, 0.0],
+            [0.0, 0.0, 3.4],
             4,
+            1,
             false,
         );
     }
-    // Pressurised stack along z, below the truss.
-    m.tube_z(8, 2.0, -26.0, 24.0, (0.0, -5.0), true);
-    m.tube_z(8, 2.4, -6.0, 4.0, (0.0, -5.0), false);
-    // Cross modules (nodes and laboratories) at right angles.
-    m.tube_z(6, 1.6, -10.0, -2.0, (6.0, -5.0), false);
-    m.tube_z(6, 1.6, -10.0, -2.0, (-6.0, -5.0), false);
+    // Cross modules at right angles: Columbus and Kibo, the nodes' side ports.
+    m.tube_x(8, 1.6, 2.0, 9.0, (-5.0, -8.0));
+    m.tube_x(8, 1.6, -9.0, -2.0, (-5.0, -8.0));
+    m.tube_x(8, 1.9, 2.0, 10.0, (-5.0, 3.0));
+    // The Cupola and docking ports.
+    m.sphere([0.0, -8.0, -4.0], 1.0, 4, 6, false);
     m.line([0.0, -3.0, 0.0], [0.0, -1.0, 0.0], false);
     m
 }
 
-/// Hubble: the optical tube with its aperture door and light shield, two solar wings and the antennas.
+/// Hubble: the optical tube with its aperture door and light shield, the equipment section, two solar wings
+/// of two long panels each, and the antenna masts.
 fn hubble() -> Model {
     let mut m = Model::default();
-    m.tube_z(10, 2.1, -6.6, 6.6, (0.0, 0.0), true);
-    m.tube_z(10, 2.3, 4.0, 6.6, (0.0, 0.0), false);
-    // Aperture door, half open.
+    // Aft shroud, the equipment-bay section, and the forward light shield (narrower), nose toward +z.
+    m.tube_z(12, 2.15, -6.6, -2.2, (0.0, 0.0), true);
+    m.tube_z(8, 2.2, -2.2, 2.0, (0.0, 0.0), true);
+    m.tube_z(12, 2.0, 2.0, 6.6, (0.0, 0.0), true);
+    m.ring_z(12, 2.0, 6.6, (0.0, 0.0), true);
+    m.ring_z(12, 2.15, -2.2, (0.0, 0.0), false);
+    // Aperture door, open on its hinge.
     m.panel(
-        [-2.2, 2.2, 6.6],
-        [4.4, 0.0, 0.0],
-        [0.0, 2.6, 1.5],
+        [-2.0, 2.0, 6.6],
+        [4.0, 0.0, 0.0],
+        [0.0, 2.4, 1.6],
         3,
         3,
         false,
     );
-    // Solar wings.
+    // Solar wings: a boom from the equipment section, then two panels end to end along the tube.
     for side in [-1.0f32, 1.0] {
-        m.line([side * 2.1, 0.0, 0.0], [side * 3.0, 0.0, 0.0], true);
-        m.panel(
-            [side * 3.0, -1.3, -3.6],
-            [side * 7.1, 0.0, 0.0],
-            [0.0, 2.6, 0.0],
-            4,
-            2,
-            true,
-        );
-        m.panel(
-            [side * 3.0, -1.3, 0.0],
-            [side * 7.1, 0.0, 0.0],
-            [0.0, 2.6, 0.0],
-            4,
-            2,
-            false,
-        );
+        m.line([side * 2.2, 0.0, 0.5], [side * 3.2, 0.0, 0.5], true);
+        for (z0, z1) in [(-6.4, 0.2), (0.8, 7.4)] {
+            m.panel(
+                [side * 3.2, -0.25, z0],
+                [side * 2.7, 0.0, 0.0],
+                [0.0, 0.0, z1 - z0],
+                3,
+                5,
+                true,
+            );
+        }
     }
-    // High-gain antenna booms and dishes.
+    // The two high-gain antenna masts with their dishes.
     for side in [-1.0f32, 1.0] {
-        m.line([side * 1.4, 1.4, -2.0], [side * 3.2, 4.2, -2.8], false);
-        m.ring_z(8, 0.6, -2.8, (side * 3.2, 4.2), false);
+        m.line([side * 1.4, 1.6, -4.0], [side * 2.2, 4.2, -4.6], false);
+        m.ring_z(8, 0.7, -4.6, (side * 2.2, 4.2), false);
+        m.ring_z(8, 0.3, -4.4, (side * 2.2, 4.2), false);
+    }
+    // Aft-bay doors and the radial instrument bays: a few longitudinal ribs.
+    for a in [0.0f32, 90.0, 180.0, 270.0] {
+        let (s, c) = a.to_radians().sin_cos();
+        m.line([2.2 * c, 2.2 * s, -2.2], [2.2 * c, 2.2 * s, 2.0], false);
     }
     m
 }
 
-/// JWST: the five-layer sunshield, the 18-segment mirror on its tripod, and the spacecraft bus.
+/// JWST: the five-layer kite sunshield, the 18-segment mirror on its tower, the secondary on its boom, and
+/// the spacecraft bus with its solar panel, antenna and trim flap on the hot side.
 fn jwst() -> Model {
     let mut m = Model::default();
-    // Sunshield layers: a kite, 21 x 14.
+    // Sunshield layers: a kite 21 x 14, five membranes with gaps between.
     for i in 0..5 {
-        let y = -2.5 - i as f32 * 0.5;
-        let k = 1.0 - i as f32 * 0.012;
+        let y = -2.4 - i as f32 * 0.55;
+        let k = 1.0 - i as f32 * 0.018;
         m.poly(
             &[
                 [-10.5 * k, y, 0.0],
@@ -274,9 +329,13 @@ fn jwst() -> Model {
             i == 0 || i == 4,
         );
     }
-    m.line([-10.5, -2.5, 0.0], [10.5, -2.5, 0.0], false);
-    m.line([0.0, -2.5, -7.0], [0.0, -2.5, 7.0], false);
-    // Primary mirror: three rings of hexagons (1 + 6 + 12 = 19 sites, the centre is the empty hole).
+    // The spreader booms and the mid-booms that hold the layers out.
+    m.line([-10.5, -2.4, 0.0], [10.5, -2.4, 0.0], false);
+    m.line([0.0, -2.4, -7.0], [0.0, -2.4, 7.0], false);
+    for x in [-10.5, 10.5] {
+        m.line([x, -2.4, 0.0], [x, -4.6, 0.0], false);
+    }
+    // Primary mirror: two rings of hexagons round the empty centre (6 + 12 = 18 segments).
     let size = 0.72f32;
     let y = 2.6;
     for q in -2i32..=2 {
@@ -289,6 +348,8 @@ fn jwst() -> Model {
             m.hex_xz(x, z, y, size * 0.98, true);
         }
     }
+    // Backplane: the frame behind the mirror, and the folding wing hinges.
+    m.cuboid([-0.9, y - 1.2, -0.9], [0.9, y - 0.1, 0.9], false);
     // Secondary mirror on its three-strut boom.
     let tip = [0.0, y + 7.2, 0.0];
     for a in [90.0f32, 210.0, 330.0] {
@@ -296,94 +357,157 @@ fn jwst() -> Model {
         m.line([3.0 * c, y, 3.0 * s], tip, false);
     }
     m.ring_y(8, 0.5, y + 7.2, (0.0, 0.0), false);
-    // Spacecraft bus and its trim flap.
-    m.cuboid([-1.8, -2.4, -1.8], [1.8, 1.0, 1.8], true);
+    // Spacecraft bus under the shield (the hot side), with its trim flap.
+    m.cuboid([-1.8, -9.0, -1.8], [1.8, -5.6, 1.8], true);
     m.panel(
-        [1.8, -1.6, -2.8],
-        [0.0, 0.0, 5.6],
-        [3.0, 0.0, 0.0],
+        [1.8, -8.6, -2.6],
+        [0.0, 0.0, 5.2],
+        [3.2, 0.0, 0.0],
         5,
         2,
         false,
     );
-    // Tower joining the bus to the telescope.
-    m.tube_y(6, 1.0, 1.0, 1.0, y, (0.0, 0.0), false);
-    m
-}
-
-/// Roman: the hexagonal telescope barrel, sunshade, bus, solar panel and the antenna dish.
-fn roman() -> Model {
-    let mut m = Model::default();
-    m.tube_y(6, 1.4, 1.4, 0.0, 5.0, (0.0, 0.0), true);
-    m.tube_y(6, 1.9, 1.9, 4.2, 6.6, (0.0, 0.0), false);
-    // Instrument carrier and bus below the barrel.
-    m.cuboid([-2.2, -3.0, -2.2], [2.2, 0.0, 2.2], true);
-    // Large sun-facing solar panel, canted.
+    // The flat solar panel on the sun side of the bus, and the antenna.
     m.panel(
-        [-5.5, -1.6, -3.4],
-        [11.0, 0.0, 0.0],
-        [0.0, -1.1, 6.8],
-        6,
+        [-1.9, -5.6, -2.4],
+        [-0.0, 0.0, 4.8],
+        [-3.6, 0.0, 0.0],
         4,
+        2,
         true,
     );
-    m.line([-2.2, -1.5, 0.0], [-5.5, -1.6, 0.0], false);
-    // High-gain antenna dish on a short mast.
-    m.line([2.2, -1.0, 0.0], [3.6, 0.2, 0.0], false);
-    m.ring_z(10, 1.0, 0.2, (3.6, 0.2), false);
-    m.ring_z(10, 0.45, 0.45, (3.6, 0.2), false);
+    m.line([0.0, -9.0, 0.0], [0.0, -10.4, 0.0], false);
+    m.ring_y(8, 0.6, -10.4, (0.0, 0.0), false);
+    // Tower from the bus through the shield to the telescope.
+    m.tube_y(6, 0.9, 0.9, -5.6, y - 1.2, (0.0, 0.0), false);
     m
 }
 
-/// Crew Dragon: capsule with nose cone, heat-shield base, and the trunk with its body-mounted array.
-fn dragon_crew() -> Model {
+/// Roman: the round telescope barrel under its aperture cover, the aft instrument carrier, the big fixed
+/// solar panel, and the antenna dish on its mast.
+fn roman() -> Model {
     let mut m = Model::default();
-    // Capsule: a truncated cone, base 3.7 across.
-    m.tube_y(12, 1.85, 0.8, 0.0, 3.4, (0.0, 0.0), true);
-    // Nose cone, swung open to the front: a shallow cone.
-    m.tube_y(12, 0.8, 0.06, 3.4, 4.3, (0.0, 0.0), true);
-    // Trunk below the heat shield.
-    m.tube_y(12, 1.85, 1.85, -3.4, -0.2, (0.0, 0.0), true);
-    // Body-mounted solar array on one side of the trunk: vertical strips.
-    for i in 0..8 {
-        let a = (-50.0 + i as f32 * 14.0).to_radians();
+    // Outer barrel and aperture cover, nose toward +y.
+    m.tube_y(16, 2.1, 2.1, 0.0, 6.5, (0.0, 0.0), true);
+    m.ring_y(16, 2.1, 7.4, (0.0, 0.0), true);
+    m.tube_y(16, 2.1, 2.1, 6.5, 7.4, (0.0, 0.0), false);
+    m.ring_y(16, 1.2, 6.5, (0.0, 0.0), false);
+    // Instrument carrier and spacecraft bus aft of the barrel.
+    m.cuboid([-2.6, -4.0, -2.6], [2.6, 0.0, 2.6], true);
+    m.cuboid([-2.8, -4.4, -2.8], [2.8, -4.0, 2.8], false);
+    // The large solar panel: a roof over the barrel, on standoffs, canted toward the Sun.
+    m.panel(
+        [2.9, -3.0, -3.6],
+        [0.4, 9.6, 0.0],
+        [-0.8, 0.0, 7.2],
+        6,
+        8,
+        true,
+    );
+    for (y, z) in [(-2.0, -2.0), (-2.0, 2.0), (4.5, -2.0), (4.5, 2.0)] {
+        m.line([2.0, y, z * 0.7], [2.9, y + 0.1, z * 1.6], false);
+    }
+    // High-gain antenna on a mast off the bus.
+    m.line([2.6, -2.0, 0.0], [4.2, -1.4, 0.0], false);
+    m.ring_z(12, 1.1, -1.4, (4.2, -1.4), false);
+    m.ring_z(12, 0.4, -1.1, (4.2, -1.4), false);
+    // Radiator and sunshade vanes at the aft end.
+    m.line([-2.6, -2.0, 2.6], [-3.8, -2.0, 3.8], false);
+    m.line([2.6, -2.0, -2.6], [3.8, -2.0, -3.8], false);
+    m
+}
+
+/// The Crew Dragon shape both Dragons share: a rounded cone over a 4 m skirt, the nose cone, the trunk with
+/// its two fins, and the body-mounted array. Returns the model for the caller to add to.
+fn dragon_body(m: &mut Model, nose_open: bool) {
+    // Capsule: skirt, shoulder, cone. Radii in metres, 1 unit = 1 m.
+    m.ring_y(16, 2.0, 0.0, (0.0, 0.0), true);
+    m.ring_y(16, 2.0, 0.5, (0.0, 0.0), false);
+    m.ring_y(16, 1.75, 1.6, (0.0, 0.0), true);
+    m.ring_y(16, 1.3, 2.6, (0.0, 0.0), false);
+    m.ring_y(16, 0.95, 3.4, (0.0, 0.0), true);
+    for i in 0..16 {
+        let a = i as f32 / 16.0 * std::f32::consts::TAU;
+        let (s, c) = a.sin_cos();
+        let pts = [(2.0, 0.0), (2.0, 0.5), (1.75, 1.6), (1.3, 2.6), (0.95, 3.4)];
+        for w in pts.windows(2) {
+            m.line(
+                [w[0].0 * c, w[0].1, w[0].0 * s],
+                [w[1].0 * c, w[1].1, w[1].0 * s],
+                false,
+            );
+        }
+    }
+    // Nose cone: a dome over the docking hatch, hinged up when open.
+    if nose_open {
+        m.ring_y(12, 0.85, 3.45, (0.0, 0.0), false);
+        m.line([0.85, 3.45, 0.0], [1.3, 4.7, 0.0], true);
+        m.line([-0.85, 3.45, 0.0], [-1.3, 4.7, 0.0], true);
+        m.line([1.3, 4.7, 0.0], [-1.3, 4.7, 0.0], true);
+    } else {
+        m.tube_y(12, 0.95, 0.7, 3.4, 3.9, (0.0, 0.0), true);
+        m.tube_y(12, 0.7, 0.1, 3.9, 4.3, (0.0, 0.0), true);
+    }
+    // Trunk, 4 m across and 3.6 m long, with two fins flaring from the aft end.
+    m.tube_y(16, 2.0, 2.0, -3.6, -0.2, (0.0, 0.0), true);
+    for side in [-1.0f32, 1.0] {
+        m.poly(
+            &[
+                [side * 2.0, -3.6, 0.0],
+                [side * 3.0, -4.6, 0.0],
+                [side * 3.0, -3.6, 0.0],
+                [side * 2.0, -0.6, 0.0],
+            ],
+            true,
+            true,
+        );
+    }
+    // The body-mounted array: strips of cells up the trunk's sun-side half.
+    for i in 0..9 {
+        let a = (-60.0 + i as f32 * 15.0).to_radians();
         m.line(
-            [1.88 * a.cos(), -3.2, 1.88 * a.sin()],
-            [1.88 * a.cos(), -0.4, 1.88 * a.sin()],
+            [2.02 * a.cos(), -3.4, 2.02 * a.sin()],
+            [2.02 * a.cos(), -0.4, 2.02 * a.sin()],
             false,
         );
     }
-    // Heat shield rings, and four SuperDraco pods round the capsule.
-    for r in [1.4, 0.9, 0.4] {
+}
+
+/// Crew Dragon: capsule with nose cone, the four SuperDraco pods, windows, and the finned trunk.
+fn dragon_crew() -> Model {
+    let mut m = Model::default();
+    dragon_body(&mut m, false);
+    // Heat shield rings under the skirt.
+    for r in [1.5, 0.9, 0.35] {
         m.ring_y(12, r, 0.0, (0.0, 0.0), false);
     }
+    // SuperDraco pods: boxes in pairs on the skirt at four stations.
     for i in 0..4 {
         let a = (45.0 + i as f32 * 90.0).to_radians();
-        let (c, s) = (1.7 * a.cos(), 1.7 * a.sin());
-        m.cuboid([c - 0.2, 0.7, s - 0.2], [c + 0.2, 1.3, s + 0.2], false);
+        let (c, s) = (1.95 * a.cos(), 1.95 * a.sin());
+        m.cuboid([c - 0.3, 0.7, s - 0.3], [c + 0.3, 1.5, s + 0.3], false);
     }
-    // Windows and thruster pods on the capsule.
-    for a in [20.0f32, 60.0, 100.0] {
-        let (s, c) = a.to_radians().sin_cos();
-        m.line([1.5 * c, 2.2, 1.5 * s], [1.0 * c, 2.9, 1.0 * s], false);
+    // The window row on the cone.
+    for a in [-25.0f32, 0.0, 25.0] {
+        let (s, c) = (a + 90.0).to_radians().sin_cos();
+        m.line([1.5 * c, 2.0, 1.5 * s], [1.3 * c, 2.5, 1.3 * s], false);
     }
     m
 }
 
-/// Cargo Dragon: the same capsule over a longer trunk with two deployed array wings.
+/// Cargo Dragon: the same capsule and finned trunk, no SuperDracos or windows, with two array wings out.
 fn dragon_cargo() -> Model {
     let mut m = Model::default();
-    m.tube_y(12, 1.85, 0.8, 0.0, 3.0, (0.0, 0.0), true);
-    m.tube_y(12, 0.8, 0.06, 3.0, 3.9, (0.0, 0.0), false);
-    m.tube_y(12, 1.85, 1.85, -4.6, -0.2, (0.0, 0.0), true);
+    dragon_body(&mut m, false);
+    // Two deployed wings, each a panel of cells on a short boom out of the trunk.
     for side in [-1.0f32, 1.0] {
-        m.line([side * 1.85, -2.4, 0.0], [side * 2.4, -2.4, 0.0], true);
+        m.line([side * 2.0, -2.0, 0.0], [side * 2.8, -2.0, 0.0], true);
         m.panel(
-            [side * 2.4, -4.2, -1.2],
-            [side * 8.0, 0.0, 0.0],
-            [0.0, 3.4, 0.0],
+            [side * 2.8 - if side < 0.0 { 6.5 } else { 0.0 }, -3.6, -0.02],
+            [6.5, 0.0, 0.0],
+            [0.0, 3.2, 0.0],
             5,
-            3,
+            2,
             true,
         );
     }
@@ -393,57 +517,66 @@ fn dragon_cargo() -> Model {
 /// A Soyuz: the orbital module, the bell-shaped descent module and the service module with its two wings.
 fn soyuz() -> Model {
     let mut m = Model::default();
-    // Service module and its instrument section.
-    m.tube_y(12, 1.45, 1.45, -3.2, -0.8, (0.0, 0.0), true);
-    m.tube_y(12, 1.45, 1.0, -0.8, 0.0, (0.0, 0.0), true);
-    // Engine bell below.
-    m.tube_y(10, 0.5, 0.8, -3.9, -3.2, (0.0, 0.0), false);
-    // Descent module: a rounded cone.
-    m.tube_y(12, 1.0, 1.15, 0.0, 0.7, (0.0, 0.0), true);
-    m.tube_y(12, 1.15, 0.55, 0.7, 2.1, (0.0, 0.0), true);
-    // Orbital module: the sphere on top, with a docking probe.
-    m.sphere([0.0, 3.2, 0.0], 1.15, 5, 8, true);
-    m.line([0.0, 4.35, 0.0], [0.0, 5.3, 0.0], true);
-    m.ring_y(8, 0.3, 5.3, (0.0, 0.0), false);
-    // Solar wings: a panel each side of the service module.
+    // Instrument module (cylinder), the tapered propulsion section below it, and the engine bell.
+    m.tube_y(14, 1.4, 1.4, -2.2, -0.2, (0.0, 0.0), true);
+    m.tube_y(14, 1.4, 1.0, -0.2, 0.5, (0.0, 0.0), false);
+    m.tube_y(12, 1.1, 1.4, -3.0, -2.2, (0.0, 0.0), true);
+    m.tube_y(10, 0.45, 0.7, -3.7, -3.0, (0.0, 0.0), false);
+    // Descent module: the rounded cone of the capsule.
+    m.ring_y(14, 1.1, 0.5, (0.0, 0.0), true);
+    m.ring_y(14, 1.15, 1.0, (0.0, 0.0), false);
+    m.tube_y(14, 1.15, 0.75, 1.0, 2.2, (0.0, 0.0), true);
+    // Orbital module: the sphere on top, with a hatch ring and the docking probe.
+    m.sphere([0.0, 3.5, 0.0], 1.25, 5, 8, true);
+    m.line([0.0, 4.75, 0.0], [0.0, 5.7, 0.0], true);
+    m.ring_y(8, 0.3, 5.7, (0.0, 0.0), false);
+    // Two solar panels in a line, each three leaves long.
     for side in [-1.0f32, 1.0] {
-        m.line([side * 1.45, -1.8, 0.0], [side * 1.9, -1.8, 0.0], true);
+        m.line([side * 1.4, -1.2, 0.0], [side * 1.9, -1.2, 0.0], true);
         m.panel(
-            [side * 1.9 - if side < 0.0 { 5.4 } else { 0.0 }, -3.0, 0.0],
-            [5.4, 0.0, 0.0],
-            [0.0, 2.4, 0.0],
-            5,
+            [side * 1.9 - if side < 0.0 { 3.8 } else { 0.0 }, -2.2, 0.0],
+            [3.8, 0.0, 0.0],
+            [0.0, 2.0, 0.0],
             3,
+            1,
             true,
         );
     }
-    // Antennas on the service module.
+    // Antennas: the whip and the Kurs dishes.
     m.line([0.9, -0.4, 0.9], [1.7, 0.4, 1.7], false);
     m.line([-0.9, -0.4, -0.9], [-1.7, 0.4, -1.7], false);
     m
 }
 
-/// Cygnus: the cylindrical cargo module over its service module, with a round array each side.
+/// Cygnus (Enhanced): the two-segment cargo module over its service module, an octagonal array each side.
 fn cygnus() -> Model {
     let mut m = Model::default();
-    m.tube_y(14, 1.7, 1.7, -0.6, 4.0, (0.0, 0.0), true);
-    m.tube_y(14, 1.7, 1.0, 4.0, 4.7, (0.0, 0.0), true);
-    m.ring_y(10, 0.55, 5.0, (0.0, 0.0), false);
-    m.tube_y(14, 1.5, 1.5, -3.2, -0.6, (0.0, 0.0), true);
-    m.tube_y(10, 0.5, 0.8, -3.9, -3.2, (0.0, 0.0), false);
-    // Cargo module ribs.
-    for y in [0.6, 1.6, 2.6, 3.4] {
-        m.ring_y(14, 1.72, y, (0.0, 0.0), false);
+    // Pressurised cargo module: two cylinders, with the berthing ring and cone on top.
+    m.tube_y(16, 1.55, 1.55, -0.2, 2.2, (0.0, 0.0), true);
+    m.tube_y(16, 1.55, 1.55, 2.2, 4.6, (0.0, 0.0), true);
+    m.tube_y(16, 1.55, 0.9, 4.6, 5.2, (0.0, 0.0), true);
+    m.ring_y(12, 0.55, 5.5, (0.0, 0.0), false);
+    // Panels on the module: the blanket and bands.
+    for i in 0..16 {
+        let a = i as f32 / 16.0 * std::f32::consts::TAU;
+        m.line(
+            [1.56 * a.cos(), 0.0, 1.56 * a.sin()],
+            [1.56 * a.cos(), 4.6, 1.56 * a.sin()],
+            false,
+        );
     }
-    // The round deployable arrays: rim, inner rim, spokes.
+    // Service module with its engine bell.
+    m.tube_y(16, 1.45, 1.45, -3.0, -0.2, (0.0, 0.0), true);
+    m.tube_y(10, 0.45, 0.8, -3.7, -3.0, (0.0, 0.0), false);
+    // The octagonal arrays: rim, inner ring, spokes.
     for side in [-1.0f32, 1.0] {
         let cx = side * 4.6;
-        m.line([side * 1.5, -1.9, 0.0], [side * 2.7, -1.9, 0.0], true);
-        let rim = m.ring_z(24, 2.3, 0.0, (cx, -1.9), true);
-        m.ring_z(24, 0.5, 0.0, (cx, -1.9), false);
-        m.ring_z(24, 1.4, 0.0, (cx, -1.9), false);
-        for p in rim.iter().step_by(2) {
-            m.line([cx, -1.9, 0.0], *p, false);
+        m.line([side * 1.45, -1.6, 0.0], [side * 2.4, -1.6, 0.0], true);
+        let rim = m.ring_z(8, 2.45, 0.0, (cx, -1.6), true);
+        m.ring_z(8, 1.4, 0.0, (cx, -1.6), false);
+        m.ring_z(8, 0.45, 0.0, (cx, -1.6), false);
+        for p in &rim {
+            m.line([cx, -1.6, 0.0], *p, false);
         }
     }
     m
@@ -498,96 +631,117 @@ fn falcon9() -> Model {
     m
 }
 
-/// The Space Shuttle stack: orbiter on its orange tank between the two boosters.
+/// The Space Shuttle stack: the orbiter on the orange tank's flank between the two boosters.
+/// One unit is about 3 m.
 fn shuttle() -> Model {
     let mut m = Model::default();
-    // External tank.
-    m.tube_y(14, 1.4, 1.4, -8.0, 6.0, (0.0, 0.0), true);
-    m.tube_y(14, 1.4, 0.05, 6.0, 9.4, (0.0, 0.0), true);
-    // Solid boosters on each side.
+    // External tank: 8.4 m across and 47 m long, with the ogive nose and the intertank ring.
+    m.tube_y(16, 1.4, 1.4, -8.0, 5.6, (0.0, 0.0), true);
+    m.tube_y(16, 1.4, 0.05, 5.6, 9.2, (0.0, 0.0), true);
+    m.ring_y(16, 1.4, 1.6, (0.0, 0.0), false);
+    m.ring_y(16, 1.4, 3.6, (0.0, 0.0), false);
+    // Solid boosters: 3.7 m across, nose cones, and the engine skirts below the tank.
     for side in [-1.0f32, 1.0] {
         let c = (side * 2.3, 0.0);
-        m.tube_y(10, 0.62, 0.62, -7.6, 5.4, c, true);
-        m.tube_y(10, 0.62, 0.05, 5.4, 7.6, c, true);
-        m.tube_y(8, 0.4, 0.62, -8.4, -7.6, c, false);
+        m.tube_y(12, 0.62, 0.62, -7.8, 5.0, c, true);
+        m.tube_y(12, 0.62, 0.05, 5.0, 7.4, c, true);
+        m.tube_y(10, 0.45, 0.62, -8.6, -7.8, c, false);
+        m.ring_y(12, 0.62, -3.0, c, false);
     }
-    // Orbiter along the tank's front: fuselage, nose, wings, tail fin.
-    let z = 2.0;
-    m.tube_y(10, 0.68, 0.68, -6.4, 2.2, (0.0, z), true);
-    m.tube_y(10, 0.68, 0.1, 2.2, 3.6, (0.0, z), true);
+    // The orbiter on the tank's front face, nose up: fuselage, cockpit, payload-bay doors, delta wings.
+    let z = 2.1;
+    m.tube_y(12, 0.85, 0.85, -7.0, 2.4, (0.0, z), true);
+    m.tube_y(12, 0.85, 0.5, 2.4, 3.8, (0.0, z), true);
+    m.tube_y(12, 0.5, 0.05, 3.8, 4.5, (0.0, z), true);
+    m.line([-0.45, -5.8, z + 0.85], [-0.45, 2.0, z + 0.85], false);
+    m.line([0.45, -5.8, z + 0.85], [0.45, 2.0, z + 0.85], false);
     for side in [-1.0f32, 1.0] {
         m.poly(
             &[
-                [side * 0.68, -6.4, z],
-                [side * 3.9, -6.4, z - 0.1],
-                [side * 3.5, -5.6, z - 0.1],
-                [side * 0.68, -0.4, z],
+                [side * 0.85, 0.2, z],
+                [side * 1.6, -2.6, z],
+                [side * 4.0, -6.6, z],
+                [side * 4.0, -7.0, z],
+                [side * 0.85, -6.8, z],
             ],
             true,
             true,
         );
+        // Elevons along the trailing edge.
+        m.line([side * 1.2, -6.9, z], [side * 4.0, -6.9, z], false);
     }
+    // Vertical tail and the OMS pods and main engines at the aft end.
     m.poly(
         &[
-            [0.0, -6.0, z + 0.68],
-            [0.0, -4.0, z + 2.4],
-            [0.0, -3.4, z + 2.4],
-            [0.0, -1.5, z + 0.68],
+            [0.0, -4.4, z + 0.85],
+            [0.0, -6.9, z + 2.9],
+            [0.0, -7.2, z + 2.9],
+            [0.0, -6.6, z + 0.85],
         ],
         true,
         true,
     );
-    // Engine bells at the tail.
-    for (x, y) in [(0.0, 0.25), (-0.3, -0.2), (0.3, -0.2)] {
-        m.ring_y(6, 0.18, -6.7, (x, z + y), false);
+    for side in [-1.0f32, 1.0] {
+        m.cuboid(
+            [side * 0.6 - 0.25, -7.0, z + 0.4],
+            [side * 0.6 + 0.25, -5.4, z + 1.0],
+            false,
+        );
     }
-    // Struts joining the orbiter and boosters to the tank.
-    m.line([0.0, 2.0, 1.4], [0.0, 2.0, 1.6], false);
-    m.line([-0.7, -5.0, 1.45], [-1.5, -5.0, 0.0], false);
-    m.line([0.7, -5.0, 1.45], [1.5, -5.0, 0.0], false);
+    for (x, dz) in [(0.0, 0.3), (-0.4, -0.25), (0.4, -0.25)] {
+        m.ring_y(6, 0.2, -7.5, (x, z + dz), false);
+    }
+    // The struts holding the orbiter and boosters to the tank.
+    m.line([0.0, 2.0, 1.4], [0.0, 2.0, z], false);
+    m.line([-0.8, -5.0, 1.45], [-1.7, -5.0, 0.0], false);
+    m.line([0.8, -5.0, 1.45], [1.7, -5.0, 0.0], false);
     m
 }
 
-/// Voyager: the ten-sided bus, the 3.7 m dish, and the booms.
+/// Voyager: the ten-sided bus under the 3.7 m dish, the RTG boom, the science boom with its scan platform,
+/// the long magnetometer boom and the two radio-antenna whips. One unit is a metre.
 fn voyager() -> Model {
     let mut m = Model::default();
-    // Bus: a decagonal prism lying along y.
-    let top = m.ring_y(10, 1.0, 0.0, (0.0, 0.0), true);
-    let bot = m.ring_y(10, 1.0, -0.9, (0.0, 0.0), true);
+    // Bus: a decagonal prism 1.8 m across and 0.5 m deep, lying along y.
+    let top = m.ring_y(10, 0.95, 0.0, (0.0, 0.0), true);
+    let bot = m.ring_y(10, 0.95, -0.5, (0.0, 0.0), true);
     for (p, q) in top.iter().zip(&bot) {
         m.line(*p, *q, false);
     }
-    // The dish: rings climbing a paraboloid above the bus, with spokes.
-    let rings: Vec<Vec<P3>> = [0.3f32, 0.9, 1.6, 2.3, 2.9]
+    // The dish: rings climbing a paraboloid over the bus, with spokes.
+    let rings: Vec<Vec<P3>> = [0.25f32, 0.7, 1.15, 1.55, 1.85]
         .iter()
-        .map(|&r| m.ring_y(18, r, 0.4 + 0.12 * r * r, (0.0, 0.0), r > 2.5))
+        .map(|&r| m.ring_y(20, r, 0.55 + 0.17 * r * r, (0.0, 0.0), r > 1.7))
         .collect();
-    for i in (0..18).step_by(3) {
+    for i in (0..20).step_by(4) {
         for w in rings.windows(2) {
             m.line(w[0][i], w[1][i], false);
         }
     }
     // Feed horn on three struts.
-    m.line([0.0, 0.45, 0.0], [0.0, 2.6, 0.0], true);
+    m.line([0.0, 0.6, 0.0], [0.0, 1.7, 0.0], true);
     for i in 0..3 {
-        m.line(rings[4][i * 6], [0.0, 2.6, 0.0], false);
+        m.line(rings[4][i * 6 + 2], [0.0, 1.7, 0.0], false);
     }
-    // RTG boom with its three generators, science boom, and the long magnetometer boom.
-    m.line([1.0, -0.4, 0.0], [5.2, -0.5, 0.0], true);
+    // RTG boom: three generators in a row on a truss, off one side of the bus.
+    m.line([0.95, -0.25, 0.0], [4.6, -0.25, 0.0], true);
     for k in 0..3 {
-        m.line(
-            [3.6 + k as f32 * 0.5, -0.5, 0.0],
-            [3.6 + k as f32 * 0.5, -0.5, -0.5],
-            false,
-        );
+        let x = 2.0 + k as f32 * 0.95;
+        m.tube_x(6, 0.22, x, x + 0.8, (-0.45, 0.0));
     }
-    m.cuboid([4.8, -0.7, -0.35], [5.4, -0.3, 0.35], false);
-    m.line([-1.0, -0.4, 0.0], [-2.6, -1.0, 1.4], true);
-    m.cuboid([-3.0, -1.4, 1.2], [-2.5, -0.8, 1.8], false);
-    m.line([0.0, -0.9, 0.9], [-4.0, -2.2, 3.4], false);
-    m.line([-4.0, -2.2, 3.4], [-6.6, -3.2, 5.2], false);
-    // The low-gain antenna on the dish axis.
-    m.line([0.0, 0.0, -1.0], [0.0, 0.0, -2.0], false);
+    // Science boom with the scan platform: two instrument boxes at the end.
+    m.line([-0.95, -0.25, 0.0], [-2.7, -0.7, 1.1], true);
+    m.cuboid([-3.3, -1.0, 0.9], [-2.7, -0.4, 1.5], false);
+    m.cuboid([-3.5, -0.7, 1.4], [-3.1, -0.3, 1.9], false);
+    // Magnetometer boom: a long truss out the back.
+    m.line([0.0, -0.5, 0.5], [-3.2, -1.6, 3.6], false);
+    m.line([-3.2, -1.6, 3.6], [-5.0, -2.2, 5.3], false);
+    m.line([-5.0, -2.2, 5.3], [-5.2, -2.3, 5.5], true);
+    // The two plasma-wave antenna whips, a pair 10 m long at right angles.
+    m.line([0.0, -0.5, -0.9], [3.5, -1.2, -4.4], false);
+    m.line([0.0, -0.5, -0.9], [-3.5, -1.2, -4.4], false);
+    // The low-gain antenna on the dish axis, below the bus.
+    m.line([0.0, -0.5, 0.0], [0.0, -1.2, 0.0], false);
     m
 }
 
@@ -677,7 +831,7 @@ pub fn model(id: &str) -> Option<Model> {
     };
     m.zoom = match id {
         "falcon9" => 1.3,
-        "voyager" => 1.5,
+        "voyager" => 1.7,
         _ => 1.0,
     };
     Some(m)

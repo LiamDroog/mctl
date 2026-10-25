@@ -321,12 +321,13 @@ pub struct GlobePass {
 }
 
 impl GlobePass {
-    /// `earth_jpeg` is the colour texture; `mask` is the coastline mip chain.
+    /// `earth_jpeg` is the colour texture and `night_jpeg` the city lights; `mask` is the coastline mip chain.
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         target_format: wgpu::TextureFormat,
         earth_jpeg: &[u8],
+        night_jpeg: &[u8],
         mask: &[MaskLevel],
         style: GlobeStyle,
     ) -> Result<Self> {
@@ -345,6 +346,22 @@ impl GlobePass {
             wgpu::TextureFormat::Rgba8Unorm,
             4,
             &rgba_mips(iw, ih, img.into_raw()),
+        );
+        let night = image::load_from_memory_with_format(night_jpeg, image::ImageFormat::Jpeg)
+            .context("decoding embedded night-lights texture")?
+            .to_rgba8();
+        let (nw, nh) = night.dimensions();
+        ensure!(
+            nw >= 2 && nh >= 2,
+            "night texture is degenerate ({nw}x{nh})"
+        );
+        let night_view = upload_mips(
+            device,
+            queue,
+            "earth-night",
+            wgpu::TextureFormat::Rgba8Unorm,
+            4,
+            &rgba_mips(nw, nh, night.into_raw()),
         );
         let mask_mips: Vec<_> = mask
             .iter()
@@ -378,6 +395,8 @@ impl GlobePass {
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
             mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            // The limb and the window view look at the surface edge-on.
+            anisotropy_clamp: 8,
             ..Default::default()
         });
         let vis = wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT;
@@ -416,6 +435,7 @@ impl GlobePass {
                 },
                 tex_entry(2),
                 tex_entry(3),
+                tex_entry(5),
                 wgpu::BindGroupLayoutEntry {
                     binding: 4,
                     visibility: wgpu::ShaderStages::FRAGMENT,
@@ -443,6 +463,10 @@ impl GlobePass {
                 wgpu::BindGroupEntry {
                     binding: 3,
                     resource: wgpu::BindingResource::TextureView(&mask_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::TextureView(&night_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 4,

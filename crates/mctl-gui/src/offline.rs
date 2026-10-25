@@ -34,6 +34,7 @@ pub fn build_globe(gpu: &Gpu, theme: &Theme) -> Result<GlobePass> {
         &gpu.queue,
         SCENE_FORMAT,
         assets::EARTH_JPEG,
+        assets::NIGHT_JPEG,
         &mask,
         theme.globe.clone(),
     )

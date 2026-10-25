@@ -27,6 +27,7 @@ struct U {
 @group(0) @binding(2) var earth_tex: texture_2d<f32>;
 @group(0) @binding(3) var coast_tex: texture_2d<f32>;
 @group(0) @binding(4) var samp: sampler;
+@group(0) @binding(5) var night_tex: texture_2d<f32>;
 
 const PI: f32 = 3.14159265358979;
 /// Graticule spacing in degrees of latitude and longitude.
@@ -34,7 +35,11 @@ const GRATICULE_STEP_DEG: f32 = 15.0;
 /// Graticule line half-width in screen pixels.
 const GRATICULE_HALF_WIDTH_PX: f32 = 0.7;
 /// Thickness of the atmosphere glow in Earth radii.
-const ATMOSPHERE_THICKNESS: f32 = 0.06;
+const ATMOSPHERE_THICKNESS: f32 = 0.035;
+/// Rayleigh-blue of the daylit limb, used outside the monochrome themes.
+const SKY_BLUE: vec3<f32> = vec3<f32>(0.32, 0.58, 1.0);
+/// Warm colour of city lights.
+const CITY_LIGHT: vec3<f32> = vec3<f32>(1.0, 0.82, 0.5);
 
 struct FsOut {
     @location(0) color: vec4<f32>,   // premultiplied alpha
@@ -91,6 +96,7 @@ fn fs_sphere(in: FullOut) -> FsOut {
     let dy = wrapped(dpdy(uv));
     let albedo = textureSampleGrad(earth_tex, samp, uv, dx, dy).rgb;
     let coast = textureSampleGrad(coast_tex, samp, uv, dx, dy).r;
+    let lights = textureSampleGrad(night_tex, samp, uv, dx, dy).rgb;
 
     // Graticule: distance to the nearest line, in degrees, divided by the pixel footprint.
     let deg = vec2<f32>(lon, lat) * (180.0 / PI);
@@ -110,18 +116,25 @@ fn fs_sphere(in: FullOut) -> FsOut {
     let mono = u.viewport.w > 0.5;
     let day_col = select(albedo * u.day_tint.rgb, u.day_tint.rgb * luma, mono) * lam;
     let night_col = u.night_tint.rgb * (0.35 + 0.65 * luma);
-    var col = mix(night_col, day_col, day);
+    // City lights: the bright part of the night-side picture, on the dark side only.
+    let city_luma = dot(lights, vec3<f32>(0.299, 0.587, 0.114));
+    let city = smoothstep(0.16, 0.7, city_luma);
+    let city_col = select(CITY_LIGHT, u.day_tint.rgb, u.viewport.w > 0.5) * city * 1.3;
+    var col = mix(night_col, day_col, day) + city_col * (1.0 - day);
     col = max(col, u.night_tint.rgb * u.shade.x);
     col = mix(col, u.coast.rgb, coast * u.coast.a);
     col = mix(col, u.graticule.rgb, grat * u.graticule.a);
-    // Limb darkening/glow so the sphere edge reads against the background.
+    // The atmosphere: a blue band at the limb, strong where the Sun lights it and faint in the dark.
+    let atm_col = select(SKY_BLUE, mix(u.night_tint.rgb, u.day_tint.rgb, 0.7), u.viewport.w > 0.5);
     let fres = pow(1.0 - clamp(dot(n, -dir), 0.0, 1.0), 3.0);
-    col = col + u.night_tint.rgb * fres * 0.6;
-
-    // Atmosphere: glow outside the limb based on the ray's closest approach to the centre.
-    let r_min = length(o + dir * max(-b, 0.0));
-    let glow = (1.0 - smoothstep(1.0, 1.0 + ATMOSPHERE_THICKNESS, r_min)) * select(1.0, 0.0, hit);
-    let atm = mix(u.night_tint.rgb, u.day_tint.rgb, 0.5) * glow * 0.8;
+    col = col + atm_col * fres * (0.12 + 0.7 * smoothstep(-0.25, 0.45, ndl));
+    // Outside the limb: glow by the ray's closest approach to the centre.
+    let r_q = o + dir * max(-b, 0.0);
+    let r_min = length(r_q);
+    let lit = smoothstep(-0.3, 0.4, dot(r_q / max(r_min, 1e-4), u.sun_dir.xyz));
+    let shape = pow(1.0 - smoothstep(1.0, 1.0 + ATMOSPHERE_THICKNESS, r_min), 1.6);
+    let glow = shape * (0.1 + 0.9 * lit) * select(1.0, 0.0, hit);
+    let atm = atm_col * glow;
 
     var out: FsOut;
     if hit {
@@ -129,7 +142,7 @@ fn fs_sphere(in: FullOut) -> FsOut {
         let clip = u.view_proj * vec4<f32>(p, 1.0);
         out.depth = clip.z / clip.w;
     } else {
-        out.color = vec4<f32>(atm, glow * 0.8);
+        out.color = vec4<f32>(atm, glow * 0.9);
         out.depth = 1.0;
     }
     return out;

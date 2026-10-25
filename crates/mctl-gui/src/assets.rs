@@ -1,6 +1,7 @@
 //! Embedded assets (licences in `assets/LICENSES.md`).
 
-pub const EARTH_JPEG: &[u8] = include_bytes!("../../../assets/earth/blue_marble_2048x1024.jpg");
+pub const EARTH_JPEG: &[u8] = include_bytes!("../../../assets/earth/blue_marble_4096x2048.jpg");
+pub const NIGHT_JPEG: &[u8] = include_bytes!("../../../assets/earth/black_marble_2048x1024.jpg");
 pub const COAST_110M: &[u8] = include_bytes!("../../../assets/coastlines/ne_110m_coastline.bin");
 pub const COAST_50M: &[u8] = include_bytes!("../../../assets/coastlines/ne_50m_coastline.bin");
 pub const FONT_JETBRAINS: &[u8] = include_bytes!("../../../assets/fonts/JetBrainsMono-Regular.ttf");
