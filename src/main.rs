@@ -88,6 +88,9 @@ struct GuiArgs {
     size: Option<String>,
     #[arg(long)]
     fullscreen: bool,
+    /// With `--pi`, stay in a window instead of taking the whole screen (also implied by `--size`).
+    #[arg(long)]
+    windowed: bool,
     #[arg(long, value_enum, default_value = "fifo")]
     present: PresentArg,
     /// Exit after this many presented frames (smoke tests).
@@ -560,13 +563,14 @@ fn main() -> Result<()> {
                     .map_err(|_| anyhow::anyhow!("the engine stopped before replay could start"))?;
             }
             let g = cli.gui;
+            // The Pi display owns the whole screen, unless a size or --windowed says otherwise.
+            let fullscreen = g.fullscreen || (cli.pi && g.size.is_none() && !g.windowed);
             let size = g.size.unwrap_or_else(|| default_size(cli.pi).to_owned());
             mctl_gui::run(
                 themes_for(cli.pi, &cli.themes_dir)?,
                 mctl_gui::Options {
                     size: mctl_gui::parse_size(&size)?,
-                    // The Pi display owns the whole screen.
-                    fullscreen: g.fullscreen || cli.pi,
+                    fullscreen,
                     kiosk_dwell_s: cli.pi.then_some(cli.dwell),
                     present: match g.present {
                         PresentArg::Fifo => mctl_gui::Present::Fifo,

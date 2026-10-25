@@ -13,7 +13,8 @@ What it changes:
 - **Cycling.** Each vehicle gets a run of scenes of `--dwell` seconds each (default 20), and one piece of
   gallery art (Soyuz, Falcon 9, Cygnus, the Shuttle, the Earth with an orbit, Voyager) follows each
   vehicle's art scene for 60 % of that time.
-- **Full screen, no cursor.** `--pi` implies `--fullscreen`.
+- **Full screen, no cursor.** `--pi` implies `--fullscreen`, unless you give `--size` or `--windowed`, which
+  keep it in a window of that size (the cursor is still hidden over it).
 
 A vehicle's scenes are the console's visual pages in the console's own frames, redrawn at this size, for
 whichever the vehicle has data for:
