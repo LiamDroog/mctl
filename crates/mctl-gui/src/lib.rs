@@ -17,6 +17,7 @@ mod globe;
 mod gpu;
 mod grid;
 mod keys;
+mod kiosk;
 mod offline;
 mod overlays;
 mod page;
@@ -32,6 +33,7 @@ mod vehicle_pages;
 mod widgets;
 
 pub use app::{Options, Present, run};
+pub use kiosk::DEFAULT_DWELL_S as KIOSK_DEFAULT_DWELL_S;
 /// Check the `[keys]` table, so a bad binding fails at start-up with its reason.
 pub fn check_keys(keys: &std::collections::BTreeMap<String, Vec<String>>) -> Result<(), String> {
     keys::KeyMap::from_config(keys).map(|_| ())
@@ -39,4 +41,6 @@ pub fn check_keys(keys: &std::collections::BTreeMap<String, Vec<String>>) -> Res
 
 pub use commands::parse_replay_start;
 pub use offline::{BenchOptions, Live, ShotOptions, bench, parse_size, shots};
-pub use theme::{Theme, ThemeError, embedded as embedded_themes, from_dir as themes_from_dir};
+pub use theme::{
+    Theme, ThemeError, crt as crt_theme, embedded as embedded_themes, from_dir as themes_from_dir,
+};

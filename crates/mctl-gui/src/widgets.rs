@@ -82,6 +82,10 @@ pub fn paint(
                 crate::art::paint(painter, theme, px, &m, t);
             }
         }
+        Widget::Backdrop { earth, .. } => {
+            let t = painter.ctx().input(|i| i.time);
+            backdrop(painter, theme, px, *earth, t);
+        }
         // Pictures are textures: the console paints them.
         Widget::Image { .. } => {}
         Widget::Chart { series, .. } => chart(painter, theme, px, series),
@@ -100,6 +104,82 @@ pub fn paint(
                 PlotKind::InstrumentShare => instrument_share(painter, theme, px, v, now),
             }
         }
+    }
+}
+
+// ---- backdrop -------------------------------------------------------------------------------------
+
+/// Number of background stars per megapixel.
+const STARS_PER_MPX: f32 = 220.0;
+
+/// A cheap deterministic hash to scatter stars the same way every frame.
+fn hash01(n: u32, salt: u32) -> f32 {
+    let mut x = n.wrapping_mul(0x9E37_79B1) ^ salt.wrapping_mul(0x85EB_CA6B);
+    x ^= x >> 15;
+    x = x.wrapping_mul(0x2C1B_3C6D);
+    x ^= x >> 12;
+    x = x.wrapping_mul(0x297A_2D39);
+    x ^= x >> 15;
+    (x & 0xFFFF) as f32 / 65535.0
+}
+
+/// Twinkling stars, and below them the curved limb of the Earth with its thin atmosphere (`earth`), or a
+/// small distant Earth and Moon (at L2, where there is no horizon).
+fn backdrop(painter: &Painter, theme: &Theme, px: [u32; 4], earth: bool, t: f64) {
+    let r = rect_of(px);
+    if r.width() < 40.0 || r.height() < 40.0 {
+        return;
+    }
+    let p = &theme.palette;
+    let k = (theme.font.cell_h_px / 24.0).clamp(1.0, 3.0);
+    let n = (r.width() * r.height() / 1.0e6 * STARS_PER_MPX) as u32;
+    for i in 0..n {
+        let (fx, fy) = (hash01(i, 1), hash01(i, 2));
+        let phase = hash01(i, 3) * std::f32::consts::TAU;
+        let rate = 0.4 + hash01(i, 4) * 1.6;
+        let tw = 0.55 + 0.45 * (t as f32 * rate + phase).sin();
+        let big = hash01(i, 5) > 0.93;
+        let c = if big { p.bright } else { p.dim }.to_egui();
+        let pos = Pos2::new(r.left() + fx * r.width(), r.top() + fy * r.height());
+        let side = if big { 2.0 * k } else { k };
+        painter.rect_filled(
+            Rect::from_center_size(pos, vec2(side, side)),
+            0.0,
+            fade(c, (255.0 * tw) as u8),
+        );
+    }
+    let line = p.border.to_egui();
+    if earth {
+        // A circle whose top edge is a shallow arc across the bottom of the rectangle.
+        let radius = r.width() * 1.1;
+        let top = r.bottom() - r.height() * 0.1;
+        let centre = Pos2::new(r.center().x, top + radius);
+        for (grow, alpha, colour) in [(0.0, 255u8, p.bright.to_egui()), (5.0 * k, 90, line)] {
+            let rad = radius + grow;
+            let pts: Vec<Pos2> = (0..=64)
+                .map(|i| {
+                    let a = -std::f32::consts::FRAC_PI_2 + (i as f32 / 64.0 - 0.5) * 1.5;
+                    Pos2::new(centre.x + rad * a.cos(), centre.y + rad * a.sin())
+                })
+                .filter(|q| r.contains(*q))
+                .collect();
+            painter.add(Shape::line(pts, Stroke::new(1.5 * k, fade(colour, alpha))));
+        }
+        // Meridians converging on the limb give the surface some curvature.
+        for j in -3..=3 {
+            let x_top = centre.x + j as f32 * r.width() * 0.16;
+            let a = Pos2::new(x_top, top + (j as f32).abs().powi(2) * r.height() * 0.006);
+            let b = Pos2::new(centre.x + j as f32 * r.width() * 0.55, r.bottom());
+            painter.line_segment([a, b], Stroke::new(k, fade(line, 70)));
+        }
+    } else {
+        let e = Pos2::new(r.right() - r.width() * 0.12, r.bottom() - r.height() * 0.14);
+        let er = 9.0 * k;
+        painter.circle_stroke(e, er, Stroke::new(1.5 * k, p.bright.to_egui()));
+        painter.circle_stroke(e, er * 2.8, Stroke::new(k, fade(line, 80)));
+        let ang = (t as f32 * 0.5) % std::f32::consts::TAU;
+        let moon = Pos2::new(e.x + er * 2.8 * ang.cos(), e.y + er * 2.8 * ang.sin());
+        painter.circle_filled(moon, 2.0 * k, p.foreground.to_egui());
     }
 }
 

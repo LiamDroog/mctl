@@ -16,9 +16,27 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 const DEFAULT_WINDOW_SIZE: &str = "1920x1080";
+/// The window of the Raspberry Pi display: what the Pi's composite output gives a 4:3 NTSC tube.
+const PI_WINDOW_SIZE: &str = "640x480";
 const DEFAULT_BENCH_SIZES: &str = "1920x1080,2560x1440";
 /// How long `shot` and `bench` wait for the sources to deliver before rendering what they have.
 const DEFAULT_WAIT_S: f64 = 25.0;
+
+fn default_size(pi: bool) -> &'static str {
+    if pi {
+        PI_WINDOW_SIZE
+    } else {
+        DEFAULT_WINDOW_SIZE
+    }
+}
+
+/// The themes to run with: the CRT theme alone for `--pi`, else the embedded or `--themes-dir` set.
+fn themes_for(pi: bool, dir: &Option<PathBuf>) -> anyhow::Result<Vec<mctl_gui::Theme>> {
+    if pi {
+        return Ok(vec![mctl_gui::crt_theme()?]);
+    }
+    load_themes(dir)
+}
 
 #[derive(Clone, Copy, ValueEnum)]
 enum PresentArg {
@@ -48,6 +66,12 @@ struct Cli {
     /// Start in REPLAY of the recording: `start`, an ISO epoch, or an offset from now such as `-2h`.
     #[arg(long, global = true, value_name = "WHEN")]
     replay: Option<String>,
+    /// The Raspberry Pi / CRT display: low resolution, no effects, pictures cycling through the vehicles.
+    #[arg(long, global = true)]
+    pi: bool,
+    /// With `--pi`, seconds each vehicle stays up.
+    #[arg(long, global = true, default_value_t = mctl_gui::KIOSK_DEFAULT_DWELL_S)]
+    dwell: f64,
     #[command(subcommand)]
     command: Option<Command>,
     #[command(flatten)]
@@ -59,8 +83,9 @@ struct GuiArgs {
     /// Start theme (name, case-insensitive).
     #[arg(long)]
     theme: Option<String>,
-    #[arg(long, default_value = DEFAULT_WINDOW_SIZE)]
-    size: String,
+    /// Window size, `WxH` (default 1920x1080, or 640x480 with `--pi`).
+    #[arg(long)]
+    size: Option<String>,
     #[arg(long)]
     fullscreen: bool,
     #[arg(long, value_enum, default_value = "fifo")]
@@ -76,8 +101,9 @@ enum Command {
     Check,
     /// Headless screenshots of the live page, one PNG per theme.
     Shot {
-        #[arg(long, default_value = "1920x1080")]
-        size: String,
+        /// Image size, `WxH` (default 1920x1080, or 640x480 with `--pi`).
+        #[arg(long)]
+        size: Option<String>,
         #[arg(long)]
         theme: Option<String>,
         #[arg(long)]
@@ -481,7 +507,9 @@ fn main() -> Result<()> {
                 }
             }
             std::thread::sleep(Duration::from_secs_f64(settle_s.max(0.0)));
+            let size = size.unwrap_or_else(|| default_size(cli.pi).to_owned());
             let opts = mctl_gui::ShotOptions {
+                kiosk: cli.pi,
                 size: mctl_gui::parse_size(&size)?,
                 theme,
                 out_dir,
@@ -491,7 +519,7 @@ fn main() -> Result<()> {
                 low_power: cli.low_power,
                 exec,
             };
-            mctl_gui::shots(&live, load_themes(&cli.themes_dir)?, &opts).map(|_| ())
+            mctl_gui::shots(&live, themes_for(cli.pi, &cli.themes_dir)?, &opts).map(|_| ())
         }
         Some(Command::Bench {
             sizes,
@@ -532,11 +560,14 @@ fn main() -> Result<()> {
                     .map_err(|_| anyhow::anyhow!("the engine stopped before replay could start"))?;
             }
             let g = cli.gui;
+            let size = g.size.unwrap_or_else(|| default_size(cli.pi).to_owned());
             mctl_gui::run(
-                load_themes(&cli.themes_dir)?,
+                themes_for(cli.pi, &cli.themes_dir)?,
                 mctl_gui::Options {
-                    size: mctl_gui::parse_size(&g.size)?,
-                    fullscreen: g.fullscreen,
+                    size: mctl_gui::parse_size(&size)?,
+                    // The Pi display owns the whole screen.
+                    fullscreen: g.fullscreen || cli.pi,
+                    kiosk_dwell_s: cli.pi.then_some(cli.dwell),
                     present: match g.present {
                         PresentArg::Fifo => mctl_gui::Present::Fifo,
                         PresentArg::Immediate => mctl_gui::Present::Immediate,

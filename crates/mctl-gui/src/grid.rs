@@ -130,6 +130,8 @@ pub enum Widget {
     },
     /// Rotating wireframe art of a vehicle (`id` is the vehicle id).
     Art { rect: CellRect, id: String },
+    /// Stars behind the art, and the limb of the Earth (`earth`) or a small Earth far off (L2).
+    Backdrop { rect: CellRect, earth: bool },
     /// A survey picture of a field (`key` is the field request key on the selected vehicle).
     Image { rect: CellRect, key: String },
     /// Circular angle dial with a needle at `deg` (0 at the top, clockwise).
@@ -150,6 +152,7 @@ impl Widget {
             | Self::Chart { rect, .. }
             | Self::Image { rect, .. }
             | Self::Art { rect, .. }
+            | Self::Backdrop { rect, .. }
             | Self::Spark { rect, .. }
             | Self::Dial { rect, .. }
             | Self::Plot { rect, .. } => *rect,

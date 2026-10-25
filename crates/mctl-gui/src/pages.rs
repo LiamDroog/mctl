@@ -107,6 +107,7 @@ impl Page {
                 "SETTINGS",
                 "C&W RULES",
                 "VEHICLE",
+                "GALLERY",
             ],
             Self::Ops => &["OBSERVING SCHEDULE"],
         }

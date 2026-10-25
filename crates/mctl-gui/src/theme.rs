@@ -27,6 +27,14 @@ const EMBEDDED_THEMES: &[(&str, &str)] = &[
     ),
 ];
 
+/// The display theme for `--pi`: a small CRT fed by the Pi's composite output. It is not in the cycle.
+const CRT_THEME: (&str, &str) = ("crt.toml", include_str!("../../../config/themes/crt.toml"));
+
+/// The theme of the Raspberry Pi / CRT display, with every effect off.
+pub fn crt() -> Result<Theme, ThemeError> {
+    Theme::from_toml(CRT_THEME.0, CRT_THEME.1)
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ThemeError {
     #[error("cannot read theme file {path}: {source}")]
@@ -312,6 +320,14 @@ mod tests {
     fn embedded_themes_load_and_are_the_four_from_the_design() {
         let names: Vec<_> = embedded().unwrap().into_iter().map(|t| t.name).collect();
         assert_eq!(names, ["Phosphor", "Retro", "Modern", "Retrowave"]);
+    }
+
+    #[test]
+    fn the_crt_theme_loads_with_every_effect_off() {
+        let t = crt().unwrap();
+        let e = t.effects;
+        assert!(!e.scanlines.enabled && !e.bloom.enabled);
+        assert!(!e.persistence.enabled && !e.curvature.enabled);
     }
 
     #[test]

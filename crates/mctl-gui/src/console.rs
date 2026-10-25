@@ -19,7 +19,7 @@ use crate::fonts;
 use crate::globe::{Camera, GlobeScene, build_scene, orbit_vertices};
 use crate::grid::Grid;
 use crate::keys::{KeyAction, KeyMap};
-use crate::page::{self, CommandView, PageInput, StatusMsg};
+use crate::page::{self, CommandView, Layout, PageInput, StatusMsg};
 use crate::pages::Page;
 use crate::render::EffectToggles;
 use crate::screens;
@@ -111,6 +111,8 @@ pub struct Console {
     adapter: String,
     limits: Limits,
     orbit_cache: Option<(u64, Arc<Vec<[f32; 4]>>)>,
+    /// The Pi/CRT display: cycling scenes instead of pages.
+    kiosk: Option<Kiosk>,
     /// Texture uploads from start-up, delivered with the first frame.
     pending_textures: TexturesDelta,
 }
@@ -121,6 +123,15 @@ impl Drop for Console {
         // first frame (an early error exit, a test) there is nothing left to upload to.
         self.pending_textures.clear();
     }
+}
+
+/// State of the kiosk display's cycle.
+struct Kiosk {
+    dwell_s: f64,
+    scene: usize,
+    /// When the current scene came up, in the UI's elapsed seconds.
+    since_s: f64,
+    held: bool,
 }
 
 /// Field pictures kept as textures at once (a switch of vehicle or schedule drops the lot).
@@ -226,6 +237,7 @@ impl Console {
             adapter,
             limits,
             orbit_cache: None,
+            kiosk: None,
             pending_textures,
         })
     }
@@ -390,6 +402,9 @@ impl Console {
 
     /// Apply one key press. All key bindings live here.
     pub fn handle_key(&mut self, key: KeyInput, world: &World) -> Outcome {
+        if self.kiosk.is_some() {
+            return self.kiosk_key(&key);
+        }
         if let Some(cmd) = self.cmd.as_mut() {
             match key {
                 KeyInput::Escape => self.cmd = None,
@@ -564,6 +579,75 @@ impl Console {
         }
     }
 
+    /// Turn this console into the Pi/CRT display, changing scene every `dwell_s` seconds.
+    pub fn set_kiosk(&mut self, dwell_s: f64) {
+        self.kiosk = Some(Kiosk {
+            dwell_s,
+            scene: 0,
+            since_s: self.now_s,
+            held: false,
+        });
+        self.toggles = EffectToggles::all(false);
+    }
+
+    /// Move the kiosk's cycle on when the dwell is up. Returns (scene, index, count, held) to draw, and
+    /// selects the scene's vehicle so pictures and the like follow it.
+    fn advance_kiosk(&mut self, world: &World) -> Option<(usize, usize, usize, bool)> {
+        let now = self.now_s;
+        let scenes = crate::kiosk::scenes(world);
+        let n = scenes.len().max(1);
+        let k = self.kiosk.as_mut()?;
+        k.scene %= n;
+        if let Some(sc) = scenes.get(k.scene)
+            && !k.held
+            && now - k.since_s >= sc.dwell_s(k.dwell_s)
+        {
+            k.scene = (k.scene + 1) % n;
+            k.since_s = now;
+        }
+        let out = (k.scene, k.scene, n, k.held);
+        if let Some(crate::kiosk::Scene::Vehicle(v)) = scenes.get(out.0) {
+            self.vehicle_id = v.id.clone();
+        }
+        Some(out)
+    }
+
+    /// Show scene `n` of the kiosk's cycle now (for screenshots).
+    pub fn set_kiosk_scene(&mut self, n: usize) {
+        if let Some(k) = self.kiosk.as_mut() {
+            k.scene = n;
+            k.since_s = self.now_s;
+        }
+    }
+
+    /// The display's keys: advance, hold, quit. Everything else is ignored, since nobody is operating it.
+    fn kiosk_key(&mut self, key: &KeyInput) -> Outcome {
+        let action = match key {
+            KeyInput::Char(c) => self.keys.action(c.to_ascii_lowercase()),
+            _ => None,
+        };
+        let Some(k) = self.kiosk.as_mut() else {
+            return Outcome::Continue;
+        };
+        match (key, action) {
+            (KeyInput::Escape, _) | (_, Some(KeyAction::Quit)) => return Outcome::Quit,
+            (KeyInput::Right | KeyInput::Down, _) | (_, Some(KeyAction::Vehicle)) => {
+                k.scene += 1;
+                k.since_s = self.now_s;
+            }
+            (KeyInput::Left | KeyInput::Up, _) => {
+                k.scene = k.scene.saturating_sub(1);
+                k.since_s = self.now_s;
+            }
+            (_, Some(KeyAction::Pause)) => {
+                k.held = !k.held;
+                k.since_s = self.now_s;
+            }
+            _ => {}
+        }
+        Outcome::Continue
+    }
+
     pub fn theme(&self) -> &Theme {
         &self.themes[self.theme_idx]
     }
@@ -596,6 +680,8 @@ impl Console {
         stats: &FrameStats,
     ) -> Prepared {
         let theme = self.themes[self.theme_idx].clone();
+        self.now_s = stats.elapsed_s;
+        let kiosk_scene = self.advance_kiosk(world);
         let (cw, ch) = (theme.font.cell_w_px, theme.font.cell_h_px);
         let (cols, rows) = (
             (size_px[0] as f32 / cw) as usize,
@@ -617,30 +703,47 @@ impl Console {
         {
             self.status = None;
         }
-        let layout = screens::render(
-            &mut grid,
-            &PageInput {
-                world,
-                vehicle,
-                theme: &theme,
-                toggles: self.toggles,
-                camera: &self.camera,
-                show_ecef: self.show_ecef,
-                limits: &self.limits,
-                frame_ms: stats.frame_ms,
-                gpu_ms: stats.gpu_ms,
-                adapter: &self.adapter,
-                size_px,
-                page: self.page,
-                sub: self.sub,
-                command: cmd_view.as_ref(),
-                status: self.status.as_ref().map(|(m, _)| m),
-                help: self.help,
-                trend_window_s: self.trend_window_s,
-                keys: &self.keys,
-                settings: &self.settings,
-            },
-        );
+        let layout = if let Some((scene, index, total, held)) = kiosk_scene {
+            let scenes = crate::kiosk::scenes(world);
+            match scenes.get(scene) {
+                Some(sc) => crate::kiosk::render(
+                    &mut grid,
+                    &crate::kiosk::KioskInput {
+                        world,
+                        scene: *sc,
+                        index,
+                        total,
+                        held,
+                    },
+                ),
+                None => Layout::default(),
+            }
+        } else {
+            screens::render(
+                &mut grid,
+                &PageInput {
+                    world,
+                    vehicle,
+                    theme: &theme,
+                    toggles: self.toggles,
+                    camera: &self.camera,
+                    show_ecef: self.show_ecef,
+                    limits: &self.limits,
+                    frame_ms: stats.frame_ms,
+                    gpu_ms: stats.gpu_ms,
+                    adapter: &self.adapter,
+                    size_px,
+                    page: self.page,
+                    sub: self.sub,
+                    command: cmd_view.as_ref(),
+                    status: self.status.as_ref().map(|(m, _)| m),
+                    help: self.help,
+                    trend_window_s: self.trend_window_s,
+                    keys: &self.keys,
+                    settings: &self.settings,
+                },
+            )
+        };
         let globe_px = layout.globe.map_or([0; 4], |r| cell_rect_px(&theme, r));
         let ground_px = layout.ground.map(|r| cell_rect_px(&theme, r));
         let eclipse_px = layout.eclipse.map(|r| cell_rect_px(&theme, r));
@@ -932,6 +1035,39 @@ mod tests {
             out = c.handle_key(KeyInput::Char(ch), w);
         }
         out
+    }
+
+    #[test]
+    fn the_kiosk_cycles_on_its_dwell_and_ignores_the_operating_keys() {
+        let (mut c, _rx) = console();
+        let w = crate::kiosk::test_world(3);
+        c.set_kiosk(10.0);
+        assert!(!c.toggles.any(), "the CRT does the effects");
+        assert_eq!(c.advance_kiosk(&w).map(|s| s.0), Some(0));
+        c.now_s = 9.0;
+        assert_eq!(
+            c.advance_kiosk(&w).map(|s| s.0),
+            Some(0),
+            "still within the dwell"
+        );
+        c.now_s = 10.5;
+        assert_eq!(c.advance_kiosk(&w).map(|s| s.0), Some(1));
+        assert_eq!(c.vehicle_id, "v0", "an interlude leaves the vehicle alone");
+        // An interlude is shorter than a vehicle's dwell.
+        c.now_s = 10.5 + 6.1;
+        assert_eq!(c.advance_kiosk(&w).map(|s| s.0), Some(2));
+        assert_eq!(c.vehicle_id, "v1");
+        // Effects and pages stay off; the hold key stops the cycle.
+        keys(&mut c, &w, "1234e");
+        c.handle_key(KeyInput::F(3), &w);
+        assert!(!c.toggles.any());
+        assert_eq!(c.page, Page::Master);
+        keys(&mut c, &w, " ");
+        c.now_s = 1.0e6;
+        let held = c.advance_kiosk(&w).unwrap();
+        assert!(held.3);
+        assert_eq!(held.0, 2, "held scenes do not advance");
+        assert_eq!(keys(&mut c, &w, "q"), Outcome::Quit);
     }
 
     #[test]

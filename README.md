@@ -30,6 +30,8 @@ tools/smoke.sh                   # render every page headless and check the imag
 mctl --no-record                 # do not record this run
 mctl --replay start              # play back the recording (start, an ISO epoch, or an offset such as -2h); also :replay in the console
 mctl shot --exec "burn add apo vnb 1 0 0;plan horizon 3" --pages traj:4   # set up console commands before a headless capture
+mctl --pi                        # the Raspberry Pi / CRT display, see docs/pi.md
+mctl --pi shot --out-dir /tmp/pi # one PNG per scene of that display
 ```
 
 The launcher runs `cargo build --release` (a no-op in ~0.3 s when nothing changed) and refuses to run a
@@ -42,6 +44,7 @@ Keys (all single-character keys are remappable under `[keys]` in the config): `F
 `W` cycles the trends window on TRAJ elements and trends. Orbit map only: drag with the left button inside the map to rotate, wheel to zoom there; arrows and
 `+`/`-` also work. `X` GCRF/ITRF, `Z` altitude exaggeration, `F` inertial/Earth-fixed, `C` focus,
 `1`-`4` effects, `E` all effects, `Q` quit.
+`SYS` sub-page 6 is a gallery of line art (Soyuz, Falcon 9, Cygnus, the Shuttle, Voyager, the Earth).
 
 ## Flags
 

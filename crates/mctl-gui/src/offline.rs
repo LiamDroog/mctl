@@ -232,6 +232,8 @@ pub struct ShotOptions {
     pub low_power: bool,
     /// Command lines run before the captures, e.g. `burn add apo vnb 1 0 0`.
     pub exec: Vec<String>,
+    /// Capture each scene of the Pi/CRT display instead of console pages.
+    pub kiosk: bool,
 }
 
 /// Expand `--pages` into (page, sub-page index) pairs.
@@ -276,7 +278,11 @@ pub fn shots(live: &Live, themes: Vec<Theme>, opts: &ShotOptions) -> Result<Vec<
                 .with_context(|| format!("unknown theme {name:?}"))?,
         ],
     };
-    let pages = expand_pages(&opts.pages)?;
+    let pages = if opts.kiosk {
+        Vec::new()
+    } else {
+        expand_pages(&opts.pages)?
+    };
     let mut written = Vec::new();
     for line in &opts.exec {
         let world = live.bus.latest();
@@ -287,6 +293,27 @@ pub fn shots(live: &Live, themes: Vec<Theme>, opts: &ShotOptions) -> Result<Vec<
     if !opts.exec.is_empty() {
         // Give the engine a moment to take the commands and publish the result.
         std::thread::sleep(std::time::Duration::from_secs(4));
+    }
+    if opts.kiosk {
+        // Held, so nothing advances on its own while a scene settles.
+        off.console.set_kiosk(f64::MAX);
+        let count = crate::kiosk::scenes(&live.bus.latest()).len();
+        for n in 0..count {
+            off.console.set_kiosk_scene(n);
+            for f in 0..opts.warmup_frames {
+                off.frame(f, 16.7)?;
+            }
+            let path = opts.out_dir.join(format!(
+                "kiosk-{n:02}-{}x{}.png",
+                opts.size[0], opts.size[1]
+            ));
+            off.capture()?
+                .save(&path)
+                .with_context(|| format!("writing {}", path.display()))?;
+            tracing::info!(path = %path.display(), "screenshot written");
+            written.push(path);
+        }
+        return Ok(written);
     }
     for idx in which {
         off.select_theme(idx);
@@ -685,6 +712,7 @@ mod tests {
             .to_vec(),
             low_power: false,
             exec: vec![],
+            kiosk: false,
         };
         shots(&live, themes, &opts).unwrap();
     }

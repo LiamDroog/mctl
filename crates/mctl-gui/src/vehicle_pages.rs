@@ -271,3 +271,42 @@ pub(crate) fn vehicle_page(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     }
     Layout::default()
 }
+
+/// SYS / GALLERY: the line art that is not tied to a configured vehicle, all turning together.
+pub(crate) fn gallery(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
+    let _ = inp;
+    let (cols, rows) = (grid.cols, grid.rows);
+    let (top, h) = body(rows);
+    let per_row = 3;
+    let lines = crate::art::EXTRAS.len().div_ceil(per_row);
+    let (tile_w, tile_h) = (cols / per_row, h / lines.max(1));
+    for (i, e) in crate::art::EXTRAS.iter().enumerate() {
+        let rect = CellRect::new(
+            (i % per_row) * tile_w,
+            top + (i / per_row) * tile_h,
+            tile_w,
+            tile_h,
+        );
+        boxed(grid, rect, e.title);
+        let inner = rect.inner();
+        grid.widget(Widget::Art {
+            rect: CellRect::new(
+                inner.col,
+                inner.row,
+                inner.cols,
+                inner.rows.saturating_sub(1),
+            ),
+            id: e.id.to_owned(),
+        });
+        grid.put(
+            inner.col + 1,
+            inner.row + inner.rows.saturating_sub(1),
+            &e.caption
+                .chars()
+                .take(inner.cols.saturating_sub(2))
+                .collect::<String>(),
+            Style::new(Role::Dim),
+        );
+    }
+    Layout::default()
+}

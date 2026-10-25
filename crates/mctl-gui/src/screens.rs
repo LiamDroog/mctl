@@ -1681,6 +1681,7 @@ pub fn render(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             (Page::Ops, _) => crate::deep::ops(grid, inp),
             (Page::Prox, _) => crate::vehicle_pages::prox(grid, inp),
             (Page::Sys, 4) => crate::vehicle_pages::vehicle_page(grid, inp),
+            (Page::Sys, 5) => crate::vehicle_pages::gallery(grid, inp),
             (Page::Master, _) => master(grid, inp),
             (Page::Traj, 0) => traj_orbit(grid, inp),
             (Page::Traj, 1) => traj_ground(grid, inp),

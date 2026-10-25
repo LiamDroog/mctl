@@ -39,6 +39,8 @@ pub struct Options {
     pub low_power: bool,
     pub exit_after_frames: Option<u64>,
     pub start_theme: Option<String>,
+    /// The Pi/CRT display: the seconds each scene stays up.
+    pub kiosk_dwell_s: Option<f64>,
     /// The running engine this window displays.
     pub live: crate::offline::Live,
 }
@@ -127,6 +129,8 @@ impl App {
             attrs = attrs.with_fullscreen(Some(Fullscreen::Borderless(None)));
         }
         let window = Arc::new(event_loop.create_window(attrs).context("creating window")?);
+        // Nobody is pointing at the Pi display.
+        window.set_cursor_visible(self.opts.kiosk_dwell_s.is_none());
         let instance = gpu::new_instance();
         let surface = instance
             .create_surface(window.clone())
@@ -162,6 +166,9 @@ impl App {
         console.set_keys(
             crate::keys::KeyMap::from_config(&self.opts.live.keys).map_err(anyhow::Error::msg)?,
         );
+        if let Some(d) = self.opts.kiosk_dwell_s {
+            console.set_kiosk(d);
+        }
         console.connect(
             Some(self.opts.live.commands.clone()),
             self.opts.live.settings.clone(),
