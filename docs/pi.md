@@ -10,13 +10,26 @@ What it changes:
   cells. Text keeps one row and two columns clear of the edge, because a CRT hides the border (overscan).
 - **No effects.** The `CRT` theme has scanlines, bloom, persistence and curvature all off, and keys `1`-`4`
   and `E` do nothing: the tube provides them. The theme is not in the `T` cycle and `--themes-dir` is ignored.
-- **Cycling.** Each vehicle is shown for `--dwell` seconds (default 20), followed by one piece of gallery art
-  (Soyuz, Falcon 9, Cygnus, the Shuttle, the Earth with an orbit, Voyager) for 60 % of that time.
+- **Cycling.** Each vehicle gets a run of scenes of `--dwell` seconds each (default 20), and one piece of
+  gallery art (Soyuz, Falcon 9, Cygnus, the Shuttle, the Earth with an orbit, Voyager) follows each
+  vehicle's art scene for 60 % of that time.
 - **Full screen, no cursor.** `--pi` implies `--fullscreen`.
 
-Each vehicle scene shows its line art turning over a starfield and the Earth's limb (or a small distant Earth
-at L2 for JWST and Roman), with three readouts down each side and two status lines under it: the next pass,
-the current observation, the day's Hubble programs, or the docked state, whichever the vehicle has.
+A vehicle's scenes are the console's visual pages in the console's own frames, redrawn at this size, for
+whichever the vehicle has data for:
+
+| Scene | From the console | For |
+|---|---|---|
+| line art | SYS / VEHICLE | every vehicle: turning over a starfield and the Earth's limb, with three readouts a side and two status lines |
+| ORBIT MAP | TRAJ orbit map (the 3D Earth, turning by itself); HALO ORBIT for JWST and Roman | Earth orbit, L2 |
+| GROUND TRACK | TRAJ ground track | Earth orbit |
+| SKY PLOT | PASS sky plot | when a pass is predicted |
+| R-BAR / V-BAR | PROX | when a visitor is not docked |
+| pictures | OPS survey pictures of the current and next target | when a picture has arrived |
+
+Docked Dragons show only their art, since their maps would repeat the station's. The telemetry pages (GNC, EPS,
+TCS/ECLSS, COMM, SYS) and the tables are not reproduced: they are unreadable on a 15 kHz tube and no use to
+look at.
 
 Keys: `V` or Right next scene, Left previous, Space hold or resume the cycle, `Q` or Esc quit.
 

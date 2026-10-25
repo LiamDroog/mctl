@@ -125,6 +125,9 @@ impl Drop for Console {
     }
 }
 
+/// How fast the kiosk's orbit map turns, degrees per second.
+const KIOSK_DRIFT_DEG_S: f64 = 6.0;
+
 /// State of the kiosk display's cycle.
 struct Kiosk {
     dwell_s: f64,
@@ -132,6 +135,8 @@ struct Kiosk {
     /// When the current scene came up, in the UI's elapsed seconds.
     since_s: f64,
     held: bool,
+    /// The UI's elapsed seconds at the last frame, for the camera's drift.
+    last_s: f64,
 }
 
 /// Field pictures kept as textures at once (a switch of vehicle or schedule drops the lot).
@@ -586,17 +591,22 @@ impl Console {
             scene: 0,
             since_s: self.now_s,
             held: false,
+            last_s: self.now_s,
         });
         self.toggles = EffectToggles::all(false);
     }
 
-    /// Move the kiosk's cycle on when the dwell is up. Returns (scene, index, count, held) to draw, and
+    /// Move the kiosk's cycle on when the dwell is up. Returns (scene, held) to draw, and
     /// selects the scene's vehicle so pictures and the like follow it.
-    fn advance_kiosk(&mut self, world: &World) -> Option<(usize, usize, usize, bool)> {
+    fn advance_kiosk(&mut self, world: &World) -> Option<(usize, bool)> {
         let now = self.now_s;
         let scenes = crate::kiosk::scenes(world);
         let n = scenes.len().max(1);
         let k = self.kiosk.as_mut()?;
+        // The orbit map turns slowly by itself, since nobody is there to drag it.
+        let dt = (now - k.last_s).clamp(0.0, 0.5);
+        k.last_s = now;
+        self.camera.orbit_by((KIOSK_DRIFT_DEG_S * dt) as f32, 0.0);
         k.scene %= n;
         if let Some(sc) = scenes.get(k.scene)
             && !k.held
@@ -605,8 +615,8 @@ impl Console {
             k.scene = (k.scene + 1) % n;
             k.since_s = now;
         }
-        let out = (k.scene, k.scene, n, k.held);
-        if let Some(crate::kiosk::Scene::Vehicle(v)) = scenes.get(out.0) {
+        let out = (k.scene, k.held);
+        if let Some(crate::kiosk::Scene::Vehicle(v, _)) = scenes.get(out.0) {
             self.vehicle_id = v.id.clone();
         }
         Some(out)
@@ -703,7 +713,7 @@ impl Console {
         {
             self.status = None;
         }
-        let layout = if let Some((scene, index, total, held)) = kiosk_scene {
+        let layout = if let Some((scene, held)) = kiosk_scene {
             let scenes = crate::kiosk::scenes(world);
             match scenes.get(scene) {
                 Some(sc) => crate::kiosk::render(
@@ -711,8 +721,6 @@ impl Console {
                     &crate::kiosk::KioskInput {
                         world,
                         scene: *sc,
-                        index,
-                        total,
                         held,
                     },
                 ),
@@ -1065,7 +1073,7 @@ mod tests {
         keys(&mut c, &w, " ");
         c.now_s = 1.0e6;
         let held = c.advance_kiosk(&w).unwrap();
-        assert!(held.3);
+        assert!(held.1);
         assert_eq!(held.0, 2, "held scenes do not advance");
         assert_eq!(keys(&mut c, &w, "q"), Outcome::Quit);
     }

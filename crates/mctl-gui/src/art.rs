@@ -353,6 +353,15 @@ fn dragon_crew() -> Model {
             false,
         );
     }
+    // Heat shield rings, and four SuperDraco pods round the capsule.
+    for r in [1.4, 0.9, 0.4] {
+        m.ring_y(12, r, 0.0, (0.0, 0.0), false);
+    }
+    for i in 0..4 {
+        let a = (45.0 + i as f32 * 90.0).to_radians();
+        let (c, s) = (1.7 * a.cos(), 1.7 * a.sin());
+        m.cuboid([c - 0.2, 0.7, s - 0.2], [c + 0.2, 1.3, s + 0.2], false);
+    }
     // Windows and thruster pods on the capsule.
     for a in [20.0f32, 60.0, 100.0] {
         let (s, c) = a.to_radians().sin_cos();
@@ -716,6 +725,52 @@ pub fn paint(painter: &Painter, theme: &Theme, rect_px: [u32; 4], m: &Model, t_s
         0.0,
         Color32::TRANSPARENT,
     );
+    // A turntable under the model: a flat ring with ticks, so it stands on something.
+    let floor = m
+        .segs
+        .iter()
+        .flat_map(|s| [s.a[1], s.b[1]])
+        .fold(f32::MAX, f32::min);
+    let (lo, hi) = m
+        .segs
+        .iter()
+        .flat_map(|s| [s.a[1], s.b[1]])
+        .fold((f32::MAX, f32::MIN), |(l, h), y| (l.min(y), h.max(y)));
+    let ring_r = r * 0.95;
+    let ring_y = floor - r * 0.06;
+    let ring: Vec<Pos2> = (0..=48)
+        .map(|i| {
+            let a = i as f32 / 48.0 * std::f32::consts::TAU;
+            project(
+                [ring_r * a.cos(), ring_y, ring_r * a.sin()],
+                yaw,
+                tilt,
+                fit,
+                r,
+                c,
+            )
+            .0
+        })
+        .collect();
+    painter.add(Shape::line(ring, Stroke::new(k, with_alpha(mid, 70))));
+    for i in 0..12 {
+        let a = i as f32 / 12.0 * std::f32::consts::TAU + yaw;
+        let (s, co) = a.sin_cos();
+        let p0 = project([ring_r * co, ring_y, ring_r * s], 0.0, tilt, fit, r, c).0;
+        let p1 = project(
+            [ring_r * 1.08 * co, ring_y, ring_r * 1.08 * s],
+            0.0,
+            tilt,
+            fit,
+            r,
+            c,
+        )
+        .0;
+        painter.line_segment([p0, p1], Stroke::new(k, with_alpha(mid, 90)));
+    }
+    // A bright band sweeps up the model every few seconds, lighting the lines it passes.
+    let sweep = lo + (hi - lo) * ((t_s as f32 * 0.25) % 1.4 - 0.2);
+    let band = (hi - lo).max(1.0) * 0.07;
     for s in &m.segs {
         let ((a, za), (b, zb)) = (
             project(s.a, yaw, tilt, fit, r, c),
@@ -724,8 +779,15 @@ pub fn paint(painter: &Painter, theme: &Theme, rect_px: [u32; 4], m: &Model, t_s
         // Far lines fade: depth in model units over the model radius.
         let depth = ((za + zb) * 0.5 / r).clamp(-1.0, 1.0);
         let near = 0.55 + 0.45 * (depth * 0.5 + 0.5);
-        let col = if s.major { bright } else { mid };
-        let alpha = (255.0 * near * if s.major { 1.0 } else { 0.75 }) as u8;
+        let glint = (1.0 - ((s.a[1] + s.b[1]) * 0.5 - sweep).abs() / band).clamp(0.0, 1.0);
+        let col = if glint > 0.0 {
+            Color32::WHITE
+        } else if s.major {
+            bright
+        } else {
+            mid
+        };
+        let alpha = (255.0 * near * if s.major { 1.0 } else { 0.75 }).max(255.0 * glint) as u8;
         painter.add(Shape::line_segment(
             [a, b],
             Stroke::new(

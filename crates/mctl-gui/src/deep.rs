@@ -18,7 +18,7 @@ const DISTANCE_BAR_FULL_KM: f64 = 2.0e6;
 /// Off-axis angle (deg) for a full gauge; JWST's halo reaches about 30 degrees from Earth.
 const OFF_AXIS_BAR_FULL_DEG: f64 = 45.0;
 
-fn plot(grid: &mut Grid, rect: CellRect, title: &str, kind: PlotKind) {
+pub(crate) fn plot(grid: &mut Grid, rect: CellRect, title: &str, kind: PlotKind) {
     boxed(grid, rect, title);
     grid.widget(Widget::Plot {
         rect: rect.inner(),
@@ -357,7 +357,7 @@ fn fmt_dec(deg: f64) -> String {
 }
 
 /// One picture with its caption: label as the box title, the image above, the caption lines under it.
-fn field_cell(grid: &mut Grid, rect: CellRect, f: &FieldView) {
+fn field_cell(grid: &mut Grid, rect: CellRect, f: &FieldView, compact: bool) {
     boxed(
         grid,
         rect,
@@ -387,19 +387,23 @@ fn field_cell(grid: &mut Grid, rect: CellRect, f: &FieldView) {
             lines.push((truncate(target, w), bright));
             lines.push((format!("RA  {}", fmt_ra(*ra_deg)), fg));
             lines.push((format!("DEC {}", fmt_dec(*dec_deg)), fg));
-            for l in wrap(
-                &format!(
-                    "{} {:.0}' FIELD {}",
-                    survey.to_uppercase(),
-                    fov_deg * 60.0,
-                    crate::flags::SURVEY
-                ),
-                w,
-            ) {
-                lines.push((l, dim));
-            }
-            for l in wrap(&format!("POSITION: {}", origin.to_uppercase()), w) {
-                lines.push((l, dim));
+            if compact {
+                lines.push((crate::flags::SURVEY.to_owned(), dim));
+            } else {
+                for l in wrap(
+                    &format!(
+                        "{} {:.0}' FIELD {}",
+                        survey.to_uppercase(),
+                        fov_deg * 60.0,
+                        crate::flags::SURVEY
+                    ),
+                    w,
+                ) {
+                    lines.push((l, dim));
+                }
+                for l in wrap(&format!("POSITION: {}", origin.to_uppercase()), w) {
+                    lines.push((l, dim));
+                }
             }
             widget_key = Some(f.key.clone());
         }
@@ -435,11 +439,12 @@ fn field_cell(grid: &mut Grid, rect: CellRect, f: &FieldView) {
 }
 
 /// Pictures side by side across `rect`; `caption` supplies each box title.
-fn field_strip(
+pub(crate) fn field_strip(
     grid: &mut Grid,
     rect: CellRect,
     fields: &[std::sync::Arc<FieldView>],
     caption: &dyn Fn(usize, &FieldView) -> String,
+    compact: bool,
 ) {
     if fields.is_empty() {
         boxed(grid, rect, "WHAT IT IS LOOKING AT");
@@ -458,6 +463,7 @@ fn field_strip(
             grid,
             CellRect::new(rect.col + i * w, rect.row, cw, rect.rows),
             &named,
+            compact,
         );
     }
 }
@@ -517,6 +523,7 @@ pub(crate) fn ops(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
                             .is_some_and(|t| f.key == format!("target:{t}"));
                     format!("{} {what}", if is_now { "NOW" } else { "NEXT" })
                 },
+                false,
             );
             plot(
                 grid,
@@ -553,6 +560,7 @@ pub(crate) fn ops(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
                 CellRect::new(0, top + 5, cols, strip_h),
                 &fields,
                 &|_, f| f.label.clone(),
+                false,
             );
             let lists = CellRect::new(0, top + 5 + strip_h, cols, h.saturating_sub(5 + strip_h));
             let w = lists.cols / 3;

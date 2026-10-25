@@ -8,8 +8,9 @@ use mctl_core::schedule::Ops;
 use mctl_core::world::{VehicleView, World};
 
 use crate::art::{EXTRAS, Extra};
-use crate::grid::{CellRect, Grid, Limit, Role, Style, Widget};
+use crate::grid::{CellRect, Grid, Limit, PlotKind, Role, Style, Widget};
 use crate::page::{Layout, fmt_dur};
+use crate::screens::boxed;
 
 /// Seconds each vehicle is shown, unless `--dwell` says otherwise.
 pub const DEFAULT_DWELL_S: f64 = 20.0;
@@ -23,9 +24,34 @@ const FOOTER_ROWS: usize = 4;
 const SAFE_ROWS: usize = 1;
 const SAFE_COLS: usize = 2;
 
+/// What a vehicle's scene shows: the line art, or one of the console's pictorial pages.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum View {
+    Art,
+    Orbit,
+    Ground,
+    Sky,
+    Prox,
+    Ops,
+}
+
+impl View {
+    fn title(self, regime: Regime) -> &'static str {
+        match (self, regime) {
+            (Self::Art, _) => "",
+            (Self::Orbit, Regime::L2) => "HALO ORBIT",
+            (Self::Orbit, _) => "ORBIT MAP",
+            (Self::Ground, _) => "GROUND TRACK",
+            (Self::Sky, _) => "SKY PLOT",
+            (Self::Prox, _) => "R-BAR / V-BAR",
+            (Self::Ops, _) => "OBSERVING  [PLAN]",
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub enum Scene<'a> {
-    Vehicle(&'a VehicleView),
+    Vehicle(&'a VehicleView, View),
     Extra(&'static Extra),
 }
 
@@ -33,20 +59,67 @@ impl Scene<'_> {
     /// How long the scene stays up, given the dwell for a vehicle.
     pub fn dwell_s(&self, dwell_s: f64) -> f64 {
         match self {
-            Self::Vehicle(_) => dwell_s,
+            Self::Vehicle(..) => dwell_s,
             Self::Extra(_) => dwell_s * EXTRA_DWELL_FRACTION,
         }
     }
 }
 
-/// The cycle: every vehicle, each followed by one piece of gallery art until that runs out.
+/// The views a vehicle has data for, the art first. Telemetry-only pages (GNC, EPS, TCS, COMM, SYS) have no
+/// place on a display meant to be looked at.
+fn views_of(world: &World, v: &VehicleView) -> Vec<View> {
+    let mut out = vec![View::Art];
+    // A docked vehicle shares its host's orbit: the same maps would be shown twice.
+    let docked = v.visits.is_some()
+        && world
+            .prox
+            .iter()
+            .any(|p| p.chaser == v.id && p.state == mctl_core::prox::ProxState::Docked);
+    match v.regime {
+        _ if docked => {}
+        Regime::Earth => {
+            if v.solution.is_some() {
+                out.extend([View::Orbit, View::Ground]);
+            }
+            if v.passes.iter().any(|set| !set.passes.is_empty()) {
+                out.push(View::Sky);
+            }
+        }
+        Regime::L2 => {
+            if v.deep.is_some() {
+                out.push(View::Orbit);
+            }
+        }
+    }
+    // A plot of vehicles that are all docked has nothing to show.
+    if world.prox.iter().any(|p| {
+        (p.chaser == v.id || p.target == v.id) && p.state != mctl_core::prox::ProxState::Docked
+    }) {
+        out.push(View::Prox);
+    }
+    // Pictures are the point of this view: without one there is nothing to look at.
+    if v.fields
+        .iter()
+        .any(|f| matches!(f.state, mctl_core::schedule::FieldState::Ready { .. }))
+    {
+        out.push(View::Ops);
+    }
+    out
+}
+
+/// The cycle: each vehicle's views in turn, one piece of gallery art after each vehicle's art until the
+/// gallery runs out.
 pub fn scenes(world: &World) -> Vec<Scene<'_>> {
     let mut out = Vec::new();
     let mut extras = EXTRAS.iter();
     for v in &world.vehicles {
-        out.push(Scene::Vehicle(v));
-        if let Some(e) = extras.next() {
-            out.push(Scene::Extra(e));
+        for view in views_of(world, v) {
+            out.push(Scene::Vehicle(v, view));
+            if view == View::Art
+                && let Some(e) = extras.next()
+            {
+                out.push(Scene::Extra(e));
+            }
         }
     }
     out.extend(extras.map(Scene::Extra));
@@ -56,8 +129,6 @@ pub fn scenes(world: &World) -> Vec<Scene<'_>> {
 pub struct KioskInput<'a> {
     pub world: &'a World,
     pub scene: Scene<'a>,
-    pub index: usize,
-    pub total: usize,
     pub held: bool,
 }
 
@@ -247,6 +318,94 @@ fn status(world: &World, v: &VehicleView, width: usize) -> [(String, Style); 2] 
     ]
 }
 
+/// Position lines for the map views: where the vehicle is.
+fn position_lines(v: &VehicleView) -> [(String, Style); 2] {
+    let (bright, fg) = (Style::new(Role::Bright), Style::new(Role::Fg));
+    if let Some(d) = v.deep.as_ref().filter(|_| v.regime == Regime::L2) {
+        return [
+            (
+                format!(
+                    "{:.2} M KM FROM EARTH   {:.2} KM/S",
+                    d.dist_km / 1.0e6,
+                    d.speed_km_s
+                ),
+                bright,
+            ),
+            (format!("LIGHT TIME {:.1} S", d.light_time_s), fg),
+        ];
+    }
+    let Some(s) = v.solution.as_ref() else {
+        return [("NO SOLUTION YET".to_owned(), fg), (String::new(), fg)];
+    };
+    let g = &s.geodetic;
+    [
+        (
+            format!("{:.0} KM UP   {:.2} KM/S", g.alt_km, s.state_gcrf.v.norm()),
+            bright,
+        ),
+        (
+            format!(
+                "{:.1} {}   {:.1} {}",
+                g.lat_deg.abs(),
+                if g.lat_deg >= 0.0 { 'N' } else { 'S' },
+                g.lon_deg.abs(),
+                if g.lon_deg >= 0.0 { 'E' } else { 'W' }
+            ),
+            fg,
+        ),
+    ]
+}
+
+/// The body of a pictorial view: the console's own panels, in its own frames, at this size.
+fn view_body(grid: &mut Grid, rect: CellRect, v: &VehicleView, view: View) -> Layout {
+    let mut layout = Layout::default();
+    match view {
+        View::Art => {}
+        View::Orbit if v.regime == Regime::L2 => {
+            crate::deep::plot(grid, rect, "HALO ORBIT  VIEW FROM EARTH", PlotKind::Halo);
+        }
+        View::Orbit => {
+            boxed(grid, rect, view.title(v.regime));
+            layout.globe = Some(rect.inner());
+        }
+        View::Ground => {
+            boxed(grid, rect, view.title(v.regime));
+            layout.ground = Some(rect.inner());
+        }
+        View::Sky => {
+            boxed(grid, rect, view.title(v.regime));
+            layout.sky = Some(rect.inner());
+        }
+        View::Prox => {
+            boxed(grid, rect, view.title(v.regime));
+            grid.widget(Widget::Plot {
+                rect: rect.inner(),
+                kind: PlotKind::Prox,
+            });
+        }
+        View::Ops => match v.ops.as_ref() {
+            Some(Ops::Jwst(_)) => {
+                let fields: Vec<_> = v.fields.iter().take(2).cloned().collect();
+                crate::deep::field_strip(
+                    grid,
+                    rect,
+                    &fields,
+                    &|i, f| {
+                        let what = f.label.split_whitespace().next().unwrap_or_default();
+                        format!("{} {what}", if i == 0 { "NOW" } else { "NEXT" })
+                    },
+                    true,
+                );
+            }
+            _ => {
+                let fields: Vec<_> = v.fields.iter().take(2).cloned().collect();
+                crate::deep::field_strip(grid, rect, &fields, &|_, f| f.label.clone(), true);
+            }
+        },
+    }
+    layout
+}
+
 pub fn render(grid: &mut Grid, inp: &KioskInput<'_>) -> Layout {
     let (cols, rows) = (grid.cols, grid.rows);
     let (bright, fg, dim, border) = (
@@ -258,6 +417,12 @@ pub fn render(grid: &mut Grid, inp: &KioskInput<'_>) -> Layout {
     let bottom = rows.saturating_sub(SAFE_ROWS);
     let picture_rows = bottom.saturating_sub(SAFE_ROWS + HEADER_ROWS + FOOTER_ROWS);
     let picture = CellRect::new(0, SAFE_ROWS + HEADER_ROWS, cols, picture_rows);
+    let framed = CellRect::new(
+        SAFE_COLS,
+        picture.row,
+        cols.saturating_sub(2 * SAFE_COLS),
+        picture_rows,
+    );
 
     // Header: the product on the left, the UTC time on the right, the subject in the middle.
     grid.put(SAFE_COLS, SAFE_ROWS, "MCTL", fg);
@@ -268,27 +433,36 @@ pub fn render(grid: &mut Grid, inp: &KioskInput<'_>) -> Layout {
         &format!("{} UTC", utc.get(11..19).unwrap_or("--:--:--")),
         fg,
     );
-
     let (title, art_id, earth) = match inp.scene {
-        Scene::Vehicle(v) => (vehicle_name(v), v.id.as_str(), v.regime == Regime::Earth),
+        Scene::Vehicle(v, _) => (vehicle_name(v), v.id.as_str(), v.regime == Regime::Earth),
         Scene::Extra(e) => (e.title.to_owned(), e.id, true),
     };
     centre(grid, SAFE_ROWS, &title, bright);
 
-    grid.widget(Widget::Backdrop {
-        rect: picture,
-        earth,
-    });
-    grid.widget(Widget::Art {
-        rect: picture,
-        id: art_id.to_owned(),
-    });
+    let mut layout = Layout::default();
+    let art_scene = matches!(inp.scene, Scene::Extra(_) | Scene::Vehicle(_, View::Art));
+    if art_scene {
+        grid.widget(Widget::Backdrop {
+            rect: picture,
+            earth,
+        });
+        grid.widget(Widget::Art {
+            rect: picture,
+            id: art_id.to_owned(),
+        });
+    } else if let Scene::Vehicle(v, view) = inp.scene {
+        layout = view_body(grid, framed, v, view);
+    }
 
-    let rule = "─".repeat(cols.saturating_sub(2 * SAFE_COLS));
     let footer = bottom.saturating_sub(FOOTER_ROWS);
-    grid.put(SAFE_COLS, footer, &rule, border);
+    grid.put(
+        SAFE_COLS,
+        footer,
+        &"─".repeat(cols.saturating_sub(2 * SAFE_COLS)),
+        border,
+    );
     match inp.scene {
-        Scene::Vehicle(v) => {
+        Scene::Vehicle(v, View::Art) => {
             let (l, r) = readouts(v);
             for (i, (label, value)) in l.iter().enumerate() {
                 let row = picture.row + 1 + i * 3;
@@ -305,14 +479,29 @@ pub fn render(grid: &mut Grid, inp: &KioskInput<'_>) -> Layout {
                 centre(grid, footer + 1 + i, text, *style);
             }
         }
+        Scene::Vehicle(v, View::Orbit | View::Ground) => {
+            for (i, (text, style)) in position_lines(v).iter().enumerate() {
+                centre(grid, footer + 1 + i, text, *style);
+            }
+        }
+        Scene::Vehicle(v, _) => {
+            let lines = status(inp.world, v, cols.saturating_sub(2 * SAFE_COLS));
+            for (i, (text, style)) in lines.iter().enumerate() {
+                centre(grid, footer + 1 + i, text, *style);
+            }
+        }
         Scene::Extra(e) => {
             centre(grid, footer + 1, e.caption, bright);
         }
     }
 
-    // One mark per scene; the current one is filled. A held display says so.
-    let marks: String = (0..inp.total)
-        .map(|i| if i == inp.index { "■ " } else { "· " })
+    // One mark per vehicle; the current one is filled. A held display says so.
+    let current = match inp.scene {
+        Scene::Vehicle(v, _) => inp.world.vehicles.iter().position(|w| w.id == v.id),
+        Scene::Extra(_) => None,
+    };
+    let marks = (0..inp.world.vehicles.len())
+        .map(|i| if Some(i) == current { "■ " } else { "· " })
         .collect::<String>()
         .trim_end()
         .to_owned();
@@ -323,10 +512,8 @@ pub fn render(grid: &mut Grid, inp: &KioskInput<'_>) -> Layout {
     };
     centre(grid, bottom.saturating_sub(1), &marks, dim);
 
-    Layout {
-        widgets: grid.take_widgets(),
-        ..Layout::default()
-    }
+    layout.widgets = grid.take_widgets();
+    layout
 }
 
 #[cfg(test)]
@@ -369,7 +556,7 @@ mod tests {
         let cycle = scenes(&world);
         let vehicles = cycle
             .iter()
-            .filter(|s| matches!(s, Scene::Vehicle(_)))
+            .filter(|s| matches!(s, Scene::Vehicle(..)))
             .count();
         let extras = cycle
             .iter()
@@ -378,8 +565,24 @@ mod tests {
         assert_eq!(vehicles, world.vehicles.len());
         assert_eq!(extras, EXTRAS.len());
         assert!(
-            matches!(cycle[0], Scene::Vehicle(_)),
+            matches!(cycle[0], Scene::Vehicle(..)),
             "it opens on a vehicle"
+        );
+    }
+
+    #[test]
+    fn a_vehicle_gets_only_the_views_it_has_data_for() {
+        let mut w = test_world(1);
+        assert_eq!(
+            views_of(&w, &w.vehicles[0]),
+            [View::Art],
+            "no data, no maps"
+        );
+        w.vehicles[0].schedule = Some("jwst".into());
+        assert_eq!(
+            views_of(&w, &w.vehicles[0]),
+            [View::Art],
+            "a schedule with no picture is not worth a scene"
         );
     }
 
