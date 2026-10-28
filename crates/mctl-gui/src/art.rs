@@ -809,13 +809,16 @@ pub fn paint(painter: &Painter, theme: &Theme, rect_px: [u32; 4], m: &Model, t_s
             mid
         };
         let alpha = (255.0 * near * if s.major { 1.0 } else { 0.75 }).max(255.0 * glint) as u8;
-        painter.add(Shape::line_segment(
-            [a, b],
-            Stroke::new(
-                k * if s.major { 5.0 } else { 3.5 },
-                with_alpha(col, alpha / 7),
-            ),
-        ));
+        // The glow is a wide faint copy of the line; a CRT makes its own, and it doubles the drawing.
+        if !theme.flat {
+            painter.add(Shape::line_segment(
+                [a, b],
+                Stroke::new(
+                    k * if s.major { 5.0 } else { 3.5 },
+                    with_alpha(col, alpha / 7),
+                ),
+            ));
+        }
         painter.add(Shape::line_segment(
             [a, b],
             Stroke::new(k * if s.major { 1.8 } else { 1.1 }, with_alpha(col, alpha)),

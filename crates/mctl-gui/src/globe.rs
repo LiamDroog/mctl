@@ -13,6 +13,8 @@ use crate::coast::MaskLevel;
 use crate::theme::{GlobeMode, GlobeStyle};
 
 /// Earth equatorial radius, km (WGS-84): the scene's unit of length.
+/// Widest Earth texture used on a software adapter, pixels.
+const SOFTWARE_TEXTURE_MAX_W: u32 = 2048;
 pub(crate) const EARTH_RADIUS_KM: f32 = 6378.137;
 
 /// Radial exaggeration steps for the orbit; always labelled in the panel title (DESIGN.md §9.6).
@@ -321,6 +323,7 @@ pub struct GlobePass {
 }
 
 impl GlobePass {
+    #[allow(clippy::too_many_arguments)]
     /// `earth_jpeg` is the colour texture and `night_jpeg` the city lights; `mask` is the coastline mip chain.
     pub fn new(
         device: &wgpu::Device,
@@ -328,12 +331,24 @@ impl GlobePass {
         target_format: wgpu::TextureFormat,
         earth_jpeg: &[u8],
         night_jpeg: &[u8],
+        software: bool,
         mask: &[MaskLevel],
         style: GlobeStyle,
     ) -> Result<Self> {
         let img = image::load_from_memory_with_format(earth_jpeg, image::ImageFormat::Jpeg)
             .context("decoding embedded Earth texture")?
             .to_rgba8();
+        // A CPU rasteriser pays for every texel it touches: use the half-size picture.
+        let img = if software && img.width() > SOFTWARE_TEXTURE_MAX_W {
+            image::imageops::resize(
+                &img,
+                SOFTWARE_TEXTURE_MAX_W,
+                img.height() * SOFTWARE_TEXTURE_MAX_W / img.width(),
+                image::imageops::FilterType::Triangle,
+            )
+        } else {
+            img
+        };
         let (iw, ih) = img.dimensions();
         ensure!(
             iw >= 2 && ih >= 2,
@@ -396,7 +411,7 @@ impl GlobePass {
             min_filter: wgpu::FilterMode::Linear,
             mipmap_filter: wgpu::MipmapFilterMode::Linear,
             // The limb and the window view look at the surface edge-on.
-            anisotropy_clamp: 8,
+            anisotropy_clamp: if software { 1 } else { 8 },
             ..Default::default()
         });
         let vis = wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT;

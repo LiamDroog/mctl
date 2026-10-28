@@ -28,6 +28,7 @@ pub fn create(
     instance: &wgpu::Instance,
     surface: Option<&wgpu::Surface<'_>>,
     low_power: bool,
+    allow_software: bool,
 ) -> Result<Gpu> {
     let available = pollster::block_on(instance.enumerate_adapters(wgpu::Backends::all()));
     for a in &available {
@@ -50,10 +51,13 @@ pub fn create(
 
     let info = adapter.get_info();
     if info.device_type == wgpu::DeviceType::Cpu {
-        bail!(
-            "only a software adapter is available ({}); refusing to run the GPU spike on it",
-            describe(&info)
-        );
+        if !allow_software {
+            bail!(
+                "only a software adapter is available ({}); refusing to run on it (--allow-software overrides)",
+                describe(&info)
+            );
+        }
+        tracing::warn!(adapter = %describe(&info), "running on a software adapter: expect a low frame rate");
     }
     tracing::info!(adapter = %describe(&info), "adapter selected");
 

@@ -44,6 +44,7 @@ impl Theme {
     /// This theme as the CRT shows it: the display font and no effects, since the tube supplies them.
     fn for_crt(mut self, font: &FontSpec) -> Self {
         self.font = font.clone();
+        self.flat = true;
         self.effects.scanlines.enabled = false;
         self.effects.bloom.enabled = false;
         self.effects.persistence.enabled = false;
@@ -238,6 +239,10 @@ pub struct Theme {
     pub limit: LimitStyles,
     pub effects: Effects,
     pub globe: GlobeStyle,
+    /// Draw the cheap way: no glow passes and no line anti-aliasing. For a CRT, which supplies both, and for
+    /// software rendering.
+    #[serde(default)]
+    pub flat: bool,
 }
 
 impl Theme {

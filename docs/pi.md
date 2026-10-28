@@ -67,3 +67,19 @@ a starting point.
    simplest: `cage -- mctl --pi`.
 
 The network is the only other need: with no network, `mctl --pi --offline` runs from the cache.
+
+## Running it as a service
+
+`packaging/pi/mctl-display.service` runs `cage -- mctl --pi` on the Pi's first screen at boot (with the desktop
+off: `sudo systemctl set-default multi-user.target`). It expects the binary at `~/mctl/bin/mctl` for user `liam`;
+edit `User=` and `ExecStart=` to suit. `--pi` caps the frame rate at 20 (`--max-fps` overrides) and turns on
+`--allow-software`, since a Pi 3 has no Vulkan GPU and runs Mesa's software renderer (llvmpipe). The CRT themes
+draw "flat" (no glow passes or line anti-aliasing), and a software adapter gets a 2048 px Earth texture.
+
+On a Pi 3B+ measured offline: pictures about 34 fps and the dense console pages about 15 fps, before the 20 fps
+cap; live data costs more. The crop is set with `margin_left`, `margin_right`, `margin_top` and `margin_bottom`
+on the `video=Composite-1:...` option in `/boot/firmware/cmdline.txt`.
+
+Cross-building for the Pi from another machine needs an aarch64 C compiler (`gcc-aarch64-linux-gnu`) and a
+copy of the Pi's `usr/include` and `usr/lib` to use as the sysroot, so the binary links against the Pi's glibc.
+If SSH to the Pi stalls over Wi-Fi, set `IPQoS none` in both `ssh_config` and the Pi's `sshd_config.d`.

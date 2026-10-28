@@ -596,6 +596,8 @@ impl Console {
             last_s: self.now_s,
         });
         self.toggles = EffectToggles::all(false);
+        // No anti-aliasing fringe on lines and shapes: a CRT softens them anyway, and it is a lot of triangles.
+        self.ctx.tessellation_options_mut(|o| o.feathering = false);
     }
 
     /// Move the kiosk's cycle on when the dwell is up. Returns (scene, held) to draw, and

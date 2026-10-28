@@ -35,6 +35,7 @@ pub fn build_globe(gpu: &Gpu, theme: &Theme) -> Result<GlobePass> {
         SCENE_FORMAT,
         assets::EARTH_JPEG,
         assets::NIGHT_JPEG,
+        gpu.info.device_type == wgpu::DeviceType::Cpu,
         &mask,
         theme.globe.clone(),
     )
@@ -86,7 +87,7 @@ impl Offline {
         low_power: bool,
     ) -> Result<Self> {
         let instance = gpu::new_instance();
-        let gpu = Arc::new(gpu::create(&instance, None, low_power)?);
+        let gpu = Arc::new(gpu::create(&instance, None, low_power, false)?);
         let console = Console::new(
             themes,
             start_theme,

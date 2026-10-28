@@ -2,6 +2,7 @@
 # scanlines, glow and curvature, so every effect here is off. Colours are saturated and few, since
 # composite video smears fine detail and desaturates dark colours.
 name = "CRT"
+flat = true
 
 [font]
 family = "unscii"   # an 8 px bitmap font drawn at 3x: crisp on a 15 kHz tube

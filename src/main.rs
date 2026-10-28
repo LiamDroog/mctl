@@ -18,6 +18,8 @@ use tracing_subscriber::util::SubscriberInitExt;
 const DEFAULT_WINDOW_SIZE: &str = "1920x1080";
 /// The window of the Raspberry Pi display: what the Pi's composite output gives a 4:3 NTSC tube.
 const PI_WINDOW_SIZE: &str = "640x480";
+/// The Pi display's frame-rate cap: enough for turning art, and it leaves CPU for the engine and sources.
+const PI_MAX_FPS: f32 = 20.0;
 const DEFAULT_BENCH_SIZES: &str = "1920x1080,2560x1440";
 /// How long `shot` and `bench` wait for the sources to deliver before rendering what they have.
 const DEFAULT_WAIT_S: f64 = 25.0;
@@ -80,6 +82,9 @@ struct Cli {
     /// Prefer the low-power (integrated) adapter.
     #[arg(long, global = true)]
     low_power: bool,
+    /// Run on a software (CPU) graphics adapter instead of refusing to; `--pi` implies it.
+    #[arg(long, global = true)]
+    allow_software: bool,
     /// Do not record to the database this run.
     #[arg(long, global = true)]
     no_record: bool,
@@ -92,6 +97,9 @@ struct Cli {
     /// With `--pi`, which scenes to cycle through.
     #[arg(long, global = true, value_enum, default_value = "mixed")]
     pi_style: PiStyleArg,
+    /// Cap the frame rate (default 20 with `--pi`, none otherwise).
+    #[arg(long, global = true)]
+    max_fps: Option<f32>,
     /// With `--pi`, seconds each vehicle stays up.
     #[arg(long, global = true, default_value_t = mctl_gui::KIOSK_DEFAULT_DWELL_S)]
     dwell: f64,
@@ -604,6 +612,8 @@ fn main() -> Result<()> {
                         PresentArg::Mailbox => mctl_gui::Present::Mailbox,
                     },
                     low_power: cli.low_power,
+                    allow_software: cli.allow_software || cli.pi,
+                    max_fps: cli.max_fps.or(cli.pi.then_some(PI_MAX_FPS)),
                     exit_after_frames: g.exit_after_frames,
                     start_theme: g.theme,
                     live,

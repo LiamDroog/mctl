@@ -37,6 +37,10 @@ pub struct Options {
     pub fullscreen: bool,
     pub present: Present,
     pub low_power: bool,
+    /// Run on a software (CPU) Vulkan adapter instead of refusing to. The Pi display does this by default.
+    pub allow_software: bool,
+    /// Cap the frame rate, leaving the rest of the CPU to the engine and sources (the Pi display does).
+    pub max_fps: Option<f32>,
     pub exit_after_frames: Option<u64>,
     pub start_theme: Option<String>,
     /// The Pi/CRT display: the seconds each scene stays up.
@@ -135,7 +139,12 @@ impl App {
         let surface = instance
             .create_surface(window.clone())
             .context("creating surface")?;
-        let gpu = Arc::new(gpu::create(&instance, Some(&surface), self.opts.low_power)?);
+        let gpu = Arc::new(gpu::create(
+            &instance,
+            Some(&surface),
+            self.opts.low_power,
+            self.opts.allow_software,
+        )?);
 
         let caps = surface.get_capabilities(&gpu.adapter);
         let format = pick_format(&caps)?;
@@ -419,6 +428,12 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => match self.redraw() {
                 Ok(true) => {
+                    if let Some(fps) = self.opts.max_fps {
+                        let spare = (1.0 / fps.max(1.0)) - self.last_frame.elapsed().as_secs_f32();
+                        if spare > 0.0 {
+                            std::thread::sleep(std::time::Duration::from_secs_f32(spare));
+                        }
+                    }
                     if let Some(r) = &self.running {
                         r.window.request_redraw();
                     }
