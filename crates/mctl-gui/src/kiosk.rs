@@ -21,8 +21,10 @@ pub const EXTRA_DWELL_FRACTION: f64 = 0.6;
 /// Rows used above the picture (the header) and below it (rule, two status lines, the progress marks).
 const HEADER_ROWS: usize = 1;
 const FOOTER_ROWS: usize = 4;
-/// A CRT hides the edge of the picture (overscan), so text keeps this many rows and columns clear.
-const SAFE_ROWS: usize = 1;
+/// Rows and columns of text kept clear at the edges. The video mode's own margins (in `cmdline.txt`) take
+/// care of the overscan at the top; the bottom and sides keep a cell of their own.
+const SAFE_TOP: usize = 0;
+const SAFE_BOTTOM: usize = 1;
 const SAFE_COLS: usize = 2;
 
 /// Which scenes the display cycles through.
@@ -511,7 +513,7 @@ fn render_dense(grid: &mut Grid, inp: &KioskInput<'_>, v: &VehicleView, view: Vi
     );
     let (inner_cols, inner_rows) = (
         cols.saturating_sub(2 * SAFE_COLS),
-        rows.saturating_sub(2 * SAFE_ROWS),
+        rows.saturating_sub(SAFE_TOP + SAFE_BOTTOM),
     );
     let mut sub = Grid::new(inner_cols, inner_rows);
     let (page, subpage) = view.page().expect("a dense view has a page");
@@ -525,25 +527,25 @@ fn render_dense(grid: &mut Grid, inp: &KioskInput<'_>, v: &VehicleView, view: Vi
         } else {
             crate::screens::render_body(&mut sub, &page_inp)
         }
-        .shifted(SAFE_COLS, SAFE_ROWS);
-    grid.blit(&sub, SAFE_COLS, SAFE_ROWS);
+        .shifted(SAFE_COLS, SAFE_TOP);
+    grid.blit(&sub, SAFE_COLS, SAFE_TOP);
 
-    grid.put(SAFE_COLS, SAFE_ROWS, "MCTL", fg);
+    grid.put(SAFE_COLS, SAFE_TOP, "MCTL", fg);
     centre(
         grid,
-        SAFE_ROWS,
+        SAFE_TOP,
         &format!("{}  {}", vehicle_name(v), view.title(v.regime)),
         bright,
     );
     let utc = inp.world.t.iso();
     right(
         grid,
-        SAFE_ROWS,
+        SAFE_TOP,
         &format!("{} UTC", utc.get(11..19).unwrap_or("--:--:--")),
         fg,
     );
     // Below the page: one status line and the marks, in the rows its body leaves free.
-    let status_row = rows.saturating_sub(SAFE_ROWS + 2);
+    let status_row = rows.saturating_sub(SAFE_BOTTOM + 2);
     let [(line, style), _] = status(inp.world, v, inner_cols);
     centre(grid, status_row, &line, style);
     centre(
@@ -590,9 +592,9 @@ pub fn render(grid: &mut Grid, inp: &KioskInput<'_>) -> Layout {
         Style::new(Role::Dim),
         Style::new(Role::Border),
     );
-    let bottom = rows.saturating_sub(SAFE_ROWS);
-    let picture_rows = bottom.saturating_sub(SAFE_ROWS + HEADER_ROWS + FOOTER_ROWS);
-    let picture = CellRect::new(0, SAFE_ROWS + HEADER_ROWS, cols, picture_rows);
+    let bottom = rows.saturating_sub(SAFE_BOTTOM);
+    let picture_rows = bottom.saturating_sub(SAFE_TOP + HEADER_ROWS + FOOTER_ROWS);
+    let picture = CellRect::new(0, SAFE_TOP + HEADER_ROWS, cols, picture_rows);
     let framed = CellRect::new(
         SAFE_COLS,
         picture.row,
@@ -601,11 +603,11 @@ pub fn render(grid: &mut Grid, inp: &KioskInput<'_>) -> Layout {
     );
 
     // Header: the product on the left, the UTC time on the right, the subject in the middle.
-    grid.put(SAFE_COLS, SAFE_ROWS, "MCTL", fg);
+    grid.put(SAFE_COLS, SAFE_TOP, "MCTL", fg);
     let utc = inp.world.t.iso();
     right(
         grid,
-        SAFE_ROWS,
+        SAFE_TOP,
         &format!("{} UTC", utc.get(11..19).unwrap_or("--:--:--")),
         fg,
     );
@@ -613,7 +615,7 @@ pub fn render(grid: &mut Grid, inp: &KioskInput<'_>) -> Layout {
         Scene::Vehicle(v, _) => (vehicle_name(v), v.id.as_str(), v.regime == Regime::Earth),
         Scene::Extra(e) => (e.title.to_owned(), e.id, true),
     };
-    centre(grid, SAFE_ROWS, &title, bright);
+    centre(grid, SAFE_TOP, &title, bright);
 
     let mut layout = Layout::default();
     let art_scene = matches!(inp.scene, Scene::Extra(_) | Scene::Vehicle(_, View::Art));
