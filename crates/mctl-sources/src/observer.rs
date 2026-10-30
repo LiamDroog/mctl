@@ -115,10 +115,10 @@ mod tests {
     fn ip_json_is_read_by_the_configured_keys_and_validated() {
         assert_eq!(
             parse_ip_json(
-                r#"{"latitude": 51.05, "longitude": -114.07, "city": "x"}"#,
+                r#"{"latitude": 38.883, "longitude": -77.0163, "city": "x"}"#,
                 &ip()
             ),
-            Ok((51.05, -114.07))
+            Ok((38.883, -77.0163))
         );
         assert!(
             parse_ip_json(r#"{"latitude": "51"}"#, &ip())

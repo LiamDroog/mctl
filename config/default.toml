@@ -99,9 +99,9 @@ alt_m = 10.0
 # Add your own sites like this, then set `active = "Home"` above or use `:site Home` while running.
 # [[site]]
 # name = "Home"
-# lat_deg = 51.05
-# lon_deg = -114.07
-# alt_m = 1045.0
+# lat_deg = 12.3456
+# lon_deg = -65.4321
+# alt_m = 100.0
 
 [store]
 # Recording to SQLite (DESIGN.md 10). path = "" means $XDG_DATA_HOME/mctl/mctl.db.

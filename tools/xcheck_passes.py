@@ -8,7 +8,7 @@ import datetime as dt
 rec = json.load(open(sys.argv[2]))[0]
 sat = Satrec()
 omm.initialize(sat, rec)
-LAT, LON, ALT = 51.05, -114.07, 1045.0
+LAT, LON, ALT = 38.883, -77.0163, 10.0
 a, f = 6378.137, 1/298.257223563
 e2 = f*(2-f)
 def site_ecef():

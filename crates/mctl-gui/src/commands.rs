@@ -714,12 +714,12 @@ mod tests {
                 .contains("known: NASA HQ, Home")
         );
         assert_eq!(
-            p("site add YYC 51.05 -114.07 1045"),
+            p("site add TEST 38.883 -77.0163 10"),
             Ok(Action::Engine(Command::AddSite {
-                name: "YYC".into(),
-                lat_deg: 51.05,
-                lon_deg: -114.07,
-                alt_m: 1045.0
+                name: "TEST".into(),
+                lat_deg: 38.883,
+                lon_deg: -77.0163,
+                alt_m: 10.0
             }))
         );
         assert_eq!(

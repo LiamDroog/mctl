@@ -3430,9 +3430,9 @@ mod tests {
         m.add_site(
             Site {
                 name: "Home".into(),
-                lat_deg: 51.05,
-                lon_deg: -114.07,
-                alt_m: 1045.0,
+                lat_deg: 38.883,
+                lon_deg: -77.0163,
+                alt_m: 10.0,
             },
             t,
         )

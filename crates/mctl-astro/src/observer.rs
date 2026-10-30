@@ -267,11 +267,11 @@ mod tests {
             "altitude adds radially"
         );
         // Round trip with the geodetic conversion the engine uses.
-        let g = crate::kepler::geodetic(&site(51.05, -114.07, 1045.0).ecef_km());
+        let g = crate::kepler::geodetic(&site(38.883, -77.0163, 10.0).ecef_km());
         assert!(
-            (g.lat_deg - 51.05).abs() < 1e-9
-                && (g.lon_deg + 114.07).abs() < 1e-9
-                && (g.alt_km - 1.045).abs() < 1e-9
+            (g.lat_deg - 38.883).abs() < 1e-9
+                && (g.lon_deg + 77.0163).abs() < 1e-9
+                && (g.alt_km - 0.010).abs() < 1e-9
         );
     }
 
@@ -338,7 +338,7 @@ mod tests {
     #[test]
     fn a_day_of_real_iss_passes_over_a_mid_latitude_site_is_physically_plausible() {
         let gp = GpModel::from_omm_json(OMM).unwrap();
-        let s = site(51.05, -114.07, 1045.0);
+        let s = site(38.883, -77.0163, 10.0);
         let t0 = gp.epoch;
         let look = |t: Utc| look_at(&gp, &s, t, Orientation::ASSUMED_ZERO);
         let mask = 10.0;
@@ -388,7 +388,7 @@ mod tests {
     #[ignore = "diagnostic output for an external cross-check"]
     fn print_fixture_passes() {
         let gp = GpModel::from_omm_json(OMM).unwrap();
-        let s = site(51.05, -114.07, 1045.0);
+        let s = site(38.883, -77.0163, 10.0);
         let look = |t: Utc| look_at(&gp, &s, t, Orientation::ASSUMED_ZERO);
         println!("EPOCH {}", gp.epoch.iso());
         for p in find_passes(&look, gp.epoch, gp.epoch.plus(7.0 * 86_400.0), 5.0, 10.0) {

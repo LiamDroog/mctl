@@ -219,7 +219,7 @@ mod tests {
         let g = geodetic(&Vector3::new(0.0, -(EARTH_RADIUS_KM + 10.0), 0.0));
         assert!((g.lon_deg + 90.0).abs() < 1e-9);
         // Round-trip a mid-latitude point through the forward formula.
-        let (lat, lon, h) = (51.6f64.to_radians(), -114.07f64.to_radians(), 1.045);
+        let (lat, lon, h) = (38.883f64.to_radians(), -77.0163f64.to_radians(), 0.010);
         let e2 = FLATTENING * (2.0 - FLATTENING);
         let n = EARTH_RADIUS_KM / (1.0 - e2 * lat.sin().powi(2)).sqrt();
         let r = Vector3::new(
@@ -229,8 +229,8 @@ mod tests {
         );
         let g = geodetic(&r);
         assert!(
-            (g.lat_deg - 51.6).abs() < 1e-9
-                && (g.lon_deg + 114.07).abs() < 1e-9
+            (g.lat_deg - 38.883).abs() < 1e-9
+                && (g.lon_deg + 77.0163).abs() < 1e-9
                 && (g.alt_km - h).abs() < 1e-6
         );
     }
