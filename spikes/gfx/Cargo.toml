@@ -4,6 +4,7 @@ description = "Spike A: winit + wgpu + egui console renderer with CRT post-pass 
 edition.workspace = true
 version.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [lints]
 workspace = true

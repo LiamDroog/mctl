@@ -4,6 +4,7 @@ description = "Spike B: evaluation of satkit, brahe and an in-house sgp4 + nalge
 edition.workspace = true
 version.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [lints]
 workspace = true
