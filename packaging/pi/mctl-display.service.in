@@ -1,3 +1,4 @@
+# Template: install-display.sh fills in the user and the binary path.
 [Unit]
 Description=mctl display on the composite output
 After=systemd-user-sessions.service network-online.target
@@ -6,7 +7,7 @@ Conflicts=getty@tty1.service
 After=getty@tty1.service
 
 [Service]
-User=liam
+User=@USER@
 PAMName=login
 TTYPath=/dev/tty1
 StandardInput=tty
@@ -16,7 +17,7 @@ UtmpIdentifier=tty1
 UtmpMode=user
 Environment=WLR_LIBINPUT_NO_DEVICES=1
 Environment=RUST_LOG=info
-ExecStart=/usr/bin/cage -- /home/liam/mctl/bin/mctl --pi
+ExecStart=/usr/bin/cage -- @BIN@ --pi
 Restart=on-failure
 RestartSec=5
 

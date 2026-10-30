@@ -70,11 +70,18 @@ The network is the only other need: with no network, `mctl --pi --offline` runs 
 
 ## Running it as a service
 
-`packaging/pi/mctl-display.service` runs `cage -- mctl --pi` on the Pi's first screen at boot (with the desktop
-off: `sudo systemctl set-default multi-user.target`). It expects the binary at `~/mctl/bin/mctl` for user `liam`;
-edit `User=` and `ExecStart=` to suit. `--pi` caps the frame rate at 20 (`--max-fps` overrides) and turns on
-`--allow-software`, since a Pi 3 has no Vulkan GPU and runs Mesa's software renderer (llvmpipe). The CRT themes
-draw "flat" (no glow passes or line anti-aliasing), and a software adapter gets a 2048 px Earth texture.
+`packaging/pi/install-display.sh` installs a systemd unit that runs `cage -- mctl --pi` on the Pi's first screen:
+
+```
+sudo packaging/pi/install-display.sh --user pi --bin /home/pi/mctl/bin/mctl --enable
+```
+
+(`--user` is the account to run as, `--bin` the aarch64 binary; `--dry-run` prints the unit.) It needs
+`cage` and `seatd`. For a display-only Pi, also boot without the desktop:
+`sudo systemctl set-default multi-user.target`. `--pi` caps the frame rate at 20 (`--max-fps` overrides) and
+turns on `--allow-software`, since a Pi 3 has no Vulkan GPU and runs Mesa's software renderer (llvmpipe). The
+CRT themes draw "flat" (no glow passes or line anti-aliasing), and a software adapter gets a 2048 px Earth
+texture.
 
 On a Pi 3B+ measured offline: pictures about 34 fps and the dense console pages about 15 fps, before the 20 fps
 cap; live data costs more. The crop is set with `margin_left`, `margin_right`, `margin_top` and `margin_bottom`
