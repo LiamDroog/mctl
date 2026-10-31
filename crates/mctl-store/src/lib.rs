@@ -420,11 +420,7 @@ impl Store {
         let mut stmt = self.conn.prepare(&format!(
             "SELECT * FROM {t} WHERE {time_col} >= ?1 AND {time_col} < ?2 ORDER BY {time_col}"
         ))?;
-        let names: Vec<String> = stmt
-            .column_names()
-            .iter()
-            .map(|s| (*s).to_owned())
-            .collect();
+        let names: Vec<String> = stmt.column_names().map(str::to_owned).collect();
         writeln!(out, "{}", names.join(","))?;
         let mut rows = stmt.query(params![from.0, to.0])?;
         let mut n = 0;
