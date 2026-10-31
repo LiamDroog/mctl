@@ -581,7 +581,7 @@ impl Candidate for InHouseCandidate<'_> {
         let epoch = Utc::parse(&epoch_text).map_err(CandidateError::failed)?;
         // `Constants::from_elements` would use WGS-84; CelesTrak/Space-Track elements are fit with the
         // AFSPC convention (WGS-72), which the crate calls "compatibility mode". Using WGS-84 costs ~70 m
-        // over 24 h for the ISS (measured in docs/spikes/astro-results.json via brahe, which does so).
+        // over 24 h for the ISS (measured with brahe, which does so).
         let constants = sgp4::Constants::from_elements_afspc_compatibility_mode(el)
             .map_err(CandidateError::failed)?;
         times

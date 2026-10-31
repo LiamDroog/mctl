@@ -2,7 +2,7 @@
 # Server, adapter set, field names and the TIME item come from ISS Mimic's own client
 # (github.com/ISS-Mimic/Mimic, Pi/iss_telemetry.py, MIT licence). Item IDs and their meanings come
 # from Mimic's Telemetry/ISS_Public_Telemetry.xlsx. `description` is that spreadsheet's text, verbatim;
-# `units` is its UNITS column. Both are *documentation*, not verified: see docs/adr/0002.
+# `units` is its UNITS column. Both are *documentation*, not verified.
 
 [server]
 url = "wss://push.lightstreamer.com/lightstreamer"   # Mimic: LightstreamerClient("https://push.lightstreamer.com", "ISSLIVE")
@@ -25,23 +25,23 @@ id = "TIME_000001"
 # `label` is a short display name derived from `description` by abbreviation only. `units` is the
 # spreadsheet's UNITS column, EXCEPT USLAB000022-27, which it labels RAD and RAD/S but whose live values
 # are deg and deg/s, and the cabin pressure/partial-pressure items (labelled PSI/PSIA) whose values are
-# mmHg and the cabin temperature (labelled CNT), which is degC. Evidence: docs/step3/attitude-verification.md.
+# mmHg and the cabin temperature (labelled CNT), which is degC. Evidence: docs/attitude-verification.md.
 
 # `section`/`row`/`col` lay the items out on the pages (a matrix when `col` is set). `units` follow the
 # description's own unit where it gives one; the spreadsheet's UNITS column is wrong for several items.
-# Inferred (not published): fluid temperatures are degC. Evidence: docs/step3/attitude-verification.md.
+# Inferred (not published): fluid temperatures are degC. Evidence: docs/attitude-verification.md.
 
 # `section`/`row`/`col` lay the items out on the pages (a matrix when `col` is set). `units` follow the
 # description's own unit where it gives one; the spreadsheet's UNITS column is wrong for several items.
-# Inferred (not published): fluid temperatures are degC. Evidence: docs/step3/attitude-verification.md.
+# Inferred (not published): fluid temperatures are degC. Evidence: docs/attitude-verification.md.
 
 # `section`/`row`/`col` lay the items out on the pages (a matrix when `col` is set). `units` follow the
 # description's own unit where it gives one; the spreadsheet's UNITS column is wrong for several items.
-# Inferred (not published): fluid temperatures are degC. Evidence: docs/step3/attitude-verification.md.
+# Inferred (not published): fluid temperatures are degC. Evidence: docs/attitude-verification.md.
 
 # `section`/`row`/`col` lay the items out on the pages (a matrix when `col` is set). `units` follow the
 # description's own unit where it gives one; the spreadsheet's UNITS column is wrong for several items.
-# Inferred (not published): fluid temperatures are degC. Evidence: docs/step3/attitude-verification.md.
+# Inferred (not published): fluid temperatures are degC. Evidence: docs/attitude-verification.md.
 
 [[item]]
 id = "USLAB000018"

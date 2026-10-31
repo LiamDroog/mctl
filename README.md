@@ -9,7 +9,7 @@ It's got four themes (green phosphor, amber, retrowave, and a plain dark one). I
 has a low-resolution mode for a Raspberry Pi feeding a Commodore 1702 CRT over composite, which is how I run
 mine, r/casettefuturism unite!
 
-![The MASTER page in the Phosphor theme](docs/step4/phosphor-master-1-1920x1080.png)
+![The MASTER page in the Phosphor theme](docs/screenshot.png)
 
 Full disclaimer, most of the code was written with Claude, Rust is not my expertise but my implementation with Python ran, well, it was seconds per frame rather than frames per second.
 
@@ -149,11 +149,11 @@ Some specifics about what you're looking at:
 - The pictures on the OPS page are sky-survey cutouts around the target, not images from Hubble or JWST. The
   schedules are plans, not telemetry; neither observatory publishes telemetry.
 - The ISS telemetry has 137 items. A few units the live values disprove are corrected (see
-  [docs/step3/attitude-verification.md](docs/step3/attitude-verification.md)), and the attitude convention is
+  [docs/attitude-verification.md](docs/attitude-verification.md)), and the attitude convention is
   an assumption that the page says so about. The caution and warning limits for ISS subsystems are my own
   placeholders, not flight rules.
 - Pass times match an independent implementation of mine to a few milliseconds
-  ([docs/step4/pass-verification.md](docs/step4/pass-verification.md)). They haven't been compared with a
+  ([docs/pass-verification.md](docs/pass-verification.md)). They haven't been compared with a
   published predictor like Heavens-Above.
 - The maneuver planner integrates numerically (DOP853, J2 to J4, Sun and Moon, atmospheric drag, optional solar
   pressure). Against NASA's ISS ephemeris it's 3.1 km off after a day with no drag, and 7.3 km off with the

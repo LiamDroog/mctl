@@ -132,7 +132,7 @@ id = "iss"
 name = "ISS"
 norad = 25544
 # "supgp" (CelesTrak supplemental GP, ISS-E) is implemented but NOT in the default list: measured against
-# the OEM it was 57 km along-track off while standard GP was under 2 km (docs/step4/supgp-evaluation.md).
+# the OEM it was 57 km along-track off while standard GP was under 2 km (docs/supgp-evaluation.md).
 # Add it, e.g. ["oem", "supgp", "gp"], to try it; its residual is then shown and graded like any source.
 sources = ["oem", "gp"]
 telemetry = "isslive"

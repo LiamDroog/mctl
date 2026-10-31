@@ -10,7 +10,7 @@ tail = text[text.index("# A unit-norm sanity check") :]
 items = [dict(re.findall(r'(\w+) = "(.*)"', b)) for b in re.findall(r"\[\[item\]\]\n(.*?)(?=\n\n|\Z)", text, re.S)]
 
 # Units: the description's own parenthesised unit wins over the spreadsheet's UNITS column, which is
-# wrong for several items (checked against live values, docs/step3/attitude-verification.md).
+# wrong for several items (checked against live values, docs/attitude-verification.md).
 PAREN = {"kg/hr": "kg/h", "kPa": "kPa", "deg C": "degC", "N-m": "N·m", "Nms": "Nms", "g": "g", "amps": "A", "rpm": "rpm", "degrees": "deg", "deg": "deg", "degr": "deg", "kg": "kg"}
 SHEET = {"CNT": "", "ND": "", "N/A": "", "N/S": "", "INTEGR": "", "DEG": "deg", "PCT": "%", "RPM": "rpm", "AMP": "A", "G": "g", "LBM/D": "lbm/d", "KG": "kg"}
 
@@ -130,6 +130,6 @@ for i in items:
     i.update(section=sec, row=short(row), col=col, label=short(label), units=units(i))
     body += f'[[item]]\nid = "{i["id"]}"\ngroup = "{i["group"]}"\ndescription = "{esc(i["description"])}"\nlabel = "{esc(i["label"])}"\nsection = "{esc(sec)}"\nrow = "{esc(row)}"\ncol = "{esc(col)}"\nunits = "{esc(i["units"])}"\n\n'
 if "`section`, `row`, `col`" not in head:
-    head = head.rstrip() + "\n\n# `section`/`row`/`col` lay the items out on the pages (a matrix when `col` is set). `units` follow the\n# description's own unit where it gives one; the spreadsheet's UNITS column is wrong for several items.\n# Inferred (not published): fluid temperatures are degC. Evidence: docs/step3/attitude-verification.md.\n\n"
+    head = head.rstrip() + "\n\n# `section`/`row`/`col` lay the items out on the pages (a matrix when `col` is set). `units` follow the\n# description's own unit where it gives one; the spreadsheet's UNITS column is wrong for several items.\n# Inferred (not published): fluid temperatures are degC. Evidence: docs/attitude-verification.md.\n\n"
 open(P, "w").write(head + body + tail)
 print(len(items), "items laid out")

@@ -2,7 +2,7 @@
 # Server, adapter set, field names and the TIME item come from ISS Mimic's own client
 # (github.com/ISS-Mimic/Mimic, Pi/iss_telemetry.py, MIT licence). Item IDs and their meanings come
 # from Mimic's Telemetry/ISS_Public_Telemetry.xlsx. `description` is that spreadsheet's text, verbatim;
-# `units` is its UNITS column. Both are *documentation*, not verified: see docs/adr/0002.
+# `units` is its UNITS column. Both are *documentation*, not verified.
 
 [server]
 url = "wss://push.lightstreamer.com/lightstreamer"   # Mimic: LightstreamerClient("https://push.lightstreamer.com", "ISSLIVE")

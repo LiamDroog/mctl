@@ -56,6 +56,6 @@ for g, ids in groups.items():
 assert not missing, missing
 esc = lambda s: s.replace("\\", "\\\\").replace('"', '\\"')
 body = "".join(f'[[item]]\nid = "{d["id"]}"\ngroup = "{d["group"]}"\ndescription = "{esc(d["description"])}"\nlabel = "{esc(d["label"])}"\nunits = "{esc(d["units"])}"\n\n' for d in out)
-head += "\n\n# `label` is a short display name derived from `description` by abbreviation only. `units` is the\n# spreadsheet's UNITS column, EXCEPT USLAB000022-27, which it labels RAD and RAD/S but whose live values\n# are deg and deg/s (docs/step3/attitude-verification.md).\n\n"
+head += "\n\n# `label` is a short display name derived from `description` by abbreviation only. `units` is the\n# spreadsheet's UNITS column, EXCEPT USLAB000022-27, which it labels RAD and RAD/S but whose live values\n# are deg and deg/s (docs/attitude-verification.md).\n\n"
 open("config/isslive.toml", "w").write(head + body + tail)
 print(len(out), "items")
