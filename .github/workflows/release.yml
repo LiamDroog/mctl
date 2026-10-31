@@ -46,7 +46,7 @@ jobs:
           key: dist-${{ matrix.target }}
 
       - name: Run the tests on the exact commit being released
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --exclude astro --locked
 
       - name: Build
         run: cargo build --profile dist --locked -p mctl

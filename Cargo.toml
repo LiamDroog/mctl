@@ -5,6 +5,12 @@ members = [
     "crates/*",
     "spikes/*",
 ]
+# What a plain `cargo build` or `cargo test` covers: the program, not the early prototypes. The `astro` prototype
+# needs libclang to build, which a clean machine does not have.
+default-members = [
+    ".",
+    "crates/*",
+]
 
 [workspace.package]
 edition = "2024"

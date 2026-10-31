@@ -29,7 +29,7 @@ jobs:
         run: rustup toolchain install stable --profile minimal --component clippy --component rustfmt && rustup default stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo clippy --workspace --exclude astro --all-targets --locked -- -D warnings
 
   test:
     name: tests
@@ -40,7 +40,8 @@ jobs:
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - uses: Swatinem/rust-cache@v2
       # No GPU and no network are needed: the tests that touch a GPU are ignored, and the rest use fixtures.
-      - run: cargo test --workspace --locked
+      # `astro` is an early prototype that needs libclang; the program does not.
+      - run: cargo test --workspace --exclude astro --locked
 
   docs:
     name: rustdoc
@@ -50,7 +51,7 @@ jobs:
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo doc --workspace --no-deps --locked
+      - run: cargo doc --workspace --exclude astro --no-deps --locked
         env:
           RUSTDOCFLAGS: -D warnings
 
@@ -63,7 +64,7 @@ jobs:
       - name: Install Rust 1.95
         run: rustup toolchain install 1.95 --profile minimal && rustup default 1.95
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --workspace --all-targets --locked
+      - run: cargo check --workspace --exclude astro --all-targets --locked
 
   deny:
     name: licences and advisories
@@ -118,4 +119,43 @@ jobs:
         with:
           name: golden-actual
           path: target/golden-actual
+
+  shellcheck:
+    name: shell scripts
+    runs-on: ubuntu-latest
+    # Advisory until the scripts have been through it once.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck -x packaging/*.sh packaging/pi/*.sh tools/*.sh scripts/mctl-launch
+
+  installer:
+    name: installer on ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    # Advisory: this is the only place the dnf and pacman package names, and a bare machine, get exercised.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:stable", "ubuntu:22.04", "fedora:latest", "archlinux:latest"]
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare a bare machine (compiler, libraries, a Vulkan driver, Rust); no build
+        run: packaging/bootstrap.sh --yes --no-build
+      - name: It now says everything is in place
+        run: packaging/bootstrap.sh --check
+
+  installer-from-source:
+    name: installer builds and installs (ubuntu)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bootstrap, build and install into a temporary prefix
+        run: packaging/bootstrap.sh --yes --prefix "$RUNNER_TEMP/mctl-prefix"
+      - name: The installed program runs
+        run: |
+          "$RUNNER_TEMP/mctl-prefix/bin/mctl" --version
+          "$RUNNER_TEMP/mctl-prefix/bin/mctl" about | head -n 3
 

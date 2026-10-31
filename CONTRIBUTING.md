@@ -14,12 +14,14 @@ welcome.
 ## Building and checking
 
 You need Rust 1.95 or newer and, to run the GUI, a Vulkan driver (Mesa's software one, lavapipe, is enough).
+`packaging/bootstrap.sh --check` tells you what a machine is missing and `packaging/bootstrap.sh` installs it.
+The `astro` prototype under `spikes/` needs libclang, so the commands below leave it out.
 
 ```
 cargo build --release --locked -p mctl
 cargo fmt --all
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --locked
+cargo clippy --workspace --exclude astro --all-targets --locked -- -D warnings
+cargo test --workspace --exclude astro --locked
 SMOKE_SOFTWARE=1 tools/smoke.sh      # renders every page headless; drop SMOKE_SOFTWARE if you have a real GPU
 ```
 
