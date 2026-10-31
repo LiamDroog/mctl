@@ -112,7 +112,7 @@ pub struct Orientation {
     /// Polar motion, arcseconds.
     pub xp_as: f64,
     pub yp_as: f64,
-    /// True when EOP was unavailable and zeros were used (DESIGN.md §6.3: assume, but flag).
+    /// True when EOP was unavailable and zeros were used (assumed zero, and flagged).
     pub assumed: bool,
 }
 

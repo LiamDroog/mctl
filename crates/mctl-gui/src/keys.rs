@@ -1,4 +1,4 @@
-//! Remappable single-character key bindings (DESIGN.md §9.7, NFR-8). The defaults live in the
+//! Remappable single-character key bindings. The defaults live in the
 //! embedded `config/default.toml` under `[keys]`; a user config overrides any action.
 //! Function keys, Tab, arrows, Enter and Escape keep fixed meanings.
 

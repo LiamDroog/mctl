@@ -1,4 +1,4 @@
-//! Relative motion of a visiting vehicle about the station (DESIGN.md section 9.6, F8), published by the
+//! Relative motion of a visiting vehicle about the station, published by the
 //! engine for the PROX page.
 
 use std::sync::Arc;

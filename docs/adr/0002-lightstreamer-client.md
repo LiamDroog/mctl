@@ -1,7 +1,7 @@
 # ADR 0002: Lightstreamer client for ISSLIVE — in-house minimal TLCP over a rustls WebSocket
 
 - **Status:** Proposed (M0 spike, 2026-10-23); the owner confirms or overrides.
-- **Decides:** DESIGN.md §6.5 "Lightstreamer TLCP" and risks R1, R2, R4.
+- **Decides:** the design document §6.5 "Lightstreamer TLCP" and risks R1, R2, R4.
 - **Evidence:** `spikes/isslive` (`isslive`), config in `spikes/isslive/isslive.toml`, run logs in `docs/spikes/isslive-*.log`.
 
 ## Context
@@ -47,7 +47,7 @@ Subscribing to a made-up item name returns `SUBOK` for the full item count and t
 
 ### Finding: connection health does not imply fresh data
 
-I connected at 15:13 UTC on 2026-10-23. The session was healthy (`PROBE` every 5 s) but delivered only the snapshot for the next ~7.5 minutes (two captures, 150 s and 300 s), with `TIME_000001` at `Status.Class=1`, `Status.Indicator=M`. The source timestamps decoded to **02:18:29 UTC, about 12.9 hours earlier**. In Mimic's client only class `24` means connected (`TimeListener`), and Mimic's own "Signal Error" state exists for this. When I checked again at 16:06 UTC the feed was live (`Status.Class=24`, data age ~4 s, 1,458 updates in 45 s). I do not know when it resumed or why it stalled. mctl must judge freshness from `TIME_000001` (status class and timestamp advance) and the timestamps of regularly-updating items, never from the socket (DESIGN.md §1.3, R1).
+I connected at 15:13 UTC on 2026-10-23. The session was healthy (`PROBE` every 5 s) but delivered only the snapshot for the next ~7.5 minutes (two captures, 150 s and 300 s), with `TIME_000001` at `Status.Class=1`, `Status.Indicator=M`. The source timestamps decoded to **02:18:29 UTC, about 12.9 hours earlier**. In Mimic's client only class `24` means connected (`TimeListener`), and Mimic's own "Signal Error" state exists for this. When I checked again at 16:06 UTC the feed was live (`Status.Class=24`, data age ~4 s, 1,458 updates in 45 s). I do not know when it resumed or why it stalled. mctl must judge freshness from `TIME_000001` (status class and timestamp advance) and the timestamps of regularly-updating items, never from the socket (the design document §1.3, R1).
 
 ### Observed update rates (live, 180 s, 2026-10-23 16:07 UTC; `docs/spikes/isslive-run-3-live-180s.log`)
 
@@ -81,8 +81,8 @@ Documented by Mimic's spreadsheet (its text, quoted in `isslive.toml`): `USLAB00
 
 - R2 is closed for now: no GPL dependency, no OpenSSL. If the project later picks a GPL-compatible licence, `lightstreamer-client` stays unattractive anyway (partial implementation); `lightstreamer-rs` could be revisited if it gains a rustls feature.
 - Maintenance cost: `tlcp.rs` is 509 lines including its 9 tests, `session.rs` 362. It covers only what ISSLIVE needs; reconnection and rebind are **not implemented** (WebSocket never sent `LOOP`, and any failure ends the session with an error). M3 must add reconnect with backoff and re-subscription, and the staleness policy above.
-- R4 stays open: do not enable the ADI until the quaternion convention is verified against a known attitude (DESIGN.md already requires this).
-- DESIGN.md changes proposed: §3.1 (ISSLIVE row: item IDs and field names confirmed; units column of the public spreadsheet is unreliable; freeze behaviour), §14 R1 (a healthy connection can carry 13+ hours of stale data), R4 (what is now verified).
+- R4 stays open: do not enable the ADI until the quaternion convention is verified against a known attitude (the design document already requires this).
+- Design-document changes proposed: §3.1 (ISSLIVE row: item IDs and field names confirmed; units column of the public spreadsheet is unreliable; freeze behaviour), §14 R1 (a healthy connection can carry 13+ hours of stale data), R4 (what is now verified).
 
 ## Not verified
 

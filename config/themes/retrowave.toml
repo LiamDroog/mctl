@@ -1,4 +1,4 @@
-# Deep purple with magenta/cyan accents; bloom, no scanlines/persistence. DESIGN.md §9.2.
+# Deep purple with magenta/cyan accents; bloom, no scanlines/persistence.
 # The optional horizon-grid backdrop is NOT implemented in the M0 spike.
 name = "Retrowave"
 

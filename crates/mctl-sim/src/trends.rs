@@ -1,5 +1,5 @@
 //! Trend series computed from the recording: elements and beta from recorded states, the difference
-//! between sources, and the epochs of recorded element sets (DESIGN.md §9.6 F2.3).
+//! between sources, and the epochs of recorded element sets.
 //!
 //! Runs on a worker thread with its own read-only connection, so the engine never waits on the disk.
 

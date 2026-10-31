@@ -1,4 +1,4 @@
-//! The simulation clock (DESIGN.md FR-20..22): LIVE follows the wall clock at 1x; SIM runs from any
+//! The simulation clock: LIVE follows the wall clock at 1x; SIM runs from any
 //! epoch at any rate from -10000x to +10000x, can pause, step and scrub.
 //!
 //! Every method takes the wall time explicitly so behaviour is deterministic under test.

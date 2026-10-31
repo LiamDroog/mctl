@@ -1,4 +1,4 @@
-//! CelesTrak supplemental GP (DESIGN.md §3.1): operator-derived element segments fitted forward from
+//! CelesTrak supplemental GP: operator-derived element segments fitted forward from
 //! the current epoch, e.g. `ISS-E`. A segment is fitted FORWARD from its epoch, so the segment that
 //! answers a query is the latest one whose epoch is not after it (using the nearest epoch instead
 //! picked a later segment extrapolated backwards and was ~57 km off the OEM). The set is valid from

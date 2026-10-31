@@ -1,12 +1,12 @@
 # ADR 0001: Astrodynamics library — `satkit`, `brahe`, or in-house on `sgp4` + `nalgebra`
 
 - **Status:** Proposed (M0 spike, 2026-10-23). The owner confirms or overrides; nothing downstream depends on it before M1.
-- **Decides:** DESIGN.md §6.5 "Frames, numerical propagation, force models" and the SGP4 row.
+- **Decides:** the design document §6.5 "Frames, numerical propagation, force models" and the SGP4 row.
 - **Evidence:** `spikes/astro` (`astro eval`), raw results in `docs/spikes/astro-results.json`, fixtures in `spikes/astro/fixtures/` (fetched 2026-10-23).
 
 ## Context
 
-mctl needs SGP4 from OMM JSON, TEME↔GCRF↔ITRF, Sun/Moon, UT1/leap-second handling, OEM interpolation, and (M5) a numerical propagator with J2–J4 + drag for the maneuver planner (DESIGN.md §4.2, §7). NFR-1 wants one executable whose only runtime dependencies are the GPU stack and libc, with assets embedded. The project licence is undecided, so every candidate must be permissive.
+mctl needs SGP4 from OMM JSON, TEME↔GCRF↔ITRF, Sun/Moon, UT1/leap-second handling, OEM interpolation, and (M5) a numerical propagator with J2–J4 + drag for the maneuver planner (the design document §4.2, §7). NFR-1 wants one executable whose only runtime dependencies are the GPU stack and libc, with assets embedded. The project licence is undecided, so every candidate must be permissive.
 
 ## Options
 
@@ -34,7 +34,7 @@ Cause, read from the `sgp4` source: `Constants::from_elements` uses **WGS-84** c
 
 ### 2. SGP4 vs the NASA OEM over the same 24 h (OEM interpolated, SGP4 rotated TEME→GCRF by each candidate; RTN residuals)
 
-OEM hold-out test (interpolate every other sample from its neighbours): **4.09 m / 33.8 mm/s** max, against the 10 m target in DESIGN.md §12. Sample spacing is 90–240 s (not uniform: the last rows are 11:54:30, 11:58:30, 12:00:00), so interpolation must use arbitrary nodes.
+OEM hold-out test (interpolate every other sample from its neighbours): **4.09 m / 33.8 mm/s** max, against the 10 m target in the design document §12. Sample spacing is 90–240 s (not uniform: the last rows are 11:54:30, 11:58:30, 12:00:00), so interpolation must use arbitrary nodes.
 
 | Candidate | RMS 3-D | Max 3-D | Max R / T / N | At 24 h (R/T/N) |
 |---|---|---|---|---|
@@ -42,7 +42,7 @@ OEM hold-out test (interpolate every other sample from its neighbours): **4.09 m
 | satkit | 1,199 m | 2,350 m | 242 / 2,349 / 399 m | −171 / 1,889 / −286 m |
 | brahe | 1,220 m | 2,402 m | 250 / 2,400 / 396 m | −173 / 1,896 / −295 m |
 
-Along-track dominates, as DESIGN.md §7.2 expects for a 16-hour-old element set. The WGS-72 candidates are 53 m closer to the OEM than brahe, which is weak independent support for AFSPC being the right convention (the 2.3 km prediction error dwarfs it).
+Along-track dominates, as the design document §7.2 expects for a 16-hour-old element set. The WGS-72 candidates are 53 m closer to the OEM than brahe, which is weak independent support for AFSPC being the right convention (the 2.3 km prediction error dwarfs it).
 
 ### 3. Vallado SGP4 verification vectors (33 cases, Dec 2015 reference, AFSPC/WGS-72)
 
@@ -61,10 +61,10 @@ Two reference-file defects were found and handled by stated rules (`vallado.rs`)
 | Candidate | TEME→GCRF | GCRF→ITRF |
 |---|---|---|
 | brahe | 0.14 mm | 0.31 mm |
-| in-house, no polar motion (DESIGN.md §6.4) | 1.37 m | 12.8 m |
+| in-house, no polar motion (the design document §6.4) | 1.37 m | 12.8 m |
 | in-house, with polar motion | 1.37 m | 1.37 m |
 
-Satkit and brahe agree to a third of a millimetre: two independent full IAU 2006/2000A implementations. The in-house chain (IAU-76 precession, 10 of 106 IAU-80 nutation terms, no frame bias) is 1.37 m off; ignoring polar motion adds 11.5 m, matching the design's "~10 m". DESIGN.md §12's "< 1 m" frames target is not met by the truncated in-house chain; the residual is truncation plus the omitted frame bias (about 0.8 m by my estimate, not isolated), and it is irrelevant next to SGP4's own ~1 km.
+Satkit and brahe agree to a third of a millimetre: two independent full IAU 2006/2000A implementations. The in-house chain (IAU-76 precession, 10 of 106 IAU-80 nutation terms, no frame bias) is 1.37 m off; ignoring polar motion adds 11.5 m, matching the design's "~10 m". the design document §12's "< 1 m" frames target is not met by the truncated in-house chain; the residual is truncation plus the omitted frame bias (about 0.8 m by my estimate, not isolated), and it is irrelevant next to SGP4's own ~1 km.
 
 ### 5. Sun against JPL Horizons (13 weekly epochs, geocentric ICRF)
 
@@ -76,7 +76,7 @@ Horizons gives *geometric* positions by default, while analytic series model the
 | in-house (Vallado series) | 36.4″ / 22.7″ | 15.8″ / 6.0″ |
 | brahe (`sun_position`) | 326.5″ / 314.9″ | **305.9″ / 294.1″** |
 
-DESIGN.md FR-13 needs arcminute level: satkit and in-house pass; brahe's analytic Sun (5′) does not (`sun_position` is documented as low-precision analytical; brahe also has an ephemeris-based path through its SPICE module, not evaluated).
+the design document FR-13 needs arcminute level: satkit and in-house pass; brahe's analytic Sun (5′) does not (`sun_position` is documented as low-precision analytical; brahe also has an ephemeris-based path through its SPICE module, not evaluated).
 
 ### 6. Numerical propagation, 24 h from an OEM state (2026-10-22T12:00), hourly, residual vs OEM; Cd·A/m = 5.30e-3 m²/kg from the OEM header
 
@@ -89,7 +89,7 @@ DESIGN.md FR-13 needs arcminute level: satkit and in-house pass; brahe's analyti
 | same, one fitted multiplier | unsupported | **90.6 m** (×0.855) | not run |
 | Runtime for the 24 h run | 5 ms | 28 ms | ~1,000 ms |
 
-The three independent J2–J4 results agree within 3 m, which validates the in-house integrator and zonal-gravity code (also unit-tested: J2 nodal regression within 5% of theory, and the acceleration is checked against a finite-difference of the potential). **J2–J4 + drag alone cannot reach DESIGN.md §12's "< 1 km per 24 h": the floor is ~2 km.** Only the richer force model does (805 m untuned).
+The three independent J2–J4 results agree within 3 m, which validates the in-house integrator and zonal-gravity code (also unit-tested: J2 nodal regression within 5% of theory, and the acceleration is checked against a finite-difference of the potential). **J2–J4 + drag alone cannot reach the design document §12's "< 1 km per 24 h": the floor is ~2 km.** Only the richer force model does (805 m untuned).
 
 ### 7. Time scales and EOP
 
@@ -101,7 +101,7 @@ The three independent J2–J4 results agree within 3 m, which validates the in-h
 | Beyond the EOP table (2040) | **error** | holds last row (−0.208 s), log warning | holds last row (−0.208 s), silently |
 | Before 1972 | error | 9.34 s (pre-1972 UTC formula) | 9.34 s |
 
-Satkit's frame functions use zero EOP with a one-time warning when none is loaded, but its propagator refuses to build without one. Brahe accepted a zero-EOP provider (`StaticEOPProvider::from_zero()`) for a full propagation without any warning, and its `EOPExtrapolation::Error` mode panics rather than returning an error. DESIGN.md §6.3 says to flag missing UT1 rather than assume it; only the in-house path does that by construction.
+Satkit's frame functions use zero EOP with a one-time warning when none is loaded, but its propagator refuses to build without one. Brahe accepted a zero-EOP provider (`StaticEOPProvider::from_zero()`) for a full propagation without any warning, and its `EOPExtrapolation::Error` mode panics rather than returning an error. the design document §6.3 says to flag missing UT1 rather than assume it; only the in-house path does that by construction.
 
 ### 8. Footprint and runtime requirements (stripped release binaries doing one SGP4 + frame + propagation)
 
@@ -124,7 +124,7 @@ Reaching the 1 km target in-house would need a 20×20 geopotential (EGM coeffici
 ## Consequences
 
 - **Do now in the in-house path:** add the `sgp4` decay guard (radius below one Earth radius is an error, matching Vallado's error 6); fail on checksum/format errors for TLEs but note OMM JSON avoids them; add frame bias and the full nutation series (or IAU 2006 tables) plus EOP polar motion before the §12 "< 1 m" frame test; make the leap-second table updatable and detect staleness; never extrapolate or hold EOP silently.
-- **DESIGN.md changes proposed** are in the M0 report (§6.5, §7.2, §12, NFR-1 wording, and the SGP4 constant choice).
+- **Design-document changes proposed** are in the M0 report (§6.5, §7.2, §12, NFR-1 wording, and the SGP4 constant choice).
 - **Risk R-new:** satkit's single maintainer and release cadence. Mitigated by the trait, the exact pin, and the in-house fallback.
 - **Cost:** the in-house frames and Moon series are real work (days, not hours); the spike's 400 lines show the shape of it.
 

@@ -1,7 +1,7 @@
 //! The sample console page: header, bordered panels with placeholder data, footer.
 //!
 //! Every number here is fixture data for the spike and is labelled `SAMPLE` on screen, per the
-//! honesty rule (DESIGN.md §1.3): nothing on screen may pass for real telemetry.
+//! honesty rule: nothing on screen may pass for real telemetry.
 
 use std::sync::Arc;
 

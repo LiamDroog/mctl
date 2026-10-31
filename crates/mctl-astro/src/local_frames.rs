@@ -1,4 +1,4 @@
-//! Local orbital frames (DESIGN.md FR-11, §6.4): RTN for residuals, VNB for maneuver input, and LVLH
+//! Local orbital frames: RTN for residuals, VNB for maneuver input, and LVLH
 //! for attitude and relative motion. Each is a rotation from the inertial frame the state is in.
 
 use mctl_core::state::State;

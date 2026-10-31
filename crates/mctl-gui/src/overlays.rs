@@ -1,4 +1,4 @@
-//! Orbit-map overlays (DESIGN.md §9.6 F2.1): node and apsis markers with altitudes, the eclipse
+//! Orbit-map overlays: node and apsis markers with altitudes, the eclipse
 //! segment of the orbit, the velocity vector, the nadir line and the Sun direction. Drawn with the
 //! 2D painter by projecting the same scene the globe pass uses, hiding what the Earth occludes.
 
@@ -179,7 +179,7 @@ pub fn plan_point_at(points: &[PlanPoint], t: Utc) -> Option<&PlanPoint> {
         .min_by(|a, b| (a.t.0 - t.0).abs().total_cmp(&(b.t.0 - t.0).abs()))
 }
 
-/// The nominal and planned trajectories over the orbit map (DESIGN.md FR-31): nominal dim and dashed,
+/// The nominal and planned trajectories over the orbit map: nominal dim and dashed,
 /// planned solid in the info colour, burns as diamonds numbered in time order.
 pub fn paint_plan(
     painter: &Painter,

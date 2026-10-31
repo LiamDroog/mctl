@@ -1,7 +1,7 @@
 # Embedded asset licenses
 
-Every asset embedded in the `mctl` binary, with its source and licence. The project's own licence is
-undecided (DESIGN.md §14 R2); none of the licences below constrain that choice. Verified 2026-10-23.
+Every asset embedded in the `mctl` binary, with its source and licence. The project itself is
+GPL-3.0-or-later; none of the licences below conflict with that. Verified 2026-10-23.
 
 | Asset | File | Source | Licence | Embeddable in a distributed binary? |
 |---|---|---|---|---|

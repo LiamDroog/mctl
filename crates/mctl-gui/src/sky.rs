@@ -1,4 +1,4 @@
-//! Polar sky plot (DESIGN.md §9.6 F7.1): azimuth around, elevation inward, zenith at the centre.
+//! Polar sky plot: azimuth around, elevation inward, zenith at the centre.
 
 use egui::{Align2, Painter, Pos2, Shape, Stroke};
 use mctl_core::time::Utc;

@@ -1,4 +1,4 @@
-//! Geocentric Sun position (analytic; arcminute-level is sufficient, DESIGN.md FR-13) and the
+//! Geocentric Sun position (analytic; arcminute level is sufficient) and the
 //! conical shadow model.
 
 use mctl_core::time::Utc;

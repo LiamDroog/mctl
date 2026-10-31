@@ -1,4 +1,4 @@
-//! The maneuver plan (DESIGN.md section 4.4, 7.4): a burn list and force-model choices, which the planner
+//! The maneuver plan: a burn list and force-model choices, which the planner
 //! turns into a [`PlanView`]. Plans are saved and loaded as TOML (FR-34).
 
 use std::sync::Arc;
@@ -9,7 +9,7 @@ use thiserror::Error;
 use crate::state::Elements;
 use crate::time::Utc;
 
-/// Longest horizon the planner will propagate, seconds (DESIGN.md 7.4: max 7 days).
+/// Longest horizon the planner will propagate, seconds (at most 7 days).
 pub const MAX_HORIZON_S: f64 = 7.0 * 86_400.0;
 /// Most burns in one plan.
 pub const MAX_BURNS: usize = 20;
@@ -200,7 +200,7 @@ impl PlanDef {
 }
 
 /// A maneuver mentioned in the ISS OEM's comments: read-only, shown for reference (FR-33). The comment
-/// format is not specified (DESIGN.md R3), so everything but the raw text is best effort.
+/// format is not specified, so everything but the raw text is best effort.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReferenceBurn {
     pub raw: String,

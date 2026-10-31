@@ -1,4 +1,4 @@
-# CelesTrak supplemental GP (ISS-E): M1 evaluation (DESIGN.md §3.1)
+# CelesTrak supplemental GP (ISS-E): M1 evaluation (the design document §3.1)
 
 Checked 2026-10-23 with `cargo test -p mctl-astro supgp_vs_oem -- --ignored --nocapture` against the cached
 NASA OEM (created 2026-10-21 16:27).

@@ -1,6 +1,6 @@
 //! Spike A: GPU console renderer (winit + wgpu + egui, no eframe).
 //!
-//! Throwaway: it exists to retire the rendering risks in DESIGN.md §13 M0(a).
+//! Throwaway: it exists to retire the rendering risks of the console renderer.
 
 mod app;
 mod coast;

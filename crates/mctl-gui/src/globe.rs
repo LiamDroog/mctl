@@ -17,7 +17,7 @@ use crate::theme::{GlobeMode, GlobeStyle};
 const SOFTWARE_TEXTURE_MAX_W: u32 = 2048;
 pub(crate) const EARTH_RADIUS_KM: f32 = 6378.137;
 
-/// Radial exaggeration steps for the orbit; always labelled in the panel title (DESIGN.md §9.6).
+/// Radial exaggeration steps for the orbit; always labelled in the panel title.
 pub const EXAGGERATION_STEPS: [f32; 4] = [1.0, 2.0, 5.0, 10.0];
 
 /// Camera: distances in Earth radii, vertical field of view degrees.
@@ -48,7 +48,7 @@ const PAST_PHASE: f32 = -1.0;
 
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
-/// Interactive camera state (DESIGN.md §9.6: orbit, zoom, inertial or Earth-fixed, focus Earth or vehicle).
+/// Interactive camera state (orbit, zoom, inertial or Earth-fixed, focus Earth or vehicle).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera {
     pub azimuth_deg: f32,

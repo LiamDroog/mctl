@@ -1,4 +1,4 @@
-//! Fixed character grid: the console's text model (DESIGN.md §9.1).
+//! Fixed character grid: the console's text model.
 //!
 //! Panels write styled characters into the grid; [`Grid::paint`] turns runs of identical
 //! style into egui text at exact cell positions. Graphical panels are cell rectangles the

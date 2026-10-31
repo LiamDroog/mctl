@@ -1,6 +1,6 @@
 //! Time: UTC instants, the leap-second table, and Earth-orientation (UT1-UTC, polar motion) data.
 //!
-//! Known simplification versus DESIGN.md §6.3: instants are POSIX-style UTC seconds in an `f64`, not
+//! Known simplification versus the usual TAI representation: instants are POSIX-style UTC seconds in an `f64`, not
 //! TAI as `i64` plus a fraction. That is exact (to ~0.2 µs) for every window that does not contain a
 //! leap second and for the present day; a leap second itself cannot be represented. Moving to TAI is
 //! planned before the sim clock can scrub across historical leap seconds.
@@ -144,7 +144,7 @@ impl Utc {
         format!("{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{s:06.3}")
     }
 
-    /// GMT as `DDD:HH:MM:SS.ss` (day of year), DESIGN.md §6.3.
+    /// GMT as `DDD:HH:MM:SS.ss` (day of year).
     pub fn gmt_doy(self) -> String {
         let (y, mo, d, h, mi, s) = Utc((self.0 * 1.0e2).round() / 1.0e2).to_ymd_hms();
         let doy = days_from_civil(y, mo, d) - days_from_civil(y, 1, 1) + 1;

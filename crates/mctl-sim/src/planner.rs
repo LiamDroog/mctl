@@ -1,4 +1,4 @@
-//! The maneuver planner (DESIGN.md 7.4): resolve burn triggers on the nominal trajectory, propagate
+//! The maneuver planner: resolve burn triggers on the nominal trajectory, propagate
 //! numerically through the burns, propagate the same start without burns for comparison, and report the
 //! difference. Runs on a worker thread; the engine publishes the result.
 

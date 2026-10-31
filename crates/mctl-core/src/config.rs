@@ -49,7 +49,7 @@ pub struct Config {
     pub rules: Vec<crate::cw::RuleDef>,
 }
 
-/// Proximity-operations display (DESIGN.md 9.6 F8). The zone sizes are configured, not sourced.
+/// Proximity-operations display. The zone sizes are configured, not sourced.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct ProxConfig {
@@ -117,7 +117,7 @@ pub struct SkySources {
     pub cache_s: f64,
 }
 
-/// JPL Horizons vector tables (DESIGN.md gives Horizons as the source for non-ISS vehicles).
+/// JPL Horizons vector tables (the source for the vehicles other than the ISS).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct HorizonsSource {
@@ -172,7 +172,7 @@ pub struct Limits {
     pub residual_warning_km: f64,
 }
 
-/// A named observer site (DESIGN.md §8, FR-51).
+/// A named observer site.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SiteDef {
@@ -198,7 +198,7 @@ impl SiteDef {
     }
 }
 
-/// IP geolocation (DESIGN.md §8 step 3): disabled by default; queries the configured HTTPS endpoint
+/// IP geolocation: disabled by default; queries the configured HTTPS endpoint
 /// once per session. The endpoint, its JSON field names and its accuracy are all configuration.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -220,15 +220,15 @@ pub struct ObserverConfig {
     pub pass_days: f64,
     /// Elevation sampling step of the pass search, seconds.
     pub step_s: f64,
-    /// Ask GeoClue2 when no site is configured as active (DESIGN.md §8 step 2).
+    /// Ask GeoClue2 when no site is configured as active.
     pub geoclue: bool,
     pub geoclue_timeout_s: f64,
     pub ip: IpLookup,
-    /// Used when no site is configured as active (DESIGN.md §8 step 4).
+    /// Used when no site is configured as active.
     pub fallback: SiteDef,
 }
 
-/// Recording to SQLite (DESIGN.md §10).
+/// Recording to SQLite.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct StoreConfig {
@@ -291,7 +291,7 @@ pub struct VehicleDef {
     /// Observing schedule shown on the OPS page: `jwst` or `hst`.
     #[serde(default)]
     pub schedule: Option<String>,
-    /// Trajectory sources in priority order (DESIGN.md §3.2).
+    /// Trajectory sources in priority order.
     pub sources: Vec<SourceKind>,
     /// Telemetry source for the GNC/EPS/TCS/COMM pages, if the vehicle has one (`"isslive"`).
     #[serde(default)]
@@ -706,7 +706,7 @@ pub fn append_site(path: &Path, site: &SiteDef) -> Result<(), ConfigError> {
     std::fs::write(path, out).map_err(io)
 }
 
-/// Create the user configuration from the embedded defaults on first run (DESIGN.md §11). Every
+/// Create the user configuration from the embedded defaults on first run. Every
 /// line is commented out, so the file overrides nothing and later changes to the defaults still
 /// apply; uncomment a line to override it. Returns whether a file was written.
 pub fn write_template_if_missing(path: &Path) -> Result<bool, ConfigError> {

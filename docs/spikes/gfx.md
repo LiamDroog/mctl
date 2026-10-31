@@ -56,7 +56,7 @@ Persistence originally used an `Rgba16Float` history and cost +4.2 / +7.4 ms; mo
 - Retrowave's optional horizon-grid backdrop is not implemented.
 - A live-desktop screenshot was taken with `spectacle -f` and **deleted immediately** because it captured unrelated windows (browser, terminals). It is not in the repo.
 
-## Findings that affect DESIGN.md
+## Findings that affect the design document
 
 1. **VT323 cannot be the CRT font**: it has no box-drawing glyphs. Unscii-16 (public domain) is used instead (see `assets/LICENSES.md`).
 2. **Intel Haswell (and likely other pre-Gen9 iGPUs) get OpenGL, not Vulkan, from wgpu.** The GL backend works, including timestamp queries. NFR-6/NFR-2 should say which backends are supported.

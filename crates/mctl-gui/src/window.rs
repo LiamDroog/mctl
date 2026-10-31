@@ -1,4 +1,4 @@
-//! The window view (DESIGN.md §9.6, F9): the Earth as seen from the vehicle, with the limb curving at its
+//! The window view: the Earth as seen from the vehicle, with the limb curving at its
 //! true altitude, the terminator, the Sun and Moon, stars, and the sub-satellite point.
 //!
 //! The Earth itself is the globe pass drawn from the vehicle's position instead of from outside; this

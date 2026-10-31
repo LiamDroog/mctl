@@ -1,7 +1,7 @@
 //! The in-house candidate: the `sgp4` crate plus `nalgebra`, with everything else written here.
 //!
 //! This is deliberately the *cheapest honest version* of each capability, so the evaluation can
-//! say what DESIGN.md's in-house path would cost and what accuracy it buys:
+//! say what the in-house path would cost and what accuracy it buys:
 //! - frames: IAU-76 precession with a 10-term IAU-80 nutation series (full series has 106 terms);
 //! - Sun: Vallado's low-precision series;
 //! - time: an embedded leap-second table and `finals2000A` for UT1-UTC and polar motion;
@@ -330,7 +330,7 @@ fn reduction(t: f64, jd_ut1: f64) -> Reduction {
 /// How the in-house frame chain is configured.
 #[derive(Clone, Copy)]
 pub struct InHouse {
-    /// Apply polar motion in GCRF -> ITRF. DESIGN.md §6.4 says to ignore it (~10 m).
+    /// Apply polar motion in GCRF -> ITRF. Ignoring it costs about 10 m.
     pub polar_motion: bool,
 }
 

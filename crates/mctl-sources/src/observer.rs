@@ -1,4 +1,4 @@
-//! Observer location resolution after a configured site (DESIGN.md §8): GeoClue2, then optional IP
+//! Observer location resolution after a configured site: GeoClue2, then optional IP
 //! geolocation. The fallback site is handled by the engine; this only reports what it found, or why not.
 
 use std::sync::mpsc::SyncSender;

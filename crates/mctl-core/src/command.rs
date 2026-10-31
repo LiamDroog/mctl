@@ -1,11 +1,11 @@
-//! Commands the console sends to the engine (DESIGN.md §6.2: GUI -> core via a command channel; the
+//! Commands the console sends to the engine (GUI -> core via a command channel; the
 //! core never calls into the GUI), and the parsing of the time arguments they take.
 
 use thiserror::Error;
 
 use crate::time::{TimeError, Utc};
 
-/// Largest simulation rate magnitude (DESIGN.md FR-20: -10000x .. +10000x).
+/// Largest simulation rate magnitude (-10000x .. +10000x).
 pub const MAX_RATE: f64 = 10_000.0;
 /// Smallest rate magnitude accepted; slower than this is indistinguishable from a pause.
 pub const MIN_RATE: f64 = 0.01;

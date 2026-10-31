@@ -15,7 +15,7 @@ const USER_AGENT: &str = "mctl-m0-spike (research; contact via repo owner)";
 /// CelesTrak GP query for the ISS. `FORMAT=JSON` is explicit because the server default is now CSV.
 pub const CELESTRAK_ISS_OMM_URL: &str =
     "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=JSON";
-/// NASA ISS trajectory (OEM, EME2000), DESIGN.md §3.1.
+/// NASA ISS trajectory (OEM, EME2000).
 pub const NASA_ISS_OEM_URL: &str =
     "https://nasa-public-data.s3.amazonaws.com/iss-coords/current/ISS_OEM/ISS.OEM_J2K_EPH.txt";
 /// JPL Horizons API endpoint.

@@ -1,4 +1,4 @@
-//! Theme palettes and effect parameters, loaded from TOML (DESIGN.md §9.2).
+//! Theme palettes and effect parameters, loaded from TOML.
 //!
 //! Themes are data so users can add their own; every value is range-checked on load so a
 //! typo fails loudly with the file and field instead of rendering something subtly wrong.
@@ -151,7 +151,7 @@ pub struct Palette {
     pub info: Rgb,
 }
 
-/// How a limit state is encoded without relying on hue alone (DESIGN.md §9.2).
+/// How a limit state is encoded without relying on hue alone.
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct LimitStyle {
     pub inverse: bool,
@@ -306,7 +306,7 @@ impl Theme {
             if l.blink_hz < 0.0 || l.blink_hz > 10.0 {
                 return Err(bad(field, "blink_hz must be 0..=10"));
             }
-            // DESIGN.md §9.2: limit states must not rely on hue alone.
+            // Limit states must not rely on hue alone.
             if !(l.inverse || l.dim || l.blink_hz > 0.0 || l.semantic_colour) {
                 return Err(bad(field, "state has no visible encoding"));
             }

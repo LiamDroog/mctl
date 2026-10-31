@@ -1,5 +1,5 @@
 //! Lock-free publication of the latest [`World`]: producers never block on the reader, and the
-//! reader never blocks on producers (DESIGN.md §6.2).
+//! reader never blocks on producers.
 
 use std::sync::Arc;
 

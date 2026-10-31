@@ -1,4 +1,4 @@
-//! Orbit events by root finding (DESIGN.md §7.3, FR-14): ascending and descending nodes, apsides and
+//! Orbit events by root finding: ascending and descending nodes, apsides and
 //! eclipse entry and exit. Sampled event functions are bracketed, then bisected.
 
 use mctl_core::time::Utc;

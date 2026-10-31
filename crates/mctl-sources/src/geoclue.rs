@@ -1,4 +1,4 @@
-//! Observer location from GeoClue2 over the system D-Bus (DESIGN.md §8, step 2 of the chain).
+//! Observer location from GeoClue2 over the system D-Bus (step 2 of the chain).
 //!
 //! Best effort: GeoClue only answers applications listed in `/etc/geoclue/geoclue.conf` (or approved
 //! by a desktop agent), and its network backends vary by distribution. Every failure comes back with
@@ -11,7 +11,7 @@ use zbus::OwnedObjectPath;
 use zbus::{Connection, Proxy};
 
 const SERVICE: &str = "org.freedesktop.GeoClue2";
-/// `GCLUE_ACCURACY_LEVEL_CITY` (DESIGN.md §8).
+/// `GCLUE_ACCURACY_LEVEL_CITY`.
 const ACCURACY_CITY: u32 = 4;
 /// Identifier GeoClue matches against its configuration.
 pub const DESKTOP_ID: &str = "mctl";

@@ -1,4 +1,4 @@
-//! Source arbitration (DESIGN.md §3.2): the first source, in configured priority order, that is
+//! Source arbitration: the first source, in configured priority order, that is
 //! healthy and valid at the requested time is active. Everything else keeps propagating in the
 //! background so residuals can be published.
 

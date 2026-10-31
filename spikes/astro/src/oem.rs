@@ -12,7 +12,7 @@ use crate::timeutil::{TimeError, Utc};
 /// Frame the NASA ISS OEM is published in. Mean of J2000 equator and equinox.
 const EXPECTED_FRAME: &str = "EME2000";
 const EXPECTED_TIME_SYSTEM: &str = "UTC";
-/// Points used per interpolation: the order is this minus one. 9 points = 8th order, as DESIGN.md §7.1 says.
+/// Points used per interpolation: the order is this minus one. 9 points = 8th order, as planned.
 pub const INTERPOLATION_POINTS: usize = 9;
 
 #[derive(Debug, Error)]
@@ -247,7 +247,7 @@ impl Oem {
         Ok(out)
     }
 
-    /// Hold-out test from DESIGN.md §12: interpolate every other sample from its neighbours,
+    /// Hold-out test: interpolate every other sample from its neighbours,
     /// leaving the sample itself out. Returns the position error (m) and velocity error (mm/s) maxima.
     pub fn hold_out_errors(&self) -> (f64, f64) {
         let (mut max_r, mut max_v) = (0.0f64, 0.0f64);

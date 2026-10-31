@@ -1,6 +1,6 @@
-//! The MASTER page (DESIGN.md §9.5), built only from the engine's published snapshot.
+//! The MASTER page, built only from the engine's published snapshot.
 //!
-//! Rule (DESIGN.md §1.3): a quantity with no source is shown as `NO DATA`, never as a plausible
+//! Rule: a quantity with no source is shown as `NO DATA`, never as a plausible
 //! substitute. Panels whose data source belongs to a later milestone say so rather than inventing content.
 
 use egui::{Painter, Pos2, Stroke};
@@ -13,7 +13,7 @@ use crate::grid::{CellRect, Grid, Limit, Role, Style};
 use crate::render::EffectToggles;
 use crate::theme::Theme;
 
-/// Smallest grid for which the layout is designed (DESIGN.md §9.5).
+/// Smallest grid for which the layout is designed.
 pub const MIN_COLS: usize = 160;
 pub const MIN_ROWS: usize = 45;
 

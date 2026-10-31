@@ -42,7 +42,7 @@ const SUN_EPOCHS: usize = 13;
 const NUMERICAL_START: &str = "2026-10-22T12:00:00";
 /// Index of `satkit` in the candidate list: the most complete frame implementation, used as the frames reference.
 const SATKIT_INDEX: usize = 2;
-/// Highest zonal harmonic used in the numerical comparison (DESIGN.md §7.1: J2-J4).
+/// Highest zonal harmonic used in the numerical comparison (J2-J4).
 const ZONAL_DEGREE: u16 = 4;
 
 /// Percent-encode for a URL query value.

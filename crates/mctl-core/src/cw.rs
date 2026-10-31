@@ -1,4 +1,4 @@
-//! Caution and warning (DESIGN.md §4.5): rule definitions, the per-rule state machine, and the
+//! Caution and warning: rule definitions, the per-rule state machine, and the
 //! master-annunciator latch. Pure logic; the engine feeds it values and publishes the result.
 
 use std::str::FromStr;

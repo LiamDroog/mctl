@@ -1,7 +1,7 @@
 //! Pixel-drawn widgets that sit in cell rectangles the text grid leaves empty: gauges, sparklines,
 //! dials, the L2 orbit plots and the JWST schedule timeline. Colours come from the active theme; a
-//! limit state changes colour here and is always also said in text beside the widget (DESIGN.md §9.2:
-//! no state relies on hue alone).
+//! limit state changes colour here and is always also said in text beside the widget (no state
+//! relies on hue alone).
 
 use egui::{Align2, Color32, Painter, Pos2, Rect, Shape, Stroke, StrokeKind, vec2};
 use mctl_core::schedule::Ops;

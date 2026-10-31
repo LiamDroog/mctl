@@ -1,4 +1,4 @@
-//! TRAJ / MANEUVER PLANNER (DESIGN.md 9.6 F2.4): the burn table, force-model controls, results and the
+//! TRAJ / MANEUVER PLANNER: the burn table, force-model controls, results and the
 //! plan plots. The plan itself lives in the engine; this page shows the snapshot and says which
 //! commands edit it.
 

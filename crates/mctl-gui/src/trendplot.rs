@@ -1,4 +1,4 @@
-//! Time-series plots for the TRAJ trends page (DESIGN.md §9.6 F2.3).
+//! Time-series plots for the TRAJ trends page.
 
 use egui::{Align2, Painter, Pos2, Shape, Stroke};
 use mctl_core::time::Utc;
@@ -6,7 +6,7 @@ use mctl_core::world::{TrendPlot, TrendSet};
 
 use crate::theme::Theme;
 
-/// Selectable windows, 6 h to 90 d (DESIGN.md §9.6).
+/// Selectable windows, 6 h to 90 d.
 pub const WINDOWS: [(&str, f64); 5] = [
     ("6h", 6.0 * 3600.0),
     ("24h", 86_400.0),

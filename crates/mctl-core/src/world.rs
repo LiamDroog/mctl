@@ -1,4 +1,4 @@
-//! The immutable snapshot the engine publishes and the console reads (DESIGN.md §6.2).
+//! The immutable snapshot the engine publishes and the console reads.
 //!
 //! Nothing here is ever a placeholder: a quantity with no source is `None`, and the UI shows `NO DATA`.
 
@@ -88,7 +88,7 @@ pub struct DeepView {
     pub rot_km: [f64; 3],
 }
 
-/// Orbit events (DESIGN.md FR-14).
+/// Orbit events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EventKind {
     AscendingNode,
@@ -181,7 +181,7 @@ pub struct VehicleView {
     pub beta_series: Arc<Vec<(Utc, f64)>>,
 }
 
-/// Where an observer site came from (DESIGN.md §8).
+/// Where an observer site came from.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SiteView {
     pub name: String,
@@ -252,7 +252,7 @@ pub struct PassSet {
     pub look_now: Option<LookView>,
 }
 
-/// Earth-orientation data status (DESIGN.md §6.3: assume zero UT1-UTC, but say so).
+/// Earth-orientation data status (assume zero UT1-UTC, but say so).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum EopView {
     Loaded {
@@ -265,7 +265,7 @@ pub enum EopView {
     },
 }
 
-/// Clock mode (DESIGN.md FR-20).
+/// Clock mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClockMode {
     Live,
@@ -293,7 +293,7 @@ impl ClockView {
     }
 }
 
-/// One line of the event log (DESIGN.md FR-42 foreshadows the full C&W log; this records system events).
+/// One line of the event log (system events; the C&W log is separate).
 #[derive(Debug, Clone, PartialEq)]
 pub struct LogEntry {
     /// Wall-clock time of the event.
@@ -301,7 +301,7 @@ pub struct LogEntry {
     pub text: String,
 }
 
-/// One telemetry item's latest value (DESIGN.md FR-3, FR-6).
+/// One telemetry item's latest value.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TelemetryItem {
     pub id: String,
@@ -393,7 +393,7 @@ pub struct TrendPlot {
     pub series: Vec<TrendSeries>,
 }
 
-/// Time series computed from the recording (DESIGN.md §9.6 F2.3).
+/// Time series computed from the recording.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrendSet {
     pub vehicle: String,

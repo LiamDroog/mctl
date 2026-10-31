@@ -1,6 +1,6 @@
 //! Spike C: minimal in-house Lightstreamer TLCP client for the public ISSLIVE feed.
 //!
-//! Throwaway: it exists to retire DESIGN.md §13 M0(c) and R2/R4. The per-update printout on stdout
+//! Throwaway: it exists to retire the risks of the ISSLIVE client. The per-update printout on stdout
 //! is the point of the spike, so it uses `println!`; diagnostics go through `tracing`.
 
 mod config;

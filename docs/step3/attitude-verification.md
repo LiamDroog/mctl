@@ -1,4 +1,4 @@
-# ISSLIVE: attitude convention and unit corrections (DESIGN.md R4)
+# ISSLIVE: attitude convention and unit corrections (the design document R4)
 
 Checked 2026-10-23 against the live feed (`mctl isslive`, 20 s capture), not against documentation.
 

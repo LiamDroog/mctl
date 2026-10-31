@@ -1,4 +1,4 @@
-//! Observer geometry and pass prediction (DESIGN.md FR-14, FR-15, §7.3).
+//! Observer geometry and pass prediction.
 //!
 //! Look angles use the WGS-84 ellipsoid and the ITRF position of the vehicle. Passes are found by
 //! sampling elevation at a step that cannot skip a pass, then bisecting each crossing of the mask.

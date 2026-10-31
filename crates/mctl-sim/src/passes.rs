@@ -1,4 +1,4 @@
-//! Pass prediction jobs (DESIGN.md §7.3): computed off the engine thread, because a week of passes
+//! Pass prediction jobs: computed off the engine thread, because a week of passes
 //! over several sites takes about a second.
 
 use std::sync::Arc;

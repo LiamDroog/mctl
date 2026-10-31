@@ -1,6 +1,6 @@
 //! Supervised source tasks (NFR-5): one thread per source, so a hung or failing provider can never
 //! block the UI or another source. On start each task publishes its cached copy immediately, then
-//! refreshes in the background with exponential backoff and jitter after failures (DESIGN.md §3.3).
+//! refreshes in the background with exponential backoff and jitter after failures.
 
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel};

@@ -1,4 +1,4 @@
-//! On-disk HTTP cache with ETag / Last-Modified revalidation (DESIGN.md §3.3).
+//! On-disk HTTP cache with ETag / Last-Modified revalidation.
 //!
 //! Each key is a body file plus a small JSON metadata file. A refresh inside the minimum interval
 //! does no network I/O at all; otherwise it sends a conditional request, so an unchanged resource

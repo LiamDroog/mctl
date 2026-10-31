@@ -23,6 +23,6 @@ predictor (Spot the Station, Heavens-Above), which would also test the element s
 
 Re-run over seven days (`xcheck_passes.py` and `print_fixture_passes` both set to 7 d): mctl and the
 independent implementation each find 38 passes. Largest differences: AOS 0.003 s, LOS 0.003 s, TCA 0.46 s,
-max elevation 0.013 deg. DESIGN.md §12 asks for 20 passes within 10 s and 0.5 deg against NASA Spot the
+max elevation 0.013 deg. the design document §12 asks for 20 passes within 10 s and 0.5 deg against NASA Spot the
 Station or an independent tool; this meets the numbers against an independent *implementation*, but
 not against Spot the Station, which also depends on the element set it uses.

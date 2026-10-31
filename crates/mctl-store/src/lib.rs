@@ -1,4 +1,4 @@
-//! SQLite recording (DESIGN.md §10, FR-60..62): states, telemetry, element sets, events and C&W log,
+//! SQLite recording: states, telemetry, element sets, events and C&W log,
 //! in WAL mode, with retention by age and size and CSV export.
 //!
 //! Writing happens on a dedicated thread fed by a channel, so the engine never waits on the disk.

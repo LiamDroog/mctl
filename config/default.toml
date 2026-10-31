@@ -5,7 +5,7 @@
 [fetch]
 user_agent = "mctl/0.0 (mission control display; github.com/LiamDroog/mctl)"
 timeout_s = 30
-# Exponential backoff after a failed fetch, with jitter, capped (DESIGN.md §3.3).
+# Exponential backoff after a failed fetch, with jitter, capped.
 backoff_initial_s = 30
 backoff_max_s = 1800
 
@@ -68,7 +68,7 @@ residual_caution_km = 5.0
 residual_warning_km = 20.0
 
 [observer]
-# Observer site resolution (DESIGN.md 8): the configured `active` site, else the fallback below.
+# Observer site resolution: the configured `active` site, else the fallback below.
 # GeoClue and IP geolocation (steps 2 and 3 of the design's chain) are NOT implemented yet.
 active = ""
 mask_deg = 10.0
@@ -89,8 +89,7 @@ lon_key = "longitude"
 accuracy_km = 25.0
 
 [observer.fallback]
-# NASA Headquarters, per DESIGN.md 8. The design says to verify these coordinates against a survey
-# source before release; they are not verified.
+# NASA Headquarters. These coordinates are approximate and not checked against a survey source.
 name = "NASA HQ"
 lat_deg = 38.8830
 lon_deg = -77.0163
@@ -104,7 +103,7 @@ alt_m = 10.0
 # alt_m = 100.0
 
 [store]
-# Recording to SQLite (DESIGN.md 10). path = "" means $XDG_DATA_HOME/mctl/mctl.db.
+# Recording to SQLite. path = "" means $XDG_DATA_HOME/mctl/mctl.db.
 enabled = true
 path = ""
 state_hz = 1.0
@@ -190,9 +189,9 @@ sources = ["horizons"]
 met_epoch = "2026-08-30T11:26:04"
 horizons = { id = "-211", step_s = 21600, past_days = 50, future_days = 100, stale_after_s = 1209600 }
 
-# ---- Caution and warning rules (DESIGN.md 4.5) ---------------------------------------------------
-# Every rule says where its limits come from in `basis`. DESIGN.md FR-43: ISS subsystem limits are
-# user-defined and public flight-rule limits are not assumed, so the subsystem rules below are
+# ---- Caution and warning rules ---------------------------------------------------
+# Every rule says where its limits come from in `basis`. ISS subsystem limits are user-defined and
+# public flight-rule limits are not assumed, so the subsystem rules below are
 # ILLUSTRATIVE starting points, not flight rules. Edit them in ~/.config/mctl/config.toml (a user
 # overlay replaces this whole list if it defines any [[rule]]).
 
@@ -267,7 +266,7 @@ units = ""
 basis = "illustrative, not a flight rule"
 vehicle = "iss"
 
-# ---- Key bindings (DESIGN.md 9.7) ------------------------------------------------------------------
+# ---- Key bindings ------------------------------------------------------------------
 # Single characters, case-insensitive; an action may have several. Function keys, Tab, arrows, Enter
 # and Escape are fixed. A user config replaces individual actions; every action must stay bound and no
 # character may be used twice.

@@ -1,6 +1,6 @@
 //! The ISSLIVE feed as an engine source: one thread running the TLCP session, reconnecting with
 //! backoff, and forwarding every item update as an [`Event`]. Failures are reported as health, never
-//! swallowed (DESIGN.md R1: pages degrade to NO DATA, trajectory views do not depend on this).
+//! swallowed (pages degrade to NO DATA; trajectory views do not depend on this).
 
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender};
 use std::time::Duration;

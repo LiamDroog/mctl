@@ -1,5 +1,5 @@
-//! Numerical (Cowell) propagation for the maneuver planner and for extending a source past its span
-//! (DESIGN.md §7.1): Dormand-Prince 8(5,3) from the `ode_solvers` crate, in GCRF, km and s.
+//! Numerical (Cowell) propagation for the maneuver planner and for extending a source past its span:
+//! Dormand-Prince 8(5,3) from the `ode_solvers` crate, in GCRF, km and s.
 //!
 //! Forces: point mass, Earth zonal harmonics J2 to J4 about the true pole, Sun and Moon third-body
 //! (each switchable), atmospheric drag on a co-rotating atmosphere (static exponential model, so an
@@ -564,7 +564,7 @@ mod tests {
         assert!(matches!(r, Err(NumericalError::Decayed(_))), "{r:?}");
     }
 
-    /// Validation against the real ISS ephemeris (DESIGN.md section 12): start from an OEM state, propagate
+    /// Validation against the real ISS ephemeris: start from an OEM state, propagate
     /// with the full force model and the OEM's own ballistic coefficient, and compare with the OEM.
     #[test]
     fn the_full_model_tracks_the_nasa_iss_ephemeris_for_a_day() {

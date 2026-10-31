@@ -1,4 +1,4 @@
-//! Geocentric Moon position, analytic (DESIGN.md FR-13: arcminute-level is sufficient). Vallado
+//! Geocentric Moon position, analytic (arcminute level is sufficient). Vallado
 //! Algorithm 31, the truncated lunar series, precessed to J2000.
 
 use mctl_core::time::Utc;

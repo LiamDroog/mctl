@@ -1,5 +1,5 @@
 //! Time, state types, configuration, the published world snapshot, the bus and the arbiter.
-//! No UI, network or async-runtime dependency, so it is unit-testable in isolation (DESIGN.md §6.1).
+//! No UI, network or async-runtime dependency, so it is unit-testable in isolation.
 
 pub mod arbiter;
 pub mod bus;

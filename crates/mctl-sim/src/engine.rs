@@ -1,5 +1,5 @@
 //! The propagation engine: consumes source events, runs the arbiter every tick, and publishes an
-//! immutable [`World`] snapshot (DESIGN.md §6.2, §3.2). It runs on its own thread at `engine.tick_hz`;
+//! immutable [`World`] snapshot. It runs on its own thread at `engine.tick_hz`;
 //! the UI only ever reads the latest snapshot.
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -42,7 +42,7 @@ const LOG_CAPACITY: usize = 200;
 /// After the first snapshot, conditions only list (they do not latch the master annunciator) for
 /// this long, so the normal start-up (sources still loading, EOP not yet read) is not an alarm.
 const CW_STARTUP_GRACE_S: f64 = 10.0;
-/// Samples per revolution of the event search (DESIGN.md §7.3: period / 200).
+/// Samples per revolution of the event search (period / 200).
 const EVENT_STEPS_PER_REV: f64 = 200.0;
 /// Track is rebuilt at least this often, seconds.
 const TRACK_REBUILD_S: f64 = 1.0;

@@ -1,7 +1,6 @@
-//! Attitude director indicator (DESIGN.md §9.6 F3.1) and the quaternion maths behind it.
+//! Attitude director indicator and the quaternion maths behind it.
 //!
-//! The ISSLIVE attitude quaternion's component order and axis convention are NOT verified (DESIGN.md
-//! R4). This module assumes scalar-first and the aerospace 3-2-1 (yaw-pitch-roll) sequence, which
+//! The ISSLIVE attitude quaternion's component order and axis convention are NOT verified. This module assumes scalar-first and the aerospace 3-2-1 (yaw-pitch-roll) sequence, which
 //! matches the live data (component 0 is ~0.997 in the nominal hold); the page shows that assumption
 //! on screen until it is checked against a known attitude mode.
 
