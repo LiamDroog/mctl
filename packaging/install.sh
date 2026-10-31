@@ -37,13 +37,18 @@ if [ -L "$bin" ]; then
     exit 1
 fi
 
-if ! command -v cargo >/dev/null 2>&1 && [ -r "$HOME/.cargo/env" ]; then
-    . "$HOME/.cargo/env"
+if [ -x "$repo/mctl" ] && [ ! -f "$repo/Cargo.toml" ]; then
+    # An unpacked release tarball: the binary is already built.
+    built="$repo/mctl"
+else
+    if ! command -v cargo >/dev/null 2>&1 && [ -r "$HOME/.cargo/env" ]; then
+        . "$HOME/.cargo/env"
+    fi
+    command -v cargo >/dev/null 2>&1 || { echo "install.sh: cargo not found" >&2; exit 127; }
+    (cd "$repo" && cargo build --release --locked -p mctl)
+    built="$repo/target/release/mctl"
 fi
-command -v cargo >/dev/null 2>&1 || { echo "install.sh: cargo not found" >&2; exit 127; }
-
-(cd "$repo" && cargo build --release --locked -p mctl)
-install -Dm755 "$repo/target/release/mctl" "$bin"
+install -Dm755 "$built" "$bin"
 install -Dm644 "$here/mctl.desktop" "$apps/mctl.desktop"
 install -Dm644 "$here/mctl-pi.desktop" "$apps/mctl-pi.desktop"
 install -Dm644 "$here/mctl.svg" "$icons/mctl.svg"

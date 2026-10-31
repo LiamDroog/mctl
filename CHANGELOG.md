@@ -1,0 +1,18 @@
+# Changelog
+
+All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/), and
+the project uses [semantic versioning](https://semver.org/) once it reaches 1.0; until then, minor versions may
+change behaviour.
+
+## [Unreleased]
+
+First public release. In the box:
+
+- A mission-control console for the ISS, Hubble, JWST, Roman and the Crew and Cargo Dragons: orbit map,
+  ground track, sky plot and pass predictions, elements and trends, a maneuver planner, a window view of the
+  Earth from the vehicle, proximity operations, and JWST and Hubble observing schedules with survey pictures.
+- Live ISS telemetry (GNC, EPS, TCS/ECLSS, COMM) with a caution-and-warning rule engine.
+- Recording to SQLite, export to CSV, and replay of the recording.
+- Four themes with optional CRT effects, and a low-resolution display mode (`--pi`) for a Raspberry Pi driving
+  a composite CRT.
+- `mctl about`, with the licence, credits and third-party notices.

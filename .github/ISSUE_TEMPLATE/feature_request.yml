@@ -1,0 +1,15 @@
+name: Feature request
+description: A vehicle, page, data source or display you would like
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What would you like, and what is it for?
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Where would the data come from?
+      description: For a new vehicle or page, a public source (URL) makes it far more likely to happen.

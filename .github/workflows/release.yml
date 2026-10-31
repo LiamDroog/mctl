@@ -1,0 +1,110 @@
+name: Release
+
+# Runs when a version tag is pushed: `git tag -a v0.1.0 -m "mctl 0.1.0" && git push origin v0.1.0`.
+# See docs/RELEASING.md for the checklist; nothing here publishes without that tag.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          # Built on the oldest runner images offered, so the binaries run on older distributions too
+          # (the glibc of the build machine is the minimum glibc of the binary).
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-22.04
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The tag must match the version in Cargo.toml
+        run: |
+          version="$(awk -F'"' '/^version *=/ { print $2; exit }' Cargo.toml)"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $version" >&2
+            exit 1
+          fi
+          grep -q "^## \[$version\]" CHANGELOG.md || { echo "CHANGELOG.md has no [$version] section" >&2; exit 1; }
+
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: dist-${{ matrix.target }}
+
+      - name: Run the tests on the exact commit being released
+        run: cargo test --workspace --locked
+
+      - name: Build
+        run: cargo build --profile dist --locked -p mctl
+
+      - name: The binary starts and carries its notices
+        run: |
+          target/dist/mctl --version
+          target/dist/mctl about | grep -q "GNU General Public License"
+          target/dist/mctl about | grep -q "Third-party notices"
+          file target/dist/mctl
+
+      - name: Package
+        run: packaging/make-dist.sh ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  publish:
+    name: publish the release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: dist-*
+          merge-multiple: true
+
+      - name: Verify the checksums
+        run: cd dist && sha256sum -c ./*.sha256
+
+      - name: Release notes from the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          {
+            echo
+            echo "Linux binaries for x86-64 and aarch64 (Raspberry Pi 3 and later, 64-bit OS) with SHA-256 checksums."
+            echo "Source: https://github.com/${GITHUB_REPOSITORY}/tree/${GITHUB_REF_NAME} (GPL-3.0-or-later)."
+          } >> notes.md
+          test -s notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/*.sha256 \
+            --title "mctl ${GITHUB_REF_NAME#v}" --notes-file notes.md --verify-tag

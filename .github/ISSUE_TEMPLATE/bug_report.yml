@@ -1,0 +1,36 @@
+name: Bug report
+description: Something is wrong, crashes, or shows a wrong number
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The command line you ran and what you pressed.
+  - type: input
+    id: version
+    attributes:
+      label: Output of `mctl --version`
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: OS, GPU and compositor (Wayland or X11)
+      description: For a Raspberry Pi, say which model and whether you used --pi.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Relevant lines from ~/.local/state/mctl/mctl.log
+      render: text
+  - type: markdown
+    attributes:
+      value: Please do not attach screenshots or logs that show your location.

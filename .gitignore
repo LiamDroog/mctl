@@ -2,3 +2,6 @@ target/
 
 # The design document stays local.
 /DESIGN.md
+
+# Release tarballs (packaging/make-dist.sh).
+/dist/
