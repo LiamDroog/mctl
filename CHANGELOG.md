@@ -15,4 +15,6 @@ First public release. In the box:
 - Recording to SQLite, export to CSV, and replay of the recording.
 - Four themes with optional CRT effects, and a low-resolution display mode (`--pi`) for a Raspberry Pi driving
   a composite CRT.
-- `mctl about`, with the licence, credits and third-party notices.
+- `mctl about`, with the licence, credits and third-party notices, and matching ABOUT and CREDITS pages.
+- `packaging/bootstrap.sh`: checks a machine for a compiler, libraries, a Vulkan driver and Rust, installs what is
+  missing (apt, dnf, pacman, and rustup), then builds and installs mctl.

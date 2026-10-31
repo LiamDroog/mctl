@@ -1,174 +1,203 @@
 # mctl
 
-A mission-control display for the ISS and the spacecraft around it, in the style of a flight control console:
-live orbits, ground tracks, sky plots and pass predictions, ISS telemetry with caution-and-warning rules, a
-maneuver planner, replay of what you recorded, and JWST and Hubble observing schedules with pictures of what
-they are pointed at. It runs as a native Rust program on Linux, with four colour themes (green and amber
-phosphor, a modern slate, retrowave), and it has a low-resolution mode for a Raspberry Pi driving a
-composite CRT.
+mctl is a spacecraft display I'm writing in Rust. It follows the ISS, the Crew and Cargo Dragons that visit it,
+Hubble, JWST and Roman, and tries to look like a flight control room: a 3D orbit map, ground track, sky plot,
+pass predictions, a maneuver planner, and live telemetry from the ISS. I wanted something to leave running on
+a screen at home.
+
+It's a normal Linux program with four themes (green phosphor, amber, retrowave, and a plain dark one). It also
+has a low-resolution mode for a Raspberry Pi feeding a Commodore 1702 CRT over composite, which is how I run
+mine.
 
 ![The MASTER page in the Phosphor theme](docs/step4/phosphor-master-1-1920x1080.png)
 
-**Status:** early (0.x). Linux only: Wayland or X11, with a Vulkan driver (a software one such as Mesa's
-lavapipe is enough, just slow). It is built and used on one desktop and one Raspberry Pi 3B+; other hardware
-is untested. Windows and macOS are not supported.
+Most of the code was written with Claude, Anthropic's AI model. I set the direction, tested it, and made the
+calls. There's more on that under Credits.
 
-## Vehicles and pages
+It's early (0.x). I've only run it on my own desktop and on a Pi 3B+, so expect rough edges on anything else.
+It's Linux only, on Wayland or X11, and it needs Vulkan. Mesa's software driver works if you have no GPU, just
+slowly.
 
-ISS, Hubble, JWST and Roman, plus the Crew and Cargo Dragons that visit the station. JWST and Roman are
-followed at the Sun-Earth L2 point. `F1`-`F11` switch pages and `Tab` steps through sub-pages:
+## What's in it
 
-| Page | Shows |
-|---|---|
-| MASTER | 3D orbit map, ground track, state vector, elements, event timeline, eclipse and beta angle, C&W summary |
-| TRAJ | orbit map, ground track, elements and trends from the recording, maneuver planner |
-| GNC, EPS, TCS/ECLSS, COMM | live ISS telemetry (ISSLIVE): attitude indicator, tables, history sparklines |
-| PASS | sky plot, pass list and observer sites |
-| PROX | R-bar/V-bar motion of a visiting vehicle about the station |
-| VIEW | the Earth from the vehicle's window: nadir, ram, wake or free look |
-| SYS | event log, source health, settings, C&W rules, vehicle facts and line art |
-| OPS | JWST and Hubble observing schedules, with survey pictures of the current and next target |
+The function keys switch pages and Tab steps through the sub-pages of each one.
 
-## Install
+- **F1 MASTER**: orbit map, ground track, state vector, elements, event timeline, eclipse and beta angle.
+- **F2 TRAJ**: the orbit map and ground track full size, elements and trends from your recording, and the
+  maneuver planner.
+- **F3 to F6 GNC, EPS, TCS/ECLSS, COMM**: live ISS telemetry, with an attitude indicator, tables and history
+  charts.
+- **F7 PASS**: sky plot, pass list and observer sites.
+- **F8 PROX**: where a visiting vehicle is relative to the station.
+- **F9 VIEW**: the Earth out of the vehicle's window (nadir, ram, wake, or look around).
+- **F10 SYS**: event log, source health, settings, the caution and warning rules, vehicle facts, line art, and
+  the About and Credits pages.
+- **F11 OPS**: the JWST and Hubble observing schedules, with a picture of the sky where each is pointed.
 
-Prebuilt Linux binaries (x86-64, and aarch64 for a Raspberry Pi) are attached to each
-[release](https://github.com/LiamDroog/mctl/releases) with checksums. The binary embeds its configuration,
-fonts, textures and coastlines, and needs only a GPU driver and libc.
+## Installing
 
-To build from source you need Rust 1.95 or newer:
+### A release
+
+Each [release](https://github.com/LiamDroog/mctl/releases) has a tarball for x86-64 and one for aarch64 (a
+Raspberry Pi 3 or later running a 64-bit OS), plus checksums. Unpack one and run `./mctl`. If it complains about
+a missing library, `packaging/bootstrap.sh` in the tarball works out what's missing and installs it, and
+`packaging/install.sh` puts the binary and a desktop entry in `~/.local`.
+
+### From source
+
+On a fresh machine:
 
 ```
-cargo build --release --locked -p mctl
-./target/release/mctl            # the console
+git clone https://github.com/LiamDroog/mctl
+cd mctl
+packaging/bootstrap.sh
 ```
 
-`packaging/install.sh` builds a release binary and installs it with desktop entries and an icon
-(`--prefix`, `--uninstall`). `scripts/mctl-launch` is a development launcher that rebuilds before running;
-symlink it as `mctl` somewhere on your `PATH`.
+It checks for a C compiler, curl, the libraries the window needs, a Vulkan driver, and Rust 1.95 or newer. It
+tells you what's missing, asks, and installs it: system packages through apt, dnf or pacman, and Rust through
+the official rustup installer into `~/.cargo` if there's no recent enough one. Then it builds mctl and installs
+it into `~/.local`. The first build takes a few minutes on a desktop. Don't do it on a Pi 3; use a release.
+
+It has a few switches:
+
+```
+packaging/bootstrap.sh --check              # just report what's missing, change nothing
+packaging/bootstrap.sh --dry-run            # show what it would do
+packaging/bootstrap.sh --yes                # don't ask
+packaging/bootstrap.sh --no-system-packages # never touch apt/dnf/pacman, only tell me
+packaging/bootstrap.sh --prefix /usr/local  # install somewhere else
+```
+
+The package names are set for apt (Debian, Ubuntu, Raspberry Pi OS), dnf (Fedora) and pacman (Arch). So far
+only apt has been tried on a real machine. If you'd rather do it by hand, you need `build-essential` or the
+equivalent, then `cargo build --release --locked -p mctl`.
+
+`packaging/install.sh --uninstall` removes it again. If you're working on the code, `scripts/mctl-launch` is a
+launcher that rebuilds before it runs; symlink it as `mctl` somewhere on your `PATH`.
 
 ## Using it
 
 ```
-mctl                             # the console
-mctl --vehicle jwst --theme retrowave --fullscreen   # iss | hubble | jwst | roman (or V in the console)
-mctl --offline                   # cached data only, no network
-mctl check                       # validate the config, fetch every source once, report
-mctl about                       # licence, credits and third-party notices
-mctl --replay start              # play back the recording (start, an ISO epoch, or an offset such as -2h)
-mctl --no-record                 # do not record this run
-mctl isslive --duration-s 30     # print live ISS telemetry
-mctl export --out ./dump         # every recorded table as CSV (or: export telemetry --from ... --out t.csv)
-mctl shot --out-dir /tmp/shots --pages all   # headless PNGs, one per theme and page (page or page:sub)
-tools/smoke.sh                   # render every page headless and check the images
+mctl                            # the console
+mctl --vehicle jwst --theme retrowave --fullscreen    # iss, hubble, jwst or roman
+mctl --offline                  # use cached data only
+mctl check                      # check the config and fetch each data source once
+mctl about                      # licence, credits, third-party notices
+mctl --replay start             # play back your recording (or an ISO time, or an offset like -2h)
+mctl --no-record                # don't record this run
+mctl export --out ./dump        # every recorded table as CSV
+mctl shot --out-dir /tmp/shots --pages all    # headless screenshots, one per theme and page
 ```
 
-Keys (all single-character keys are remappable under `[keys]` in the config): `F1`-`F11` pages (clickable in
-the footer), `Tab`/`Shift-Tab` sub-pages, `T` theme, `V` vehicle, `Space` pause/resume the simulation clock,
-`[` `]` halve/double the warp (up to 10000x either way), `0` back to LIVE, `A` acknowledge the master
-caution/warning, `:` command line (`warp`, `seek`, `step`, `page`, `theme`, `vehicle`, `fx`, `ack`, `site`,
-`burn`, `plan`, `replay`, ...; `Tab` completes), `?` help, `Q` quit. `W` cycles the trends window. On the
-orbit map, drag to rotate and use the wheel or `+`/`-` to zoom; `X` GCRF/ITRF, `Z` altitude exaggeration,
-`F` inertial/Earth-fixed, `C` focus; `1`-`4` toggle the CRT effects and `E` all of them. The window view
-(`F9`) is steered by dragging or the arrow keys in free look.
+The keys, all of which can be remapped under `[keys]` in the config:
 
-Values that are not plain measurements carry a short flag: `[EST]` estimated, assumed, inferred or
-configured; `[PLAN]` scheduled, not what is happening; `[TLE]` TLE-derived, not valid inside about 5 km;
-`[SURVEY]` a sky-survey cutout, not an observatory image; `[NOW]` the current value while the clock is not at
-the present. The legend is in `?` help.
+- `F1` to `F11` change page (you can click them in the footer too), `Tab` and `Shift-Tab` change sub-page.
+- `T` changes theme, `V` changes vehicle, `?` shows help, `Q` quits.
+- `Space` pauses the simulation clock, `[` and `]` halve and double the warp (up to 10000x either way), and
+  `0` goes back to live time.
+- `A` acknowledges the master caution or warning.
+- `:` opens a command line: `warp`, `seek`, `step`, `page`, `theme`, `vehicle`, `site`, `burn`, `plan`,
+  `replay` and more. Tab completes.
+- On the orbit map, drag to rotate and use the wheel or `+` and `-` to zoom. `X` switches GCRF and ITRF, `Z`
+  exaggerates altitude, `F` switches inertial and Earth-fixed, `C` changes focus.
+- `1` to `4` toggle the CRT effects and `E` toggles all of them.
 
-## Raspberry Pi and CRT
+Anything that isn't a plain measurement carries a short flag: `[EST]` for estimated, assumed or configured,
+`[PLAN]` for scheduled rather than happening, `[TLE]` for derived from a TLE and not trustworthy inside about
+5 km, `[SURVEY]` for a sky-survey picture, and `[NOW]` for a current value shown while the clock is somewhere
+else. `?` has the legend.
 
-`mctl --pi` is a second front end for the same engine, made to be looked at: big line art, maps and the
-console's own pages at 640x480, cycling through the vehicles, with no effects (the tube supplies those). It
-runs on a Pi 3B+ (which has no Vulkan GPU, so it uses software rendering and the frame rate is modest) and
-on anything faster.
+## On a Raspberry Pi and a CRT
+
+`mctl --pi` is a second front end on the same engine, built to be looked at rather than driven. It cycles
+through the vehicles at 640x480, with line art, maps, and the console's own pages, and it draws without the CRT
+effects because the tube does those itself.
 
 ```
-mctl --pi                                      # fullscreen display
-mctl --pi --pi-style dense --theme retrowave   # console pages only, in the retrowave colours
-mctl --pi shot --out-dir /tmp/pi               # one PNG per scene
+mctl --pi                                       # fullscreen, cycling
+mctl --pi --pi-style dense --theme retrowave    # console pages only, in retrowave
+mctl --pi shot --out-dir /tmp/pi                # one PNG per scene
 ```
 
-Setup, composite output, cross-building and the systemd service are in [docs/pi.md](docs/pi.md).
+The pictures look good on a CRT. The dense console pages are hard to read at that resolution, and I haven't
+fixed that. A Pi 3B+ has no Vulkan GPU, so it renders in software and the frame rate is modest. The setup, the
+composite output and cross-building for a Pi are in [docs/pi.md](docs/pi.md).
 
-## Configuration and data
+## Where the data comes from
 
-Defaults are embedded (`config/default.toml`); a file at `~/.config/mctl/config.toml` overrides any key, and
-invalid values fail loudly. Downloaded data is cached in `~/.cache/mctl`, logs go to
-`~/.local/state/mctl/mctl.log`, and the recording is `~/.local/share/mctl/mctl.db` (SQLite; retention 30 days
-or 2 GB, set under `[store]`). Only real time is recorded, never simulated states. C&W rules are `[[rule]]`
-entries; the ISS subsystem ones are illustrative, not flight rules.
+- Element sets: [CelesTrak](https://celestrak.org). It also has a supplemental ISS set that mctl can use but
+  doesn't by default.
+- ISS trajectory: NASA's public ephemeris. ISS telemetry: the public ISSLIVE feed, over its Lightstreamer
+  endpoint. That isn't an official API and it could change or vanish.
+- Earth orientation and leap seconds: IERS and USNO.
+- JWST and Roman trajectories: [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/).
+- JWST visit plans and Hubble reports: [STScI](https://www.stsci.edu).
+- Sky pictures: the Digitized Sky Survey (DSS2) through CDS Strasbourg, see the
+  [DSS acknowledgement](https://archive.stsci.edu/dss/acknowledging.html).
+- The Earth: NASA Earth Observatory's Blue Marble and Black Marble. Coastlines: Natural Earth.
+- Fonts: JetBrains Mono and Unscii.
 
-The observer site for pass predictions is the configured one, else GeoClue (if your system allows it), else
-(off by default) an IP lookup, else a built-in NASA HQ fallback. The IP lookup is the only thing that sends
-anything about you anywhere, and it is off unless you turn it on. There is no telemetry or analytics.
+mctl identifies itself in its requests, revalidates with ETags and backs off when something fails. The licences
+for the images and fonts it embeds are in [assets/LICENSES.md](assets/LICENSES.md).
 
-## What is real
+## What to be careful about
 
-Every number on the MASTER page comes from a source: CelesTrak GP elements (SGP4) and the NASA ISS ephemeris
-through an arbiter, IERS earth-orientation data, and an analytic Sun and Moon. A quantity with no source reads
-`NO DATA`. JWST and Roman come from JPL Horizons; Hubble uses CelesTrak with Horizons as a cross-check. The
-OPS page shows the JWST weekly visit plan and the Hubble daily programme list from STScI; both are plans, not
-engineering telemetry, which neither observatory publishes. Its pictures are DSS2 sky-survey cutouts around
-the target, not Hubble or JWST images.
+This is a hobby display. Don't use it for operations, navigation, or anything where being wrong matters. It
+isn't affiliated with or endorsed by NASA, ESA, STScI, SpaceX or anyone else whose vehicles or data it shows.
 
-ISS telemetry (137 ISSLIVE items) feeds GNC/EPS/TCS/COMM. Some units the live values disprove are corrected
-([notes](docs/step3/attitude-verification.md)), and the attitude convention is an assumption the page says so
-about. Pass times match an independent implementation to milliseconds
-([check](docs/step4/pass-verification.md)) but have not been compared with a published predictor. The
-maneuver planner propagates numerically (DOP853, J2-J4, Sun and Moon, exponential-atmosphere drag, optional
-solar radiation pressure); against the NASA ISS ephemeris it is 3.1 km off after a day without drag, and
-7.3 km with the static drag model, so the drag scale is a control. PROX is TLE-derived: while a Dragon is
-docked CelesTrak gives it the station's own element set, so it reads DOCKED, and the keep-out sizes are
-configured assumptions. The window view has the right limb curvature for the altitude, but the Earth is a
-static picture without clouds.
+Some specifics about what you're looking at:
 
-**mctl is a hobby display, not an operational tool. Do not use it for anything safety-critical, for
-navigation, or to decide anything about a real spacecraft.** It is not affiliated with or endorsed by NASA,
-ESA, STScI, SpaceX or any other organisation whose vehicles or data it shows.
+- A value with no source says `NO DATA`. I'd rather show nothing than a plausible number.
+- The pictures on the OPS page are sky-survey cutouts around the target, not images from Hubble or JWST. The
+  schedules are plans, not telemetry; neither observatory publishes telemetry.
+- The ISS telemetry has 137 items. A few units the live values disprove are corrected (see
+  [docs/step3/attitude-verification.md](docs/step3/attitude-verification.md)), and the attitude convention is
+  an assumption that the page says so about. The caution and warning limits for ISS subsystems are my own
+  placeholders, not flight rules.
+- Pass times match an independent implementation of mine to a few milliseconds
+  ([docs/step4/pass-verification.md](docs/step4/pass-verification.md)). They haven't been compared with a
+  published predictor like Heavens-Above.
+- The maneuver planner integrates numerically (DOP853, J2 to J4, Sun and Moon, atmospheric drag, optional solar
+  pressure). Against NASA's ISS ephemeris it's 3.1 km off after a day with no drag, and 7.3 km off with the
+  simple drag model, so the drag scale is a setting you can adjust.
+- PROX comes from TLEs. When a Dragon is docked, CelesTrak gives it the station's own element set, so it reads
+  DOCKED. The keep-out sizes are assumptions.
+- The window view has the right limb curvature for the altitude, but the Earth is a still picture with no
+  clouds.
 
-## Data sources and credits
+## Configuration and files
 
-| Data | From |
-|---|---|
-| Element sets (GP/OMM), supplemental GP | [CelesTrak](https://celestrak.org) |
-| ISS trajectory (OEM) | NASA's public ISS trajectory data |
-| ISS telemetry | NASA's public ISSLIVE feed, over its Lightstreamer endpoint. It is not an official API and can change or disappear |
-| Earth orientation, leap seconds | IERS / USNO finals2000A |
-| JWST and Roman trajectories | [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/) |
-| JWST visit plans, Hubble reports and programs | [STScI](https://www.stsci.edu) |
-| Survey pictures | the Digitized Sky Survey (DSS2) through [CDS](https://cds.unistra.fr) Sesame and hips2fits; see the [DSS acknowledgement](https://archive.stsci.edu/dss/acknowledging.html) |
-| Earth day texture | NASA Earth Observatory, Blue Marble Next Generation (R. Stöckli) |
-| Earth night lights | NASA Earth Observatory / NOAA NGDC, Black Marble 2012 (Suomi NPP VIIRS) |
-| Coastlines | [Natural Earth](https://www.naturalearthdata.com) (public domain) |
-| Fonts | JetBrains Mono (SIL OFL 1.1) and Unscii (public domain) |
+The defaults are built in (`config/default.toml`). A file at `~/.config/mctl/config.toml` overrides any key,
+and a bad value stops the program with an error rather than being ignored. Downloaded data is cached in
+`~/.cache/mctl`, logs go to `~/.local/state/mctl/mctl.log`, and your recording is
+`~/.local/share/mctl/mctl.db`, a SQLite file kept for 30 days or 2 GB. Only real time is recorded, never
+simulated states.
 
-mctl fetches these politely: it identifies itself with a User-Agent, revalidates with ETags and backs off after
-failures. The embedded assets and their licences are listed in [assets/LICENSES.md](assets/LICENSES.md).
-
-## Layout
-
-| | |
-|---|---|
-| `crates/mctl-core` | time, state, config, the world snapshot, the bus, source arbitration, C&W rules |
-| `crates/mctl-astro` | SGP4, OEM, frames, Sun and Moon, elements, events, passes, the numerical propagator, Horizons |
-| `crates/mctl-sources` | HTTP cache, supervised fetch threads, the ISSLIVE client, schedules, survey pictures, observer location |
-| `crates/mctl-sim` | the 50 Hz engine, the simulation clock, planner, passes and trends workers |
-| `crates/mctl-store` | SQLite recording and export |
-| `crates/mctl-gui` | the console renderer (winit, wgpu, egui), pages, themes, art, the Pi display |
-| `crates/mctl-tui` | a placeholder for a future text front end |
-| `src/` | the `mctl` binary |
-| `spikes/` | the early throwaway prototypes, kept for reference |
-
-[docs/architecture.md](docs/architecture.md) explains how the pieces fit together.
+For passes, the observer site is the one you configure, otherwise GeoClue if your system allows it, otherwise a
+built-in NASA HQ fallback. There's also an IP lookup, which is off unless you switch it on and is the only thing
+that would send anything about you anywhere. There's no telemetry or analytics.
 
 ## Contributing
 
-Bug reports and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Security issues:
-[SECURITY.md](SECURITY.md).
+Bug reports and pull requests are welcome; [CONTRIBUTING.md](CONTRIBUTING.md) has the details. For security
+problems, see [SECURITY.md](SECURITY.md). [docs/architecture.md](docs/architecture.md) is a tour of how the code
+fits together, and the crates are:
 
-## Licence
+- `mctl-core`: time, state, config, the world snapshot, source arbitration, caution and warning rules.
+- `mctl-astro`: SGP4, ephemerides, frames, Sun and Moon, passes, the numerical propagator.
+- `mctl-sources`: the HTTP cache, fetch threads, the ISSLIVE client, schedules, sky pictures, observer location.
+- `mctl-sim`: the engine, the simulation clock, the planner.
+- `mctl-store`: the SQLite recording.
+- `mctl-gui`: the console, the pages, the themes, the Pi display.
 
-mctl is free software under the **GNU General Public License, version 3 or (at your option) any later
-version** (see [LICENSE](LICENSE)). The dependencies are permissive or compatible; their notices are in
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) and are printed by `mctl about`.
+`spikes/` holds some early throwaway experiments that I kept for reference.
+
+## Credits and licence
+
+I'm Liam Droog. The idea, the design, the testing and the Pi and CRT setup are mine; Claude wrote much of the
+code and the documentation from that. Thanks to the people who keep CelesTrak, Horizons, the IERS, STScI and
+NASA's public data services running. `mctl about` prints the full credits, and the third-party notices are in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+mctl is free software under the GNU General Public License, version 3 or (at your option) any later version.
+See [LICENSE](LICENSE).
