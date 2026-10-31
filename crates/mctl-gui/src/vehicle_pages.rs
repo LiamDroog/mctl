@@ -14,7 +14,7 @@ fn name_of(inp: &PageInput<'_>, id: &str) -> String {
     )
 }
 
-fn wrap(text: &str, width: usize) -> Vec<String> {
+pub(crate) fn wrap(text: &str, width: usize) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for word in text.split_whitespace() {
         match out.last_mut() {

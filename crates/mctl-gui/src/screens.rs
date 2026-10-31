@@ -1,4 +1,4 @@
-//! Page composition: the header, footer, every page and sub-page of the page map (DESIGN.md §9.4),
+//! Page composition: the header, footer, every page and sub-page of the page map,
 //! the greyed `NO SOURCE` page and the help overlay. Panels are small functions so pages are layouts.
 
 use mctl_core::cw::{CwState, Severity};
@@ -62,7 +62,7 @@ fn sub_title(inp: &PageInput<'_>) -> String {
     }
 }
 
-/// Row 0: vehicle, page, GMT, MET, clock, source and age, and the master annunciator (DESIGN.md §9.3).
+/// Row 0: vehicle, page, GMT, MET, clock, source and age, and the master annunciator.
 fn header(grid: &mut Grid, inp: &PageInput<'_>) {
     let cols = grid.cols;
     let (bright, _dim) = (Style::new(Role::Bright), Style::new(Role::Dim));
@@ -711,7 +711,7 @@ fn traj_elements(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
 const ADI_CONSISTENCY_TOL_DEG: f64 = 0.5;
 
 /// Telemetry older than this is shown STALE. Labelled constant: the feed updates items every few
-/// seconds at most, so this is generous (DESIGN.md FR-6 defines the STALE quality).
+/// seconds at most, so this is generous (the STALE quality).
 const TELEMETRY_STALE_S: f64 = 30.0;
 
 /// Whether an item shows as stale on this page: the signal is lost, or (without the stream's clock)
@@ -1251,7 +1251,7 @@ fn pass_sites(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     for t in [
         "`:site <name>` SELECTS A SITE; `:site add <name> <lat> <lon> [alt_m]` ADDS ONE; `:site save [name]` KEEPS THE ACTIVE ONE IN THE CONFIG.",
         "SITES LIVE IN ~/.config/mctl/config.toml AS [[site]] ENTRIES. RESOLUTION ORDER: CONFIGURED ACTIVE SITE, GEOCLUE2, IP LOOKUP (OFF BY DEFAULT), FALLBACK.",
-        "THE DEFAULT SITE (NASA HQ) COORDINATES ARE FROM DESIGN.md AND ARE NOT VERIFIED AGAINST A SURVEY SOURCE.",
+        "THE DEFAULT SITE (NASA HQ) COORDINATES ARE APPROXIMATE AND NOT VERIFIED AGAINST A SURVEY SOURCE.",
     ] {
         l.line(t, Style::new(Role::Dim));
     }
@@ -1580,7 +1580,7 @@ fn sys_settings(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     Layout::default()
 }
 
-/// What each greyed page will contain, from DESIGN.md §9.6.
+/// What each greyed page will contain.
 fn describe(page: Page, sub: usize) -> &'static [&'static str] {
     match (page, sub) {
         (Page::Gnc, 0) => &[
@@ -1701,6 +1701,8 @@ pub fn render_body(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             (Page::Prox, _) => crate::vehicle_pages::prox(grid, inp),
             (Page::Sys, 4) => crate::vehicle_pages::vehicle_page(grid, inp),
             (Page::Sys, 5) => crate::vehicle_pages::gallery(grid, inp),
+            (Page::Sys, 6) => crate::about::page(grid, inp),
+            (Page::Sys, 7) => crate::about::credits(grid, inp),
             (Page::View, _) => crate::vehicle_pages::window(grid, inp),
             (Page::Master, _) => master(grid, inp),
             (Page::Traj, 0) => traj_orbit(grid, inp),

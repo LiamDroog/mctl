@@ -1,7 +1,7 @@
-//! The page map (DESIGN.md §9.4) and per-vehicle availability.
+//! The page map and per-vehicle availability.
 //!
 //! A page a vehicle has no data for is greyed with the reason (`NO SOURCE`), never hidden, so the
-//! layout stays stable across vehicles (DESIGN.md §2).
+//! layout stays stable across vehicles.
 
 use mctl_core::config::Regime;
 use mctl_core::world::VehicleView;
@@ -108,6 +108,8 @@ impl Page {
                 "C&W RULES",
                 "VEHICLE",
                 "GALLERY",
+                "ABOUT",
+                "CREDITS",
             ],
             Self::Ops => &["OBSERVING SCHEDULE"],
         }

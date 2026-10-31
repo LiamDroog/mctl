@@ -1,8 +1,9 @@
 //! winit + wgpu + egui front end: character-grid console, GPU panels, CRT post-processing, themes.
 //!
-//! The GUI is a pure consumer of the engine's published `World` snapshot (DESIGN.md §6.2): it never
+//! The GUI is a pure consumer of the engine's published `World` snapshot: it never
 //! calls into sources or propagators.
 
+mod about;
 mod adi;
 mod app;
 mod art;
@@ -40,6 +41,7 @@ pub fn check_keys(keys: &std::collections::BTreeMap<String, Vec<String>>) -> Res
     keys::KeyMap::from_config(keys).map(|_| ())
 }
 
+pub use about::text as about_text;
 pub use commands::parse_replay_start;
 pub use offline::{BenchOptions, Live, ShotOptions, bench, parse_size, shots};
 pub use theme::{

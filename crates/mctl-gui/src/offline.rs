@@ -85,9 +85,10 @@ impl Offline {
         start_theme: Option<&str>,
         size: [u32; 2],
         low_power: bool,
+        allow_software: bool,
     ) -> Result<Self> {
         let instance = gpu::new_instance();
-        let gpu = Arc::new(gpu::create(&instance, None, low_power, false)?);
+        let gpu = Arc::new(gpu::create(&instance, None, low_power, allow_software)?);
         let console = Console::new(
             themes,
             start_theme,
@@ -232,6 +233,8 @@ pub struct ShotOptions {
     /// `page`, `page:sub` or `all`.
     pub pages: Vec<String>,
     pub low_power: bool,
+    /// Render on a software (CPU) adapter instead of refusing to.
+    pub allow_software: bool,
     /// Command lines run before the captures, e.g. `burn add apo vnb 1 0 0`.
     pub exec: Vec<String>,
     /// Capture each scene of the Pi/CRT display (with this mix of scenes) instead of console pages.
@@ -269,7 +272,14 @@ pub fn shots(live: &Live, themes: Vec<Theme>, opts: &ShotOptions) -> Result<Vec<
     std::fs::create_dir_all(&opts.out_dir)
         .with_context(|| format!("creating {}", opts.out_dir.display()))?;
     let count = themes.len();
-    let mut off = Offline::new(live, themes, None, opts.size, opts.low_power)?;
+    let mut off = Offline::new(
+        live,
+        themes,
+        None,
+        opts.size,
+        opts.low_power,
+        opts.allow_software,
+    )?;
     let which: Vec<usize> = match &opts.theme {
         None => (0..count).collect(),
         Some(name) => vec![
@@ -405,6 +415,8 @@ pub struct BenchOptions {
     pub theme: Option<String>,
     pub out: Option<PathBuf>,
     pub low_power: bool,
+    /// Render on a software (CPU) adapter instead of refusing to.
+    pub allow_software: bool,
     /// Also measure each effect alone, to attribute cost.
     pub breakdown: bool,
 }
@@ -456,7 +468,14 @@ pub fn bench(live: &Live, themes: Vec<Theme>, opts: &BenchOptions) -> Result<()>
     let mut header: Option<BenchReport> = None;
     for &size in &opts.sizes {
         // One device per size keeps targets exactly sized; the adapter and driver are identical.
-        let mut off = Offline::new(live, themes.clone(), None, size, opts.low_power)?;
+        let mut off = Offline::new(
+            live,
+            themes.clone(),
+            None,
+            size,
+            opts.low_power,
+            opts.allow_software,
+        )?;
         let which: Vec<usize> = match &opts.theme {
             None => (0..count).collect(),
             Some(n) => vec![
@@ -719,9 +738,167 @@ mod tests {
             .map(String::from)
             .to_vec(),
             low_power: false,
+            allow_software: false,
             exec: vec![],
             kiosk: None,
         };
         shots(&live, themes, &opts).unwrap();
+    }
+
+    mod golden {
+        use super::*;
+        use std::path::{Path, PathBuf};
+
+        const GOLDEN_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden");
+        /// A pixel differs when any channel is off by more than this: absorbs the last-bit differences
+        /// between versions of a software driver, not a changed glyph or colour.
+        const CHANNEL_TOLERANCE: u8 = 32;
+        /// The share of pixels that may differ before an image counts as changed.
+        const DIFFERENT_MAX: f64 = 0.001;
+        /// Rows at the bottom of a console page that show frame timings, which change every run.
+        const FOOTER_PX: u32 = 64;
+
+        fn out_dir() -> PathBuf {
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/golden-actual")
+        }
+
+        /// Err with a description when `actual` differs from `golden` by more than the tolerance.
+        fn compare(actual: &Path, golden: &Path, ignore_bottom: u32) -> Result<(), String> {
+            let a = image::open(actual).map_err(|e| format!("{}: {e}", actual.display()))?;
+            let g = image::open(golden).map_err(|e| {
+                format!(
+                    "{}: {e} (to create it: MCTL_BLESS=1 cargo test -p mctl-gui golden -- --ignored)",
+                    golden.display()
+                )
+            })?;
+            let (a, g) = (a.to_rgb8(), g.to_rgb8());
+            if a.dimensions() != g.dimensions() {
+                return Err(format!(
+                    "{}: size {:?} but the golden is {:?}",
+                    actual.display(),
+                    a.dimensions(),
+                    g.dimensions()
+                ));
+            }
+            let rows = a.height().saturating_sub(ignore_bottom);
+            let (mut different, mut total) = (0u64, 0u64);
+            for y in 0..rows {
+                for x in 0..a.width() {
+                    total += 1;
+                    let (p, q) = (a.get_pixel(x, y), g.get_pixel(x, y));
+                    if p.0
+                        .iter()
+                        .zip(q.0)
+                        .any(|(c, d)| c.abs_diff(d) > CHANNEL_TOLERANCE)
+                    {
+                        different += 1;
+                    }
+                }
+            }
+            let share = different as f64 / total.max(1) as f64;
+            if share > DIFFERENT_MAX {
+                return Err(format!(
+                    "{} differs from its golden in {:.2}% of pixels (limit {:.2}%); the new image is left in {}",
+                    actual.file_name().unwrap_or_default().to_string_lossy(),
+                    share * 100.0,
+                    DIFFERENT_MAX * 100.0,
+                    out_dir().display()
+                ));
+            }
+            Ok(())
+        }
+
+        fn live() -> Live {
+            let (tx, _rx) = std::sync::mpsc::channel();
+            let cfg =
+                mctl_core::config::Config::from_layers(mctl_core::config::DEFAULT_CONFIG, None)
+                    .unwrap();
+            let mut world = crate::kiosk::test_world(1);
+            world.vehicles[0].id = "iss".into();
+            world.vehicles[0].name = "ISS".into();
+            Live {
+                bus: Bus::new(world),
+                limits: cfg.limits.clone(),
+                vehicle_id: "iss".into(),
+                commands: tx,
+                settings: vec![],
+                keys: cfg.keys.clone(),
+            }
+        }
+
+        fn options(size: [u32; 2], theme: Option<&str>, pages: &[&str], dir: &Path) -> ShotOptions {
+            ShotOptions {
+                size,
+                theme: theme.map(String::from),
+                out_dir: dir.into(),
+                effects_off: false,
+                warmup_frames: 40,
+                pages: pages.iter().map(|p| (*p).to_owned()).collect(),
+                low_power: false,
+                allow_software: true,
+                exec: vec![],
+                kiosk: None,
+            }
+        }
+
+        /// Renders fixed pages from a fixed world and compares them with `tests/golden`. Needs a GPU adapter,
+        /// and a software one is fine: `cargo test -p mctl-gui golden -- --ignored`. After an intended change
+        /// to how things look, `MCTL_BLESS=1` rewrites the golden images; review them in the diff.
+        #[test]
+        #[ignore = "needs a GPU adapter (a software one is fine)"]
+        fn rendered_pages_match_the_golden_images() {
+            let dir = out_dir();
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            let live = live();
+            let embedded = crate::theme::embedded().unwrap();
+            let mut checks: Vec<(PathBuf, u32)> = Vec::new();
+
+            // Console pages: one with the CRT effects on, one without.
+            let console = options([1280, 720], Some("phosphor"), &["sys:7"], &dir);
+            checks.extend(
+                shots(&live, embedded.clone(), &console)
+                    .unwrap()
+                    .into_iter()
+                    .map(|p| (p, FOOTER_PX)),
+            );
+            let plain = options([1280, 720], Some("modern"), &["sys:8"], &dir);
+            checks.extend(
+                shots(&live, embedded, &plain)
+                    .unwrap()
+                    .into_iter()
+                    .map(|p| (p, FOOTER_PX)),
+            );
+            // The Pi display: every picture scene of the (single-vehicle) cycle, at its own size.
+            let mut kiosk = options([640, 480], None, &[], &dir);
+            kiosk.kiosk = Some(crate::kiosk::Mix::Pretty);
+            checks.extend(
+                shots(
+                    &live,
+                    vec![crate::theme::crt_themes().unwrap().remove(0)],
+                    &kiosk,
+                )
+                .unwrap()
+                .into_iter()
+                .map(|p| (p, 0)),
+            );
+            assert!(checks.len() >= 5, "only {} images rendered", checks.len());
+
+            let golden = Path::new(GOLDEN_DIR);
+            if std::env::var_os("MCTL_BLESS").is_some() {
+                std::fs::create_dir_all(golden).unwrap();
+                for (p, _) in &checks {
+                    std::fs::copy(p, golden.join(p.file_name().unwrap())).unwrap();
+                }
+                return;
+            }
+            let failures: Vec<String> = checks
+                .iter()
+                .filter_map(|(p, ignore_bottom)| {
+                    compare(p, &golden.join(p.file_name().unwrap()), *ignore_bottom).err()
+                })
+                .collect();
+            assert!(failures.is_empty(), "{}", failures.join("\n"));
+        }
     }
 }
