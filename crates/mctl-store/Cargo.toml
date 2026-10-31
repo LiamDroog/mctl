@@ -4,6 +4,9 @@ edition.workspace = true
 version.workspace = true
 publish.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "SQLite recording and CSV export for mctl"
 
 [lints]
 workspace = true

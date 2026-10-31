@@ -11,16 +11,28 @@ edition = "2024"
 version = "0.0.0"
 publish = false
 license = "GPL-3.0-or-later"
+repository = "https://github.com/LiamDroog/mctl"
+rust-version = "1.95"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
+[workspace.lints.clippy]
+# Errors are handled, not unwrapped; `expect` is for invariants and says which. Tests are exempt (clippy.toml).
+unwrap_used = "deny"
+
 [package]
 name = "mctl"
+description = "Mission-control style display for the ISS and the spacecraft around it"
+readme = "README.md"
+keywords = ["iss", "orbit", "satellite", "tracker", "mission-control"]
+categories = ["science", "visualization"]
 edition.workspace = true
 version.workspace = true
 publish.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
@@ -29,6 +41,14 @@ workspace = true
 [profile.release]
 incremental = true
 debug = false
+
+# What the release workflow builds (packaging/make-dist.sh): smaller and a little faster, but slow to compile.
+[profile.dist]
+inherits = "release"
+incremental = false
+lto = "thin"
+codegen-units = 4
+strip = true
 
 [dependencies]
 anyhow = "1.0.104"

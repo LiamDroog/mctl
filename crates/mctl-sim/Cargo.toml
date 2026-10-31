@@ -4,6 +4,9 @@ edition.workspace = true
 version.workspace = true
 publish.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "The mctl engine: simulation clock, propagation, passes and the maneuver planner"
 
 [lints]
 workspace = true

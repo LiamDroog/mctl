@@ -1,4 +1,4 @@
-//! The `:` command line (DESIGN.md FR-72): parsing and completion. Pure functions, so every command
+//! The `:` command line: parsing and completion. Pure functions, so every command
 //! and every error message is unit-tested without a window.
 
 use mctl_core::command::{Command, check_rate, parse_offset, parse_seek};
@@ -806,6 +806,27 @@ mod tests {
                 _ => "",
             };
             assert!(p(&format!("{name}{arg}")).is_ok(), "{name}{arg}");
+        }
+    }
+
+    mod robustness {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            /// Whatever is typed at the `:` prompt parses or completes, or says why not; it never panics.
+            #[test]
+            fn any_typed_line_parses_and_completes_without_panicking(line in any::<String>()) {
+                let _ = p(&line);
+                let _ = c(&line);
+            }
+
+            #[test]
+            fn every_command_followed_by_junk_never_panics(i in 0..COMMANDS.len(), junk in any::<String>()) {
+                let name = COMMANDS[i].0;
+                let _ = p(&format!("{name} {junk}"));
+                let _ = c(&format!("{name} {junk}"));
+            }
         }
     }
 }

@@ -4,6 +4,9 @@ edition.workspace = true
 version.workspace = true
 publish.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Astrodynamics for mctl: SGP4, OEM, frames, pass prediction and a numerical propagator"
 
 [lints]
 workspace = true
@@ -17,3 +20,6 @@ serde_json = "1.0.154"
 sgp4 = "2.4.0"
 thiserror = "2.0.21"
 tracing = "0.1.44"
+
+[dev-dependencies]
+proptest = "1"

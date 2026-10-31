@@ -1,1 +1,1 @@
-//! [v2] ratatui front end consuming the same core.
+//! Placeholder for a future ratatui front end consuming the same core.
