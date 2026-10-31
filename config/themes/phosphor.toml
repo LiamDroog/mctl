@@ -1,0 +1,63 @@
+# P1 green monochrome phosphor.
+name = "Phosphor"
+
+[font]
+family = "unscii"   # unscii | jetbrains
+size_px = 24.0         # advance is exactly 12 px: 0.6 em (JetBrains Mono) or 0.5 em (Unscii)
+cell_w_px = 12.0
+cell_h_px = 24.0
+
+[palette]
+background = "#010b03"
+foreground = "#3bff6e"
+dim = "#14803a"
+bright = "#c4ffd4"
+border = "#3bff6e"
+nominal = "#3bff6e"
+caution = "#3bff6e"
+warning = "#3bff6e"
+info = "#3bff6e"
+
+[limit.caution]
+inverse = true
+blink_hz = 0.0
+dim = false
+semantic_colour = false
+[limit.warning]
+inverse = true
+blink_hz = 2.0
+dim = false
+semantic_colour = false
+[limit.stale]
+inverse = false
+blink_hz = 0.0
+dim = true
+semantic_colour = false
+
+[effects.scanlines]
+enabled = true
+strength = 0.35
+period_px = 4.0
+[effects.bloom]
+enabled = true
+threshold = 0.45
+intensity = 0.9
+radius_px = 6.0
+[effects.persistence]
+enabled = true
+decay = 0.82
+[effects.curvature]
+enabled = true
+amount = 0.035
+vignette = 0.45
+
+[globe]
+mode = "mono"          # mono: tint by luminance; colour: texture colours
+day_tint = "#4dff80"
+night_tint = "#0a4a1f"
+graticule = "#1fa84c"
+coast = "#c4ffd4"
+orbit = "#c4ffd4"
+vehicle = "#ffffff"
+ambient = 0.06
+terminator_softness = 0.12

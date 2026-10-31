@@ -1,0 +1,295 @@
+# mctl default configuration, embedded in the binary. A user file at
+# $XDG_CONFIG_HOME/mctl/config.toml overrides any key (tables merge, arrays replace).
+# Invalid values fail loudly with the file and reason; there are no silent defaults.
+
+[fetch]
+user_agent = "mctl/0.0 (mission control display; github.com/LiamDroog/mctl)"
+timeout_s = 30
+# Exponential backoff after a failed fetch, with jitter, capped.
+backoff_initial_s = 30
+backoff_max_s = 1800
+
+[sources.celestrak_gp]
+# One request per vehicle. FORMAT=JSON is explicit: CelesTrak's default is CSV.
+url_template = "https://celestrak.org/NORAD/elements/gp.php?CATNR={norad}&FORMAT=JSON"
+# For vehicles with `lookup` (Dragon): substring match on the object name; the newest object is used.
+name_url_template = "https://celestrak.org/NORAD/elements/gp.php?NAME={name}&FORMAT=JSON"
+min_refresh_s = 7200      # polite default: once per 2 h per object
+stale_after_s = 259200    # an element set older than this is STALE (assumption: 3 days)
+
+[sources.celestrak_supgp]
+# Supplemental GP (operator-derived, e.g. ISS-E): many 6-hourly segments, each valid for a few hours
+# around its epoch. Only vehicles that list "supgp" under sources use it; CelesTrak has none for others.
+url_template = "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?CATNR={norad}&FORMAT=json"
+min_refresh_s = 7200
+stale_after_s = 86400     # segments cover a rolling ~2 days; beyond a day of age the newest is old
+
+[sources.nasa_oem]
+url = "https://nasa-public-data.s3.amazonaws.com/iss-coords/current/ISS_OEM/ISS.OEM_J2K_EPH.txt"
+min_refresh_s = 1800
+stale_after_s = 604800    # OEM older than this is STALE (assumption: 7 days; the file spans ~15)
+
+[sources.iers_eop]
+# finals2000A: UT1-UTC and polar motion. Tried in order.
+urls = ["https://maia.usno.navy.mil/ser7/finals2000A.all", "https://datacenter.iers.org/data/9/finals2000A.all"]
+min_refresh_s = 86400
+
+[sources.horizons]
+# JPL Horizons vector tables (geocentric ICRF). JWST and Roman come from Goddard flight-dynamics
+# trajectories; for Hubble the table is a concatenation of TLEs, so it is a cross-check, not a better source.
+url = "https://ssd.jpl.nasa.gov/api/horizons.api"
+min_refresh_s = 21600
+
+[sources.schedules]
+# STScI public schedules. JWST: weekly plain-text visit lists linked from the index page.
+# Hubble: daily status reports (programs scheduled; no visit times are published).
+jwst_index_url = "https://www.stsci.edu/jwst/science-execution/observing-schedules"
+jwst_origin = "https://www.stsci.edu"
+hst_index_template = "https://www.stsci.edu/public/hst_status/{year}_reports.html"
+hst_origin = "https://www.stsci.edu"
+min_refresh_s = 3600
+
+[sources.sky]
+# "What is it looking at": a target name is resolved with CDS Sesame (SIMBAD/NED/VizieR), and a cutout of
+# the DSS2 colour survey around it comes from CDS hips2fits. The picture is a SKY SURVEY image of the
+# field, not an image taken by Hubble or JWST. Hubble's daily report names programs, not targets, so
+# targets come from each program's public Phase II file (fixed targets only; no visit times exist).
+sesame_url = "https://cds.unistra.fr/cgi-bin/nph-sesame/-oI/SNV?{name}"
+hips2fits_url = "https://alasky.cds.unistra.fr/hips-image-services/hips2fits"
+survey = "CDS/P/DSS2/color"
+fov_deg = 0.25
+size_px = 512
+hst_program_url = "https://www.stsci.edu/hst/phase2-public/{id}.pro"
+cache_s = 604800
+
+[limits]
+# Inter-source residual (|dr|) that raises a caution on the sources panel. Assumption, not a published limit.
+residual_caution_km = 5.0
+residual_warning_km = 20.0
+
+[observer]
+# Observer site resolution: the configured `active` site, else the fallback below.
+# GeoClue and IP geolocation (steps 2 and 3 of the design's chain) are NOT implemented yet.
+active = ""
+mask_deg = 10.0
+pass_days = 7.0
+step_s = 20.0
+# GeoClue2 over D-Bus (design step 2). It only answers applications it allows; if it refuses, the
+# reason is written to the event log and the fallback is used.
+geoclue = true
+geoclue_timeout_s = 3.0
+
+[observer.ip]
+# IP geolocation (design step 3) is OFF by default: it sends this machine's public address to the
+# service. To enable, give an HTTPS endpoint that returns JSON with numeric latitude/longitude fields.
+enabled = false
+url = ""
+lat_key = "latitude"
+lon_key = "longitude"
+accuracy_km = 25.0
+
+[observer.fallback]
+# NASA Headquarters. These coordinates are approximate and not checked against a survey source.
+name = "NASA HQ"
+lat_deg = 38.8830
+lon_deg = -77.0163
+alt_m = 10.0
+
+# Add your own sites like this, then set `active = "Home"` above or use `:site Home` while running.
+# [[site]]
+# name = "Home"
+# lat_deg = 12.3456
+# lon_deg = -65.4321
+# alt_m = 100.0
+
+[store]
+# Recording to SQLite. path = "" means $XDG_DATA_HOME/mctl/mctl.db.
+enabled = true
+path = ""
+state_hz = 1.0
+retention_days = 30.0
+max_size_mb = 2048.0
+
+[prox]
+# The PROX page (F8). These zone sizes are CONFIGURED ASSUMPTIONS, not values taken from a source: the
+# design asks for public values to be sourced. Dimensions here are a 200 m keep-out sphere and an approach
+# ellipsoid of 2 km along-track by 1 km radial semi-axes.
+keep_out_m = 200.0
+ellipsoid_semi_km = [2.0, 1.0]
+docked_range_m = 50.0     # identical element sets (a docked visitor) separate by ~0; below this is DOCKED
+near_km = 100.0
+window_min = 90.0         # history kept and prediction shown, minutes
+
+[engine]
+tick_hz = 50
+# Orbit/ground-track window around now, in revolutions, and sample count.
+track_past_rev = 0.6
+track_future_rev = 1.4
+track_samples = 400
+
+[[vehicle]]
+id = "iss"
+name = "ISS"
+norad = 25544
+# "supgp" (CelesTrak supplemental GP, ISS-E) is implemented but NOT in the default list: measured against
+# the OEM it was 57 km along-track off while standard GP was under 2 km (docs/supgp-evaluation.md).
+# Add it, e.g. ["oem", "supgp", "gp"], to try it; its residual is then shown and graded like any source.
+sources = ["oem", "gp"]
+telemetry = "isslive"
+# MET epoch: launch of Zarya, 1998-11-20 06:40 UTC (assumption; verify before relying on MET).
+met_epoch = "1998-11-20T06:40:00"
+
+[[vehicle]]
+id = "hubble"
+name = "HUBBLE"
+norad = 20580
+# Horizons for Hubble is a concatenation of TLEs (no better than GP), so it is second in line: a fallback
+# when GP is stale, and a second opinion whose residual against GP is shown on the sources panel.
+sources = ["gp", "horizons"]
+schedule = "hst"
+# STS-31 liftoff, 1990-04-24 12:33:51 UTC (assumption; verify).
+met_epoch = "1990-04-24T12:33:51"
+horizons = { id = "-48", step_s = 120, past_days = 1, future_days = 3, stale_after_s = 172800 }
+
+# Visiting vehicles. CelesTrak's number for a Dragon changes every mission, so each is found by name. While
+# docked, CelesTrak publishes the station's own element set for the visitor (identical epoch and motion), so
+# the PROX page shows DOCKED rather than a meaningless zero-range track.
+[[vehicle]]
+id = "dragon-crew"
+name = "CREW DRAGON"
+lookup = "CREW DRAGON"
+visits = "iss"
+sources = ["gp"]
+
+[[vehicle]]
+id = "dragon-cargo"
+name = "CARGO DRAGON"
+lookup = "DRAGON CRS"
+visits = "iss"
+sources = ["gp"]
+
+[[vehicle]]
+id = "jwst"
+name = "JWST"
+regime = "l2"
+# Goddard FDF as-flown trajectory solutions with a prediction after the last tracking data; Horizons
+# header text is the authority (no NORAD-based GP is used for an L2 halo orbit).
+sources = ["horizons"]
+schedule = "jwst"
+# Ariane 5 liftoff, 2021-12-25 12:20 UTC (Horizons header).
+met_epoch = "2021-12-25T12:20:00"
+horizons = { id = "-170", step_s = 21600, past_days = 100, future_days = 100, stale_after_s = 1209600 }
+
+[[vehicle]]
+id = "roman"
+name = "ROMAN"
+regime = "l2"
+sources = ["horizons"]
+# Falcon Heavy liftoff, 2026-08-30 11:26:04 UTC (Horizons header). No public observing schedule found.
+met_epoch = "2026-08-30T11:26:04"
+horizons = { id = "-211", step_s = 21600, past_days = 50, future_days = 100, stale_after_s = 1209600 }
+
+# ---- Caution and warning rules ---------------------------------------------------
+# Every rule says where its limits come from in `basis`. ISS subsystem limits are user-defined and
+# public flight-rule limits are not assumed, so the subsystem rules below are
+# ILLUSTRATIVE starting points, not flight rules. Edit them in ~/.config/mctl/config.toml (a user
+# overlay replaces this whole list if it defines any [[rule]]).
+
+[[rule]]
+id = "iss-tle-age"
+title = "ISS GP element age"
+metric = "gp_age_h:iss"
+direction = "above"
+caution = 72.0
+warning = 168.0
+hysteresis = 2.0
+units = "h"
+basis = "illustrative: element sets older than ~3 days degrade the prediction noticeably"
+
+[[rule]]
+id = "hubble-tle-age"
+title = "Hubble GP element age"
+metric = "gp_age_h:hubble"
+direction = "above"
+caution = 120.0
+warning = 240.0
+hysteresis = 2.0
+units = "h"
+basis = "illustrative"
+
+[[rule]]
+id = "telemetry-feed"
+title = "ISSLIVE feed down"
+metric = "telemetry_feed_down"
+direction = "above"
+warning = 1.0
+persist_s = 30.0
+units = ""
+basis = "feed loss: any state other than delivering for 30 s"
+vehicle = "iss"
+
+[[rule]]
+id = "iss-cabin-pressure"
+title = "Lab cabin pressure"
+metric = "item:USLAB000058"
+direction = "below"
+caution = 700.0
+warning = 650.0
+hysteresis = 5.0
+persist_s = 10.0
+units = "mmHg"
+basis = "illustrative, not a flight rule (nominal cabin is ~740-760 mmHg)"
+vehicle = "iss"
+
+[[rule]]
+id = "iss-ppco2"
+title = "Lab ppCO2"
+metric = "item:USLAB000055"
+direction = "above"
+caution = 6.0
+warning = 8.0
+hysteresis = 0.3
+persist_s = 30.0
+units = "mmHg"
+basis = "illustrative, not a flight rule"
+vehicle = "iss"
+
+[[rule]]
+id = "iss-cmgs-online"
+title = "CMGs online"
+metric = "item:USLAB000005"
+direction = "below"
+caution = 3.0
+warning = 2.0
+persist_s = 10.0
+units = ""
+basis = "illustrative, not a flight rule"
+vehicle = "iss"
+
+# ---- Key bindings ------------------------------------------------------------------
+# Single characters, case-insensitive; an action may have several. Function keys, Tab, arrows, Enter
+# and Escape are fixed. A user config replaces individual actions; every action must stay bound and no
+# character may be used twice.
+[keys]
+pause = [" "]
+warp_down = ["["]
+warp_up = ["]"]
+live = ["0"]
+ack = ["a"]
+command_line = [":", ";"]
+help = ["?"]
+quit = ["q"]
+theme = ["t"]
+vehicle = ["v"]
+frame = ["x"]
+altitude = ["z"]
+camera_frame = ["f"]
+focus = ["c"]
+zoom_in = ["+", "="]
+zoom_out = ["-", "_"]
+scanlines = ["1"]
+bloom = ["2"]
+persistence = ["3"]
+crt = ["4"]
+all_effects = ["e"]
+trend_window = ["w"]

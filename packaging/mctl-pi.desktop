@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=mctl (CRT display)
+GenericName=Mission control display
+Comment=The low-resolution kiosk display for a small CRT
+Exec=mctl --pi
+Icon=mctl
+Terminal=false
+Categories=Science;
+Keywords=ISS;Hubble;JWST;kiosk;CRT;

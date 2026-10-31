@@ -1,0 +1,63 @@
+# P3 amber monochrome phosphor.
+name = "Retro"
+
+[font]
+family = "unscii"   # unscii | jetbrains
+size_px = 24.0         # advance is exactly 12 px: 0.6 em (JetBrains Mono) or 0.5 em (Unscii)
+cell_w_px = 12.0
+cell_h_px = 24.0
+
+[palette]
+background = "#0d0600"
+foreground = "#ffb000"
+dim = "#8a5a00"
+bright = "#ffe0a0"
+border = "#ffb000"
+nominal = "#ffb000"
+caution = "#ffb000"
+warning = "#ffb000"
+info = "#ffb000"
+
+[limit.caution]
+inverse = true
+blink_hz = 0.0
+dim = false
+semantic_colour = false
+[limit.warning]
+inverse = true
+blink_hz = 2.0
+dim = false
+semantic_colour = false
+[limit.stale]
+inverse = false
+blink_hz = 0.0
+dim = true
+semantic_colour = false
+
+[effects.scanlines]
+enabled = true
+strength = 0.35
+period_px = 4.0
+[effects.bloom]
+enabled = true
+threshold = 0.45
+intensity = 0.9
+radius_px = 6.0
+[effects.persistence]
+enabled = true
+decay = 0.86
+[effects.curvature]
+enabled = true
+amount = 0.035
+vignette = 0.45
+
+[globe]
+mode = "mono"          # mono: tint by luminance; colour: texture colours
+day_tint = "#ffb84d"
+night_tint = "#4a2c00"
+graticule = "#a86f00"
+coast = "#ffe0a0"
+orbit = "#ffe0a0"
+vehicle = "#fff4d6"
+ambient = 0.06
+terminator_softness = 0.12

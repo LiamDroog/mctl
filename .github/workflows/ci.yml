@@ -1,0 +1,160 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Advisories and licences change without any commit, so re-check weekly.
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  lint:
+    name: fmt and clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --component clippy --component rustfmt && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+      # No GPU and no network are needed: the tests that touch a GPU are ignored, and the rest use fixtures.
+      - run: cargo test --workspace --locked
+
+  docs:
+    name: rustdoc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --workspace --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  msrv:
+    name: minimum Rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Keep this in step with `rust-version` in Cargo.toml.
+      - name: Install Rust 1.95
+        run: rustup toolchain install 1.95 --profile minimal && rustup default 1.95
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace --all-targets --locked
+
+  deny:
+    name: licences and advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  render:
+    name: render every page (software Vulkan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install a software Vulkan driver
+        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers libvulkan1
+      - run: cargo build --release --locked -p mctl
+      - name: Render every page headless and check the images
+        env:
+          SMOKE_SOFTWARE: "1"
+        run: |
+          # An empty home, so no user configuration or cached data is picked up; offline, so no network.
+          export HOME="$RUNNER_TEMP/home" XDG_CONFIG_HOME="$RUNNER_TEMP/home/c" XDG_CACHE_HOME="$RUNNER_TEMP/home/k" \
+                 XDG_DATA_HOME="$RUNNER_TEMP/home/d" XDG_STATE_HOME="$RUNNER_TEMP/home/s"
+          mkdir -p "$HOME"
+          export VK_DRIVER_FILES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n1)"
+          tools/smoke.sh
+
+  golden:
+    name: golden images (advisory)
+    runs-on: ubuntu-latest
+    # The reference images were made with one version of Mesa's software driver; this job tells us whether
+    # GitHub's runners agree within the tolerance. Remove the line below once it has passed there, to make
+    # it blocking.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install a software Vulkan driver
+        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers libvulkan1
+      - name: Render fixed pages and compare them with tests/golden
+        run: |
+          export VK_DRIVER_FILES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -n1)"
+          cargo test -p mctl-gui --locked golden -- --ignored
+      - name: Keep what was rendered, to compare by eye or to bless
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-actual
+          path: target/golden-actual
+
+  shellcheck:
+    name: shell scripts
+    runs-on: ubuntu-latest
+    # Advisory until the scripts have been through it once.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck -x packaging/*.sh packaging/pi/*.sh tools/*.sh scripts/mctl-launch
+
+  installer:
+    name: installer on ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    # Advisory: this is the only place the dnf and pacman package names, and a bare machine, get exercised.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:stable", "ubuntu:22.04", "fedora:latest", "archlinux:latest"]
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare a bare machine (compiler, libraries, a Vulkan driver, Rust); no build
+        run: packaging/bootstrap.sh --yes --no-build
+      - name: It now says everything is in place
+        run: packaging/bootstrap.sh --check
+
+  installer-from-source:
+    name: installer builds and installs (ubuntu)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bootstrap, build and install into a temporary prefix
+        run: packaging/bootstrap.sh --yes --prefix "$RUNNER_TEMP/mctl-prefix"
+      - name: The installed program runs
+        run: |
+          "$RUNNER_TEMP/mctl-prefix/bin/mctl" --version
+          "$RUNNER_TEMP/mctl-prefix/bin/mctl" about | head -n 3
+

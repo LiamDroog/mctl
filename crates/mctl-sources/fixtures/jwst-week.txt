@@ -1,0 +1,26 @@
+Visit Information for OP Package 2629603f01
+
+VISIT ID       PCS MODE    VISIT TYPE                     SCHEDULED START TIME  DURATION     SCIENCE INSTRUMENT AND MODE                         TARGET NAME                      CATEGORY                        KEYWORDS                        
+-------------  ----------  -----------------------------  --------------------  -----------  --------------------------------------------------  -------------------------------  ------------------------------  --------------------------------
+7782:16:1      FINEGUIDE   PRIME TARGETED FIXED           2026-10-19T00:57:55Z  00/04:11:14  NIRSpec MultiObject Spectroscopy                    o16                                                              
+                           COORDINATED PARALLEL                                              NIRCam Imaging                                    
+7782:16:2      FINEGUIDE   PRIME TARGETED FIXED           2026-10-19T05:15:11Z  00/01:31:28  NIRSpec MultiObject Spectroscopy                    o16                                                              
+                           COORDINATED PARALLEL                                              NIRCam Imaging                                    
+7782:63:1      NONE        PRIME UNTARGETED               2026-10-19T06:47:34Z  00/00:05:19  NIRCam Dark                                       
+11318:3:1      FINEGUIDE   PRIME TARGETED FIXED           2026-10-19T07:57:27Z  00/00:53:34  MIRI Medium Resolution Spectroscopy                 V339-Del                         Star                            Novae
+12551:58:1     NONE        PARALLEL DARK CALIBRATION      ^ATTACHED TO PRIME^                NIRSpec Dark                                      
+11318:4:1      FINEGUIDE   PRIME TARGETED FIXED           2026-10-19T08:56:14Z  00/00:28:43  MIRI Medium Resolution Spectroscopy                 V339-Del-Background              Calibration                     Telescope/sky background
+12551:60:1     NONE        PARALLEL DARK CALIBRATION      ^ATTACHED TO PRIME^                NIRSpec Dark                                      
+9016:1:1       FINEGUIDE   PRIME TARGETED FIXED           2026-10-19T10:23:22Z  00/23:50:41  NIRSpec MultiObject Spectroscopy                    GO9016_apt_v2                                                    
+1520:223:1     NONE        PARALLEL SLEW CALIBRATION      ^ATTACHED TO PRIME^                MIRI Anneal                                       
+7782:64:1      NONE        PRIME UNTARGETED               2026-10-20T10:14:58Z  00/00:22:30  NIRCam Dark                                       
+10149:1:1      FINEGUIDE   PRIME TARGETED FIXED           2026-10-20T10:57:45Z  00/19:52:42  NIRSpec MultiObject Spectroscopy                    input_lulls_00                                                   
+                           COORDINATED PARALLEL                                              NIRCam Imaging                                    
+1000:1:43      NONE        FULL BIASED MOMENTUM UNLOAD    2026-10-21T07:22:32Z  00/01:12:10
+9016:1:2       FINEGUIDE   PRIME TARGETED FIXED           2026-10-21T09:06:14Z  00/23:50:41  NIRSpec MultiObject Spectroscopy                    GO9016_apt_v2                                                    
+12534:5:1      NONE        PARALLEL DARK CALIBRATION      ^ATTACHED TO PRIME^                NIRCam Dark                                       
+12534:106:1    NONE        PARALLEL DARK CALIBRATION      ^ATTACHED TO PRIME^                NIRCam Dark                                       
+10149:1:3      FINEGUIDE   PRIME TARGETED FIXED           2026-10-22T09:17:13Z  00/21:01:34  NIRSpec MultiObject Spectroscopy                    input_lulls_00                                                   
+                           COORDINATED PARALLEL                                              NIRCam Imaging                                    
+12636:166:1    FINEGUIDE   PRIME WFSC ROUTINE             2026-10-23T06:29:58Z  00/00:28:39  WFSC NIRCam Fine Phasing                            2MASS-03313052-2739514-2         Calibration                     Focus test
+10149:1:5      FINEGUIDE   PRIME TARGETED FIXED           2026-10-23T08:10:00Z  00/19:52:13  NIRSpec MultiObject Spectroscopy                    input_lulls_00                                                   

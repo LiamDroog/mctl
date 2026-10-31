@@ -1,0 +1,1424 @@
+# Spike C configuration. Nothing here is hardcoded in the binary.
+# Server, adapter set, field names and the TIME item come from ISS Mimic's own client
+# (github.com/ISS-Mimic/Mimic, Pi/iss_telemetry.py, MIT licence). Item IDs and their meanings come
+# from Mimic's Telemetry/ISS_Public_Telemetry.xlsx. `description` is that spreadsheet's text, verbatim;
+# `units` is its UNITS column. Both are *documentation*, not verified.
+
+[server]
+url = "wss://push.lightstreamer.com/lightstreamer"   # Mimic: LightstreamerClient("https://push.lightstreamer.com", "ISSLIVE")
+adapter_set = "ISSLIVE"
+
+[run]
+duration_s = 120          # how long to stay connected
+connect_timeout_s = 15    # TCP + TLS + WebSocket + CONOK
+setup_timeout_s = 15      # CONOK -> every SUBOK
+stall_factor = 3.0        # fail if nothing (not even PROBE) arrives for keepalive * this
+
+[fields]
+# Mimic's main subscription uses these two fields; the TIME item adds the two status fields.
+data = ["TimeStamp", "Value"]
+time = ["TimeStamp", "Value", "Status.Class", "Status.Indicator"]
+
+[time_item]
+id = "TIME_000001"
+
+# `label` is a short display name derived from `description` by abbreviation only. `units` is the
+# spreadsheet's UNITS column, EXCEPT USLAB000022-27, which it labels RAD and RAD/S but whose live values
+# are deg and deg/s, and the cabin pressure/partial-pressure items (labelled PSI/PSIA) whose values are
+# mmHg and the cabin temperature (labelled CNT), which is degC. Evidence: docs/attitude-verification.md.
+
+# `section`/`row`/`col` lay the items out on the pages (a matrix when `col` is set). `units` follow the
+# description's own unit where it gives one; the spreadsheet's UNITS column is wrong for several items.
+# Inferred (not published): fluid temperatures are degC. Evidence: docs/attitude-verification.md.
+
+# `section`/`row`/`col` lay the items out on the pages (a matrix when `col` is set). `units` follow the
+# description's own unit where it gives one; the spreadsheet's UNITS column is wrong for several items.
+# Inferred (not published): fluid temperatures are degC. Evidence: docs/attitude-verification.md.
+
+# `section`/`row`/`col` lay the items out on the pages (a matrix when `col` is set). `units` follow the
+# description's own unit where it gives one; the spreadsheet's UNITS column is wrong for several items.
+# Inferred (not published): fluid temperatures are degC. Evidence: docs/attitude-verification.md.
+
+# `section`/`row`/`col` lay the items out on the pages (a matrix when `col` is set). `units` follow the
+# description's own unit where it gives one; the spreadsheet's UNITS column is wrong for several items.
+# Inferred (not published): fluid temperatures are degC. Evidence: docs/attitude-verification.md.
+
+[[item]]
+id = "USLAB000018"
+group = "attitude"
+description = "US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 0"
+label = "Current q0"
+section = "Attitude quaternion (LVLH, scalar first)"
+row = "q0"
+col = "Current"
+units = ""
+
+[[item]]
+id = "USLAB000019"
+group = "attitude"
+description = "US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 1"
+label = "Current q1"
+section = "Attitude quaternion (LVLH, scalar first)"
+row = "q1"
+col = "Current"
+units = ""
+
+[[item]]
+id = "USLAB000020"
+group = "attitude"
+description = "US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 2"
+label = "Current q2"
+section = "Attitude quaternion (LVLH, scalar first)"
+row = "q2"
+col = "Current"
+units = ""
+
+[[item]]
+id = "USLAB000021"
+group = "attitude"
+description = "US Current Local Vertical Local Horizontal (LVLH) Attitude Quaternion Component 3"
+label = "Current q3"
+section = "Attitude quaternion (LVLH, scalar first)"
+row = "q3"
+col = "Current"
+units = ""
+
+[[item]]
+id = "USLAB000022"
+group = "attitude"
+description = "US Attitude Roll Error (deg)"
+label = "Roll error"
+section = "Attitude error (current - commanded)"
+row = "Roll"
+col = "Error"
+units = "deg"
+
+[[item]]
+id = "USLAB000023"
+group = "attitude"
+description = "US Attitude Pitch Error (deg)"
+label = "Pitch error"
+section = "Attitude error (current - commanded)"
+row = "Pitch"
+col = "Error"
+units = "deg"
+
+[[item]]
+id = "USLAB000024"
+group = "attitude"
+description = "US Attitude Yaw Error (deg)"
+label = "Yaw error"
+section = "Attitude error (current - commanded)"
+row = "Yaw"
+col = "Error"
+units = "deg"
+
+[[item]]
+id = "USLAB000025"
+group = "attitude"
+description = "US Inertial Attitude Rate X (deg/s)"
+label = "Rate X"
+section = "Inertial attitude rate"
+row = "X axis"
+col = "Rate"
+units = "deg/s"
+
+[[item]]
+id = "USLAB000026"
+group = "attitude"
+description = "US Inertial Attitude Rate Y (deg/s)"
+label = "Rate Y"
+section = "Inertial attitude rate"
+row = "Y axis"
+col = "Rate"
+units = "deg/s"
+
+[[item]]
+id = "USLAB000027"
+group = "attitude"
+description = "US Inertial Attitude Rate Z (deg/s)"
+label = "Rate Z"
+section = "Inertial attitude rate"
+row = "Z axis"
+col = "Rate"
+units = "deg/s"
+
+[[item]]
+id = "USLAB000028"
+group = "attitude"
+description = "US Commanded Attitude Quaternion Component 0"
+label = "Commanded q0"
+section = "Attitude quaternion (LVLH, scalar first)"
+row = "q0"
+col = "Commanded"
+units = ""
+
+[[item]]
+id = "USLAB000029"
+group = "attitude"
+description = "US Commanded Attitude Quaternion Component 1"
+label = "Commanded q1"
+section = "Attitude quaternion (LVLH, scalar first)"
+row = "q1"
+col = "Commanded"
+units = ""
+
+[[item]]
+id = "USLAB000030"
+group = "attitude"
+description = "US Commanded Attitude Quaternion Component 2"
+label = "Commanded q2"
+section = "Attitude quaternion (LVLH, scalar first)"
+row = "q2"
+col = "Commanded"
+units = ""
+
+[[item]]
+id = "USLAB000031"
+group = "attitude"
+description = "US Commanded Attitude Quaternion Component 3"
+label = "Commanded q3"
+section = "Attitude quaternion (LVLH, scalar first)"
+row = "q3"
+col = "Commanded"
+units = ""
+
+[[item]]
+id = "USLAB000013"
+group = "attitude"
+description = "US Attitude Source"
+label = "Attitude source"
+section = "Attitude status (codes as published)"
+row = "Attitude source"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000017"
+group = "attitude"
+description = "Attitude Control Reference Frame"
+label = "Control reference frame"
+section = "Attitude status (codes as published)"
+row = "Control reference frame"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000081"
+group = "attitude"
+description = "Attitude Maneuver In Progress status"
+label = "Maneuver in progress"
+section = "Attitude status (codes as published)"
+row = "Maneuver in progress"
+col = ""
+units = ""
+
+[[item]]
+id = "S0000003"
+group = "eps"
+description = "Solar Alpha Rotary Joint (SARJ) Starboard Joint Angle Position (degrees)"
+label = "SARJ starboard"
+section = "SARJ angle"
+row = "Starboard"
+col = "Angle"
+units = "deg"
+
+[[item]]
+id = "S0000004"
+group = "eps"
+description = "Solar Alpha Rotary Joint (SARJ) Port Joint Angle Position (degrees)"
+label = "SARJ port"
+section = "SARJ angle"
+row = "Port"
+col = "Angle"
+units = "deg"
+
+[[item]]
+id = "P4000007"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 2A - Beta Gimble Assembly (BGA) Position (degrees)"
+label = "BGA position 2A"
+section = "Solar arrays (PVCU, names as published)"
+row = "BGA position"
+col = "2A"
+units = "deg"
+
+[[item]]
+id = "USLAB000001"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG)-1 On-Line"
+label = "On-line CMG 1"
+section = "CMG status"
+row = "On-line"
+col = "CMG 1"
+units = ""
+
+[[item]]
+id = "USLAB000002"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG)-2 On-Line"
+label = "On-line CMG 2"
+section = "CMG status"
+row = "On-line"
+col = "CMG 2"
+units = ""
+
+[[item]]
+id = "USLAB000003"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG)-3 On-Line"
+label = "On-line CMG 3"
+section = "CMG status"
+row = "On-line"
+col = "CMG 3"
+units = ""
+
+[[item]]
+id = "USLAB000004"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG)-4 On-Line"
+label = "On-line CMG 4"
+section = "CMG status"
+row = "On-line"
+col = "CMG 4"
+units = ""
+
+[[item]]
+id = "USLAB000005"
+group = "cmg"
+description = "Number of Control Moment Gyroscope (CMG)s Online"
+label = "CMGs online"
+section = "CMG momentum and control"
+row = "CMGs online"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000006"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG) Control Torque - Roll (N-m)"
+label = "Control torque, roll"
+section = "CMG momentum and control"
+row = "Control torque, roll"
+col = ""
+units = "N·m"
+
+[[item]]
+id = "USLAB000007"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG) Control Torque - Pitch (N-m)"
+label = "Control torque, pitch"
+section = "CMG momentum and control"
+row = "Control torque, pitch"
+col = ""
+units = "N·m"
+
+[[item]]
+id = "USLAB000008"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG) Control Torque - Yaw (N-m)"
+label = "Control torque, yaw"
+section = "CMG momentum and control"
+row = "Control torque, yaw"
+col = ""
+units = "N·m"
+
+[[item]]
+id = "USLAB000009"
+group = "cmg"
+description = "Active Control Moment Gyroscope (CMG) Momentum (Nms)"
+label = "Momentum (active CMGs)"
+section = "CMG momentum and control"
+row = "Momentum (active CMGs)"
+col = ""
+units = "Nms"
+
+[[item]]
+id = "USLAB000011"
+group = "cmg"
+description = "Desaturation Request (Enabled/Inhibited)"
+label = "Desaturation request"
+section = "CMG momentum and control"
+row = "Desaturation request"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000038"
+group = "cmg"
+description = "Active Control Moment Gyroscope (CMG) Momentum Capacity (Nms)"
+label = "Momentum capacity"
+section = "CMG momentum and control"
+row = "Momentum capacity"
+col = ""
+units = "Nms"
+
+[[item]]
+id = "USLAB000041"
+group = "cmg"
+description = "Loss of CMG Attitude Control (LOAC) Caution Message In Alarm"
+label = "CMG control lost (alarm)"
+section = "CMG momentum and control"
+row = "CMG control lost (alarm)"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000042"
+group = "cmg"
+description = "Loss of ISS Attitude Control (LOAC) Caution Message In Alarm"
+label = "ISS control lost (alarm)"
+section = "CMG momentum and control"
+row = "ISS control lost (alarm)"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000045"
+group = "cmg"
+description = "Spin Motor Spin Bearing Temperature - Control Moment Gyroscope (CMG) 1 (deg C)"
+label = "Spin bearing temp CMG 1"
+section = "CMG temperatures"
+row = "Spin bearing temp"
+col = "CMG 1"
+units = "degC"
+
+[[item]]
+id = "USLAB000046"
+group = "cmg"
+description = "Spin Motor Spin Bearing Temperature - Control Moment Gyroscope (CMG) 2 (deg C)"
+label = "Spin bearing temp CMG 2"
+section = "CMG temperatures"
+row = "Spin bearing temp"
+col = "CMG 2"
+units = "degC"
+
+[[item]]
+id = "USLAB000047"
+group = "cmg"
+description = "Spin Motor Spin Bearing Temperature - Control Moment Gyroscope (CMG) 3 (deg C)"
+label = "Spin bearing temp CMG 3"
+section = "CMG temperatures"
+row = "Spin bearing temp"
+col = "CMG 3"
+units = "degC"
+
+[[item]]
+id = "USLAB000048"
+group = "cmg"
+description = "Spin Motor Spin Bearing Temperature - Control Moment Gyroscope (CMG) 4 (deg C)"
+label = "Spin bearing temp CMG 4"
+section = "CMG temperatures"
+row = "Spin bearing temp"
+col = "CMG 4"
+units = "degC"
+
+[[item]]
+id = "USLAB000049"
+group = "cmg"
+description = "Hall Resolver Spin Bearing Temperature - Control Moment Gyroscope (CMG) 1 (deg C)"
+label = "Hall resolver temp CMG 1"
+section = "CMG temperatures"
+row = "Hall resolver temp"
+col = "CMG 1"
+units = "degC"
+
+[[item]]
+id = "USLAB000050"
+group = "cmg"
+description = "Hall Resolver Spin Bearing Temperature - Control Moment Gyroscope (CMG) 2 (deg C)"
+label = "Hall resolver temp CMG 2"
+section = "CMG temperatures"
+row = "Hall resolver temp"
+col = "CMG 2"
+units = "degC"
+
+[[item]]
+id = "USLAB000051"
+group = "cmg"
+description = "Hall Resolver Spin Bearing Temperature - Control Moment Gyroscope (CMG) 3 (deg C)"
+label = "Hall resolver temp CMG 3"
+section = "CMG temperatures"
+row = "Hall resolver temp"
+col = "CMG 3"
+units = "degC"
+
+[[item]]
+id = "USLAB000052"
+group = "cmg"
+description = "Hall Resolver Spin Bearing Temperature - Control Moment Gyroscope (CMG) 4 (deg C)"
+label = "Hall resolver temp CMG 4"
+section = "CMG temperatures"
+row = "Hall resolver temp"
+col = "CMG 4"
+units = "degC"
+
+[[item]]
+id = "Z1000001"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG)-1 Vibration (g)"
+label = "Vibration CMG 1"
+section = "CMG health"
+row = "Vibration"
+col = "CMG 1"
+units = "g"
+
+[[item]]
+id = "Z1000002"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG)-2 Vibration (g)"
+label = "Vibration CMG 2"
+section = "CMG health"
+row = "Vibration"
+col = "CMG 2"
+units = "g"
+
+[[item]]
+id = "Z1000003"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG)-3 Vibration (g)"
+label = "Vibration CMG 3"
+section = "CMG health"
+row = "Vibration"
+col = "CMG 3"
+units = "g"
+
+[[item]]
+id = "Z1000004"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG)-4 Vibration (g)"
+label = "Vibration CMG 4"
+section = "CMG health"
+row = "Vibration"
+col = "CMG 4"
+units = "g"
+
+[[item]]
+id = "Z1000005"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG)-1 Spin Motor Current (amps)"
+label = "Spin motor current CMG 1"
+section = "CMG health"
+row = "Spin motor current"
+col = "CMG 1"
+units = "A"
+
+[[item]]
+id = "Z1000006"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG)-2 Spin Motor Current (amps)"
+label = "Spin motor current CMG 2"
+section = "CMG health"
+row = "Spin motor current"
+col = "CMG 2"
+units = "A"
+
+[[item]]
+id = "Z1000007"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG)-3 Spin Motor Current (amps)"
+label = "Spin motor current CMG 3"
+section = "CMG health"
+row = "Spin motor current"
+col = "CMG 3"
+units = "A"
+
+[[item]]
+id = "Z1000008"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG)-4 Spin Motor Current (amps)"
+label = "Spin motor current CMG 4"
+section = "CMG health"
+row = "Spin motor current"
+col = "CMG 4"
+units = "A"
+
+[[item]]
+id = "Z1000009"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG) 1 Wheel Speed (rpm)"
+label = "Wheel speed CMG 1"
+section = "CMG health"
+row = "Wheel speed"
+col = "CMG 1"
+units = "rpm"
+
+[[item]]
+id = "Z1000010"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG) 2 Wheel Speed (rpm)"
+label = "Wheel speed CMG 2"
+section = "CMG health"
+row = "Wheel speed"
+col = "CMG 2"
+units = "rpm"
+
+[[item]]
+id = "Z1000011"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG) 3 Wheel Speed (rpm)"
+label = "Wheel speed CMG 3"
+section = "CMG health"
+row = "Wheel speed"
+col = "CMG 3"
+units = "rpm"
+
+[[item]]
+id = "Z1000012"
+group = "cmg"
+description = "Control Moment Gyroscope (CMG) 4 Wheel Speed (rpm)"
+label = "Wheel speed CMG 4"
+section = "CMG health"
+row = "Wheel speed"
+col = "CMG 4"
+units = "rpm"
+
+[[item]]
+id = "P4000001"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 2A - Drive Voltage"
+label = "Drive voltage 2A"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive voltage"
+col = "2A"
+units = "V"
+
+[[item]]
+id = "P4000002"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 2A - Drive Current"
+label = "Drive current 2A"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive current"
+col = "2A"
+units = "A"
+
+[[item]]
+id = "P4000004"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 4A - Drive Voltage"
+label = "Drive voltage 4A"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive voltage"
+col = "4A"
+units = "V"
+
+[[item]]
+id = "P4000005"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 4A - Drive Current"
+label = "Drive current 4A"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive current"
+col = "4A"
+units = "A"
+
+[[item]]
+id = "P4000008"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 4A - Beta Gimble Assembly (BGA) Position (degrees)"
+label = "BGA position 4A"
+section = "Solar arrays (PVCU, names as published)"
+row = "BGA position"
+col = "4A"
+units = "deg"
+
+[[item]]
+id = "P6000001"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 4B - Drive Voltage"
+label = "Drive voltage 4B"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive voltage"
+col = "4B"
+units = "V"
+
+[[item]]
+id = "P6000002"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 4B - Drive Current"
+label = "Drive current 4B"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive current"
+col = "4B"
+units = "A"
+
+[[item]]
+id = "P6000004"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 2B - Drive Voltage"
+label = "Drive voltage 2B"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive voltage"
+col = "2B"
+units = "V"
+
+[[item]]
+id = "P6000005"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 2B - Drive Current"
+label = "Drive current 2B"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive current"
+col = "2B"
+units = "A"
+
+[[item]]
+id = "P6000007"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 4B - Beta Gimble Assembly (BGA) Position (degrees)"
+label = "BGA position 4B"
+section = "Solar arrays (PVCU, names as published)"
+row = "BGA position"
+col = "4B"
+units = "deg"
+
+[[item]]
+id = "P6000008"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 2B - Beta Gimble Assembly (BGA) Position (degrees)"
+label = "BGA position 2B"
+section = "Solar arrays (PVCU, names as published)"
+row = "BGA position"
+col = "2B"
+units = "deg"
+
+[[item]]
+id = "S4000001"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 1A - Drive Voltage"
+label = "Drive voltage 1A"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive voltage"
+col = "1A"
+units = "V"
+
+[[item]]
+id = "S4000002"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 1A - Drive Current"
+label = "Drive current 1A"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive current"
+col = "1A"
+units = "A"
+
+[[item]]
+id = "S4000004"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 3B - Drive Voltage"
+label = "Drive voltage 3B"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive voltage"
+col = "3B"
+units = "V"
+
+[[item]]
+id = "S4000005"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 3B - Drive Current"
+label = "Drive current 3B"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive current"
+col = "3B"
+units = "A"
+
+[[item]]
+id = "S4000007"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 1A - Beta Gimble Assembly (BGA) Position (degrees)"
+label = "BGA position 1A"
+section = "Solar arrays (PVCU, names as published)"
+row = "BGA position"
+col = "1A"
+units = "deg"
+
+[[item]]
+id = "S4000008"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 3A - Beta Gimble Assembly (BGA) Position (degrees)"
+label = "BGA position 3A"
+section = "Solar arrays (PVCU, names as published)"
+row = "BGA position"
+col = "3A"
+units = "deg"
+
+[[item]]
+id = "S6000001"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 3B - Drive Voltage"
+label = "Drive voltage 3B"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive voltage"
+col = "3B #2"
+units = "V"
+
+[[item]]
+id = "S6000002"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 3B - Drive Current"
+label = "Drive current 3B"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive current"
+col = "3B #2"
+units = "A"
+
+[[item]]
+id = "S6000004"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 1B - Drive Voltage"
+label = "Drive voltage 1B"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive voltage"
+col = "1B"
+units = "V"
+
+[[item]]
+id = "S6000005"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 1B - Drive Current"
+label = "Drive current 1B"
+section = "Solar arrays (PVCU, names as published)"
+row = "Drive current"
+col = "1B"
+units = "A"
+
+[[item]]
+id = "S6000007"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 3B - Beta Gimble Assembly (BGA) Position (degrees)"
+label = "BGA position 3B"
+section = "Solar arrays (PVCU, names as published)"
+row = "BGA position"
+col = "3B"
+units = "deg"
+
+[[item]]
+id = "S6000008"
+group = "eps"
+description = "Photovolatic Control Unit (PVCU) - Solar Array - 1B - Beta Gimble Assembly (BGA) Position (degrees)"
+label = "BGA position 1B"
+section = "Solar arrays (PVCU, names as published)"
+row = "BGA position"
+col = "1B"
+units = "deg"
+
+[[item]]
+id = "P1000001"
+group = "tcs"
+description = "Loop B Pump Flowrate (kg/hr)"
+label = "Pump flow loop B"
+section = "External thermal loops"
+row = "Pump flow"
+col = "Loop B"
+units = "kg/h"
+
+[[item]]
+id = "P1000002"
+group = "tcs"
+description = "Loop B PM Out Press (kPa)"
+label = "Pump module out pressure loop B"
+section = "External thermal loops"
+row = "Pump module out pressure"
+col = "Loop B"
+units = "kPa"
+
+[[item]]
+id = "P1000003"
+group = "tcs"
+description = "Loop B PM Out Temp (deg C)"
+label = "Pump module out temp loop B"
+section = "External thermal loops"
+row = "Pump module out temp"
+col = "Loop B"
+units = "degC"
+
+[[item]]
+id = "S1000001"
+group = "tcs"
+description = "Loop A Pump Flowrate (kg/hr)"
+label = "Pump flow loop A"
+section = "External thermal loops"
+row = "Pump flow"
+col = "Loop A"
+units = "kg/h"
+
+[[item]]
+id = "S1000002"
+group = "tcs"
+description = "Loop A PM Out Press (kPa)"
+label = "Pump module out pressure loop A"
+section = "External thermal loops"
+row = "Pump module out pressure"
+col = "Loop A"
+units = "kPa"
+
+[[item]]
+id = "S1000003"
+group = "tcs"
+description = "Loop A PM Out Temp (deg C)"
+label = "Pump module out temp loop A"
+section = "External thermal loops"
+row = "Pump module out temp"
+col = "Loop A"
+units = "degC"
+
+[[item]]
+id = "NODE2000001"
+group = "tcs"
+description = "Coolant water quantity (Node 2), MT"
+label = "Coolant water Node 2 (MT)"
+section = "Coolant water quantity"
+row = "Quantity (MT)"
+col = "Node 2"
+units = ""
+
+[[item]]
+id = "NODE2000002"
+group = "tcs"
+description = "Coolant water quantity (Node 2), LT"
+label = "Coolant water Node 2 (LT)"
+section = "Coolant water quantity"
+row = "Quantity (LT)"
+col = "Node 2"
+units = ""
+
+[[item]]
+id = "NODE2000003"
+group = "tcs"
+description = "Node 2 Air Conditioner State"
+label = "Node 2 air conditioner"
+section = "Air conditioners"
+row = "Node 2 air conditioner"
+col = ""
+units = ""
+
+[[item]]
+id = "NODE2000006"
+group = "tcs"
+description = "Air Cooling Fluid Temp (Node 2)"
+label = "Air fluid temp Node 2"
+section = "Internal cooling"
+row = "Air fluid temp"
+col = "Node 2"
+units = "degC"
+
+[[item]]
+id = "NODE2000007"
+group = "tcs"
+description = "Avionics Cooling Fluid Temp (Node 2)"
+label = "Avionics fluid temp Node 2"
+section = "Internal cooling"
+row = "Avionics fluid temp"
+col = "Node 2"
+units = "degC"
+
+[[item]]
+id = "NODE3000012"
+group = "tcs"
+description = "Avionics Cooling Fluid Temp (Node 3)"
+label = "Avionics fluid temp Node 3"
+section = "Internal cooling"
+row = "Avionics fluid temp"
+col = "Node 3"
+units = "degC"
+
+[[item]]
+id = "NODE3000013"
+group = "tcs"
+description = "Air Cooling Fluid Temp (Node 3)"
+label = "Air fluid temp Node 3"
+section = "Internal cooling"
+row = "Air fluid temp"
+col = "Node 3"
+units = "degC"
+
+[[item]]
+id = "NODE3000017"
+group = "tcs"
+description = "Coolant water quantity (Node 3)"
+label = "Coolant water Node 3"
+section = "Coolant water quantity"
+row = "Quantity"
+col = "Node 3"
+units = ""
+
+[[item]]
+id = "NODE3000018"
+group = "tcs"
+description = "Node 3 Air Conditioner State"
+label = "Node 3 air conditioner"
+section = "Air conditioners"
+row = "Node 3 air conditioner"
+col = ""
+units = ""
+
+[[item]]
+id = "NODE3000019"
+group = "tcs"
+description = "Coolant water quantity (Node 3)"
+label = "Coolant water Node 3"
+section = "Coolant water quantity"
+row = "Quantity"
+col = "Node 3 #2"
+units = ""
+
+[[item]]
+id = "USLAB000056"
+group = "tcs"
+description = "Coolant water quantity, LT (Lab)"
+label = "Coolant water Lab (LT)"
+section = "Coolant water quantity"
+row = "Quantity (LT)"
+col = "Lab"
+units = ""
+
+[[item]]
+id = "USLAB000057"
+group = "tcs"
+description = "Coolant water quantity, MT (Lab)"
+label = "Coolant water Lab (MT)"
+section = "Coolant water quantity"
+row = "Quantity (MT)"
+col = "Lab"
+units = ""
+
+[[item]]
+id = "USLAB000060"
+group = "tcs"
+description = "Avionics Cooling Fluid Temp (Lab)"
+label = "Avionics fluid temp Lab"
+section = "Internal cooling"
+row = "Avionics fluid temp"
+col = "Lab"
+units = "degC"
+
+[[item]]
+id = "USLAB000061"
+group = "tcs"
+description = "Air Cooling Fluid Temp (Lab)"
+label = "Air fluid temp Lab"
+section = "Internal cooling"
+row = "Air fluid temp"
+col = "Lab"
+units = "degC"
+
+[[item]]
+id = "USLAB000064"
+group = "tcs"
+description = "Lab Port Air Conditioner State"
+label = "Lab Port air conditioner"
+section = "Air conditioners"
+row = "Lab Port air conditioner"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000065"
+group = "tcs"
+description = "Lab Starboard Air Conditioner State"
+label = "Lab Starboard air conditioner"
+section = "Air conditioners"
+row = "Lab Starboard air conditioner"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000053"
+group = "eclss"
+description = "Lab ppO2"
+label = "ppO2 Lab"
+section = "Atmosphere"
+row = "ppO2"
+col = "Lab"
+units = "mmHg"
+
+[[item]]
+id = "USLAB000054"
+group = "eclss"
+description = "Lab ppN2"
+label = "ppN2 Lab"
+section = "Atmosphere"
+row = "ppN2"
+col = "Lab"
+units = "mmHg"
+
+[[item]]
+id = "USLAB000055"
+group = "eclss"
+description = "Lab ppCO2"
+label = "ppCO2 Lab"
+section = "Atmosphere"
+row = "ppCO2"
+col = "Lab"
+units = "mmHg"
+
+[[item]]
+id = "USLAB000058"
+group = "eclss"
+description = "Cabin pressure"
+label = "Total pressure Lab"
+section = "Atmosphere"
+row = "Total pressure"
+col = "Lab"
+units = "mmHg"
+
+[[item]]
+id = "USLAB000059"
+group = "eclss"
+description = "Cabin temperature"
+label = "Temperature Lab"
+section = "Atmosphere"
+row = "Temperature"
+col = "Lab"
+units = "degC"
+
+[[item]]
+id = "NODE3000001"
+group = "eclss"
+description = "Node 3 ppO2"
+label = "ppO2 Node 3"
+section = "Atmosphere"
+row = "ppO2"
+col = "Node 3"
+units = "mmHg"
+
+[[item]]
+id = "NODE3000002"
+group = "eclss"
+description = "Node 3 ppN2"
+label = "ppN2 Node 3"
+section = "Atmosphere"
+row = "ppN2"
+col = "Node 3"
+units = "mmHg"
+
+[[item]]
+id = "NODE3000003"
+group = "eclss"
+description = "Node 3 ppCO2"
+label = "ppCO2 Node 3"
+section = "Atmosphere"
+row = "ppCO2"
+col = "Node 3"
+units = "mmHg"
+
+[[item]]
+id = "NODE3000004"
+group = "eclss"
+description = "Urine Processor State"
+label = "Urine Processor State"
+section = "Water and waste (Node 3)"
+row = "Urine Processor State"
+col = ""
+units = ""
+
+[[item]]
+id = "NODE3000005"
+group = "eclss"
+description = "Urine Tank Qty"
+label = "Urine Tank Qty"
+section = "Water and waste (Node 3)"
+row = "Urine Tank Qty"
+col = ""
+units = "%"
+
+[[item]]
+id = "NODE3000006"
+group = "eclss"
+description = "Water Processor State"
+label = "Water Processor State"
+section = "Water and waste (Node 3)"
+row = "Water Processor State"
+col = ""
+units = ""
+
+[[item]]
+id = "NODE3000007"
+group = "eclss"
+description = "Water Processor Step"
+label = "Water Processor Step"
+section = "Water and waste (Node 3)"
+row = "Water Processor Step"
+col = ""
+units = ""
+
+[[item]]
+id = "NODE3000008"
+group = "eclss"
+description = "Waste Water Tank Qty"
+label = "Waste Water Tank Qty"
+section = "Water and waste (Node 3)"
+row = "Waste Water Tank Qty"
+col = ""
+units = "%"
+
+[[item]]
+id = "NODE3000009"
+group = "eclss"
+description = "Clean Water Tank Qty"
+label = "Clean Water Tank Qty"
+section = "Water and waste (Node 3)"
+row = "Clean Water Tank Qty"
+col = ""
+units = "%"
+
+[[item]]
+id = "NODE3000010"
+group = "eclss"
+description = "Oxygen Generator State"
+label = "Oxygen Generator State"
+section = "Oxygen generation"
+row = "Oxygen Generator State"
+col = ""
+units = ""
+
+[[item]]
+id = "NODE3000011"
+group = "eclss"
+description = "O2 Production rate"
+label = "O2 Production rate"
+section = "Oxygen generation"
+row = "O2 Production rate"
+col = ""
+units = "lbm/d"
+
+[[item]]
+id = "AIRLOCK000054"
+group = "eclss"
+description = "Airlock Pressure"
+label = "Total pressure Airlock"
+section = "Atmosphere"
+row = "Total pressure"
+col = "Airlock"
+units = "mmHg"
+
+[[item]]
+id = "P1000004"
+group = "comm"
+description = "S-Band Radio Frequency Group (RFG 2) Azimuth Gimbal Position"
+label = "RFG 2 azimuth"
+section = "S-band"
+row = "RFG 2 azimuth"
+col = ""
+units = "deg"
+
+[[item]]
+id = "P1000005"
+group = "comm"
+description = "S-Band Radio Frequency Group (RFG 2) Elevation Gimbal Position"
+label = "RFG 2 elevation"
+section = "S-band"
+row = "RFG 2 elevation"
+col = ""
+units = "deg"
+
+[[item]]
+id = "P1000007"
+group = "comm"
+description = "S-Band Radio Frequency Group (RFG 2), on-off status"
+label = "RFG 2 on/off"
+section = "S-band"
+row = "RFG 2 on/off"
+col = ""
+units = ""
+
+[[item]]
+id = "S1000004"
+group = "comm"
+description = "S-Band Radio Frequency Group (RFG 1) Azimuth Gimbal Position"
+label = "RFG 1 azimuth"
+section = "S-band"
+row = "RFG 1 azimuth"
+col = ""
+units = "deg"
+
+[[item]]
+id = "S1000009"
+group = "comm"
+description = "S-Band Radio Frequency Group (RFG 1), on-off status"
+label = "RFG 1 on/off"
+section = "S-band"
+row = "RFG 1 on/off"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000088"
+group = "comm"
+description = "Ku-Band Video Downlink Channel 1 Activity"
+label = "Video downlink 1 activity"
+section = "Ku-band and video"
+row = "Video downlink 1 activity"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000089"
+group = "comm"
+description = "Ku-Band Video Downlink Channel 2 Activity"
+label = "Video downlink 2 activity"
+section = "Ku-band and video"
+row = "Video downlink 2 activity"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000090"
+group = "comm"
+description = "Ku-Band Video Downlink Channel 3 Activity"
+label = "Video downlink 3 activity"
+section = "Ku-band and video"
+row = "Video downlink 3 activity"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000091"
+group = "comm"
+description = "Ku-Band Video Downlink Channel 4 Activity"
+label = "Video downlink 4 activity"
+section = "Ku-band and video"
+row = "Video downlink 4 activity"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000092"
+group = "comm"
+description = "Active String of S-Band"
+label = "Active S-band string"
+section = "S-band"
+row = "Active S-band string"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000093"
+group = "comm"
+description = "Internal Audio Controller (IAC) - IAC-1 Active/Backup Indication"
+label = "IAC-1 active/backup"
+section = "UHF and audio"
+row = "IAC-1 active/backup"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000094"
+group = "comm"
+description = "Internal Audio Controller (IAC) - IAC-2 Active/Backup Indication"
+label = "IAC-2 active/backup"
+section = "UHF and audio"
+row = "IAC-2 active/backup"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000095"
+group = "comm"
+description = "Video Source Routed to Downlink 1"
+label = "Video source, downlink 1"
+section = "Ku-band and video"
+row = "Video source, downlink 1"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000096"
+group = "comm"
+description = "Video Source Routed to Downlink 2"
+label = "Video source, downlink 2"
+section = "Ku-band and video"
+row = "Video source, downlink 2"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000097"
+group = "comm"
+description = "Video Source Routed to Downlink 3"
+label = "Video source, downlink 3"
+section = "Ku-band and video"
+row = "Video source, downlink 3"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000098"
+group = "comm"
+description = "Video Source Routed to Downlink 4"
+label = "Video source, downlink 4"
+section = "Ku-band and video"
+row = "Video source, downlink 4"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000099"
+group = "comm"
+description = "Space-To-Space Radio (UHF) 1 Power"
+label = "UHF radio 1 power"
+section = "UHF and audio"
+row = "UHF radio 1 power"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000100"
+group = "comm"
+description = "Space-To-Space Radio (UHF) 2 Power"
+label = "UHF radio 2 power"
+section = "UHF and audio"
+row = "UHF radio 2 power"
+col = ""
+units = ""
+
+[[item]]
+id = "USLAB000101"
+group = "comm"
+description = "Space-To-Space Radio Frame Sync Lock"
+label = "UHF frame sync lock"
+section = "UHF and audio"
+row = "UHF frame sync lock"
+col = ""
+units = ""
+
+[[item]]
+id = "Z1000013"
+group = "comm"
+description = "Ku-Band Transmit"
+label = "Ku transmit"
+section = "Ku-band and video"
+row = "Ku transmit"
+col = ""
+units = ""
+
+[[item]]
+id = "Z1000014"
+group = "comm"
+description = "Ku-Band SGANT Elevation Position"
+label = "Ku antenna elevation"
+section = "Ku-band and video"
+row = "Ku antenna elevation"
+col = ""
+units = "deg"
+
+[[item]]
+id = "Z1000015"
+group = "comm"
+description = "Ku-Band SGANT Cross-Elevation Position"
+label = "Ku antenna cross-elevation"
+section = "Ku-band and video"
+row = "Ku antenna cross-elevation"
+col = ""
+units = ""
+
+# A unit-norm sanity check on the documented quaternions: if they really are quaternions the
+# sum of squares must be ~1. This tests the documentation rather than assuming it.
+[[quaternion]]
+name = "current LVLH attitude (USLAB000018-21)"
+items = ["USLAB000018", "USLAB000019", "USLAB000020", "USLAB000021"]
+
+[[quaternion]]
+name = "commanded attitude (USLAB000028-31)"
+items = ["USLAB000028", "USLAB000029", "USLAB000030", "USLAB000031"]
