@@ -24,7 +24,7 @@ jobs:
     name: fmt and clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal --component clippy --component rustfmt && rustup default stable
       - uses: Swatinem/rust-cache@v2
@@ -35,7 +35,7 @@ jobs:
     name: tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - uses: Swatinem/rust-cache@v2
@@ -47,7 +47,7 @@ jobs:
     name: rustdoc
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - uses: Swatinem/rust-cache@v2
@@ -59,7 +59,7 @@ jobs:
     name: minimum Rust version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Keep this in step with `rust-version` in Cargo.toml.
       - name: Install Rust 1.95
         run: rustup toolchain install 1.95 --profile minimal && rustup default 1.95
@@ -70,14 +70,14 @@ jobs:
     name: licences and advisories
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
 
   render:
     name: render every page (software Vulkan)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - uses: Swatinem/rust-cache@v2
@@ -103,7 +103,7 @@ jobs:
     # it blocking.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - uses: Swatinem/rust-cache@v2
@@ -126,7 +126,7 @@ jobs:
     # Advisory until the scripts have been through it once.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: shellcheck -x packaging/*.sh packaging/pi/*.sh tools/*.sh scripts/mctl-launch
 
   installer:
@@ -140,7 +140,7 @@ jobs:
         image: ["debian:stable", "ubuntu:22.04", "fedora:latest", "archlinux:latest"]
     container: ${{ matrix.image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Prepare a bare machine (compiler, libraries, a Vulkan driver, Rust); no build
         run: packaging/bootstrap.sh --yes --no-build
       - name: It now says everything is in place
@@ -151,7 +151,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Bootstrap, build and install into a temporary prefix
         run: packaging/bootstrap.sh --yes --prefix "$RUNNER_TEMP/mctl-prefix"
       - name: The installed program runs
