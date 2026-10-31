@@ -1,24 +1,21 @@
 # mctl
 
-mctl is a spacecraft display I'm writing in Rust. It follows the ISS, the Crew and Cargo Dragons that visit it,
-Hubble, JWST and Roman, and tries to look like a flight control room: a 3D orbit map, ground track, sky plot,
+mctl is a spacecraft display written in Rust. It follows the ISS, the Crew and Cargo Dragons that visit it,
+Hubble, JWST and Roman, and tries to look like a retro flight control room monitor: a 3D orbit map, ground track, sky plot,
 pass predictions, a maneuver planner, and live telemetry from the ISS. I wanted something to leave running on
 a screen at home.
 
-It's a normal Linux program with four themes (green phosphor, amber, retrowave, and a plain dark one). It also
+It's got four themes (green phosphor, amber, retrowave, and a plain dark one). It also
 has a low-resolution mode for a Raspberry Pi feeding a Commodore 1702 CRT over composite, which is how I run
-mine.
+mine, r/casettefuturism unite!
 
 ![The MASTER page in the Phosphor theme](docs/step4/phosphor-master-1-1920x1080.png)
 
-Most of the code was written with Claude, Anthropic's AI model. I set the direction, tested it, and made the
-calls. There's more on that under Credits.
+Full disclaimer, most of the code was written with Claude, Rust is not my expertise but my implementation with Python ran, well, it was seconds per frame rather than frames per second.
 
-It's early (0.x). I've only run it on my own desktop and on a Pi 3B+, so expect rough edges on anything else.
-It's Linux only, on Wayland or X11, and it needs Vulkan. Mesa's software driver works if you have no GPU, just
-slowly.
+Currently mctl has only been really tested in kubuntu and on a Pi 3B+. It SHOULD work with an Ubuntu flavour in WSL, but you may need `--allow-software` for the rendering to work. YMMV.
 
-## What's in it
+## What that display do?
 
 The function keys switch pages and Tab steps through the sub-pages of each one.
 
@@ -32,7 +29,7 @@ The function keys switch pages and Tab steps through the sub-pages of each one.
 - **F9 VIEW**: the Earth out of the vehicle's window (nadir, ram, wake, or look around).
 - **F10 SYS**: event log, source health, settings, the caution and warning rules, vehicle facts, line art, and
   the About and Credits pages.
-- **F11 OPS**: the JWST and Hubble observing schedules, with a picture of the sky where each is pointed.
+- **F11 OPS**: the JWST and Hubble observing schedules, with a picture of the sky where each is pointed. Requests for pictures sometimes fail, currently under investigation.
 
 ## Installing
 
@@ -41,7 +38,7 @@ The function keys switch pages and Tab steps through the sub-pages of each one.
 Each [release](https://github.com/LiamDroog/mctl/releases) has a tarball for x86-64 and one for aarch64 (a
 Raspberry Pi 3 or later running a 64-bit OS), plus checksums. Unpack one and run `./mctl`. If it complains about
 a missing library, `packaging/bootstrap.sh` in the tarball works out what's missing and installs it, and
-`packaging/install.sh` puts the binary and a desktop entry in `~/.local`.
+`packaging/install.sh` puts the binary and a desktop entry in `~/.local`. One can also just run `packaging/bootstrap.sh` to install from source, details below.
 
 ### From source
 
@@ -56,7 +53,7 @@ packaging/bootstrap.sh
 It checks for a C compiler, curl, the libraries the window needs, a Vulkan driver, and Rust 1.95 or newer. It
 tells you what's missing, asks, and installs it: system packages through apt, dnf or pacman, and Rust through
 the official rustup installer into `~/.cargo` if there's no recent enough one. Then it builds mctl and installs
-it into `~/.local`. The first build takes a few minutes on a desktop. Don't do it on a Pi 3; use a release.
+it into `~/.local`. The first build takes a few minutes on a desktop. Don't do it on a Pi 3; use a release. Unless you've got lots of time, then you do you. I won't tell you how to use your time.
 
 It has a few switches:
 
@@ -89,6 +86,8 @@ mctl export --out ./dump        # every recorded table as CSV
 mctl shot --out-dir /tmp/shots --pages all    # headless screenshots, one per theme and page
 ```
 
+Currently the kiosk/unattended mode only work with the `--pi` flag, with simplified layouts and a cycle through the screens. In progress for a regular kiosk mode.
+
 The keys, all of which can be remapped under `[keys]` in the config:
 
 - `F1` to `F11` change page (you can click them in the footer too), `Tab` and `Shift-Tab` change sub-page.
@@ -111,7 +110,7 @@ else. `?` has the legend.
 
 `mctl --pi` is a second front end on the same engine, built to be looked at rather than driven. It cycles
 through the vehicles at 640x480, with line art, maps, and the console's own pages, and it draws without the CRT
-effects because the tube does those itself.
+effects because the tube does those itself. `--size 1920x1080`  or equivalent can override the auto 640x480 res that the `--pi` flag sets to use on a regular monitor.
 
 ```
 mctl --pi                                       # fullscreen, cycling
@@ -119,16 +118,15 @@ mctl --pi --pi-style dense --theme retrowave    # console pages only, in retrowa
 mctl --pi shot --out-dir /tmp/pi                # one PNG per scene
 ```
 
-The pictures look good on a CRT. The dense console pages are hard to read at that resolution, and I haven't
-fixed that. A Pi 3B+ has no Vulkan GPU, so it renders in software and the frame rate is modest. The setup, the
-composite output and cross-building for a Pi are in [docs/pi.md](docs/pi.md).
+The pictures look good on a CRT. The dense console pages are hard to read at that resolution. A Pi 3B+ has no Vulkan GPU, so it renders in software and the frame rate is modest. The setup, the composite output and cross-building for a Pi are in [docs/pi.md](docs/pi.md).
 
-## Where the data comes from
+## Live data? Propagated data? Fake data?
+mctl pulls live data where available. These contain:
 
 - Element sets: [CelesTrak](https://celestrak.org). It also has a supplemental ISS set that mctl can use but
   doesn't by default.
 - ISS trajectory: NASA's public ephemeris. ISS telemetry: the public ISSLIVE feed, over its Lightstreamer
-  endpoint. That isn't an official API and it could change or vanish.
+  endpoint. That isn't an official API and it could change or vanish depending what their funding looks like ( :( )
 - Earth orientation and leap seconds: IERS and USNO.
 - JWST and Roman trajectories: [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/).
 - JWST visit plans and Hubble reports: [STScI](https://www.stsci.edu).
@@ -140,10 +138,10 @@ composite output and cross-building for a Pi are in [docs/pi.md](docs/pi.md).
 mctl identifies itself in its requests, revalidates with ETags and backs off when something fails. The licences
 for the images and fonts it embeds are in [assets/LICENSES.md](assets/LICENSES.md).
 
-## What to be careful about
+## Unfortunately required disclaimers
 
 This is a hobby display. Don't use it for operations, navigation, or anything where being wrong matters. It
-isn't affiliated with or endorsed by NASA, ESA, STScI, SpaceX or anyone else whose vehicles or data it shows.
+isn't affiliated with or endorsed by NASA, ESA, STScI, SpaceX or anyone else whose vehicles or data it shows. If you happen to be in a situation where you're piloting a spacecraft and this is your only means of navigation, please, and I say this lovingly, please reevaluate the chain of decisions that have gotten you into this pickle.
 
 Some specifics about what you're looking at:
 
@@ -175,7 +173,7 @@ simulated states.
 
 For passes, the observer site is the one you configure, otherwise GeoClue if your system allows it, otherwise a
 built-in NASA HQ fallback. There's also an IP lookup, which is off unless you switch it on and is the only thing
-that would send anything about you anywhere. There's no telemetry or analytics.
+that would send anything about you anywhere. There's no telemetry or analytics. I don't really give a damn about who's using this. Unless you do happen to be in a situation where you're piloting a spacecraft with this software. Please let me know about that. If you survive.
 
 ## Contributing
 
@@ -194,10 +192,10 @@ fits together, and the crates are:
 
 ## Credits and licence
 
-I'm Liam Droog. The idea, the design, the testing and the Pi and CRT setup are mine; Claude wrote much of the
-code and the documentation from that. Thanks to the people who keep CelesTrak, Horizons, the IERS, STScI and
+I credit the copious amout of synthwave and retrowave music and the desire for a retrofuturistic (Hi, r/casettefuturism!) display piece in my home. The idea, the design, the testing and the Pi and CRT setup are mine; Claude wrote much of the
+code and the documentation from that as was previously mentioned. Thanks to the people who keep CelesTrak, Horizons, the IERS, STScI and
 NASA's public data services running. `mctl about` prints the full credits, and the third-party notices are in
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Anyone ~crazy~ kind enough to contribute to the repo will also be acknowledged here.
 
 mctl is free software under the GNU General Public License, version 3 or (at your option) any later version.
-See [LICENSE](LICENSE).
+See [LICENSE](LICENSE). Please don't sell this. If you want to use it in any published media (short/long form) please contact me before use.
