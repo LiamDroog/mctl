@@ -22,4 +22,4 @@ tokio-tungstenite = { version = "0.30.0", features = ["connect", "rustls-tls-web
 toml = "1.1.8"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-webpki-roots = "0.26"
+webpki-roots = "1.0"
