@@ -11,6 +11,13 @@ mine, r/casettefuturism unite!
 
 ![The MASTER page in the Phosphor theme](docs/screenshot.png)
 
+The four themes, on the same page (`T` cycles them):
+
+| | |
+|---|---|
+| ![Phosphor](docs/theme-phosphor.png) | ![Retro](docs/theme-retro.png) |
+| ![Retrowave](docs/theme-retrowave.png) | ![Modern](docs/theme-modern.png) |
+
 Full disclaimer, most of the code was written with Claude, Rust is not my expertise but my implementation with Python ran, well, it was seconds per frame rather than frames per second.
 
 Currently mctl has only been really tested in kubuntu and on a Pi 3B+. It SHOULD work with an Ubuntu flavour in WSL, but you may need `--allow-software` for the rendering to work. YMMV.
@@ -107,6 +114,8 @@ Anything that isn't a plain measurement carries a short flag: `[EST]` for estima
 else. `?` has the legend.
 
 ## On a Raspberry Pi and a CRT
+
+![Pi mode cycling through a few scenes](docs/pi-mode.gif)
 
 `mctl --pi` is a second front end on the same engine, built to be looked at rather than driven. It cycles
 through the vehicles at 640x480, with line art, maps, and the console's own pages, and it draws without the CRT
