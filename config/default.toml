@@ -3,7 +3,7 @@
 # Invalid values fail loudly with the file and reason; there are no silent defaults.
 
 [fetch]
-user_agent = "mctl/0.0 (mission control display; github.com/liam/mctl)"
+user_agent = "mctl/0.0 (mission control display; github.com/LiamDroog/mctl)"
 timeout_s = 30
 # Exponential backoff after a failed fetch, with jitter, capped (DESIGN.md §3.3).
 backoff_initial_s = 30
