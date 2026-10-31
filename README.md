@@ -20,7 +20,7 @@ The four themes, on the same page (`T` cycles them):
 
 Full disclaimer, most of the code was written with Claude, Rust is not my expertise but my implementation with Python ran, well, it was seconds per frame rather than frames per second.
 
-Currently mctl has only been really tested in kubuntu and on a Pi 3B+. It SHOULD work with an Ubuntu flavour in WSL, but you may need `--allow-software` for the rendering to work. YMMV.
+Currently mctl has only been really tested in kubuntu and on a Pi 3B+. It runs in Ubuntu under WSL2 on Mesa's software renderer, slowly. There `--fullscreen` opens a maximized window instead. YMMV.
 
 ## What that display do?
 

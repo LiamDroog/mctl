@@ -37,8 +37,6 @@ pub struct Options {
     pub fullscreen: bool,
     pub present: Present,
     pub low_power: bool,
-    /// Run on a software (CPU) Vulkan adapter instead of refusing to. The Pi display does this by default.
-    pub allow_software: bool,
     /// Cap the frame rate, leaving the rest of the CPU to the engine and sources (the Pi display does).
     pub max_fps: Option<f32>,
     pub exit_after_frames: Option<u64>,
@@ -127,10 +125,17 @@ fn pick_present(caps: &wgpu::SurfaceCapabilities, want: Present) -> Result<wgpu:
 impl App {
     fn init(&mut self, event_loop: &ActiveEventLoop) -> Result<()> {
         let mut attrs = Window::default_attributes()
-            .with_title("mctl gfx spike")
+            .with_title("mctl")
             .with_inner_size(PhysicalSize::new(self.opts.size[0], self.opts.size[1]));
         if self.opts.fullscreen {
-            attrs = attrs.with_fullscreen(Some(Fullscreen::Borderless(None)));
+            if running_under_wsl() {
+                // WSLg's compositor drops the connection of a fullscreen client ("Broken pipe" in the Wayland
+                // event loop), so fill the screen with a maximized window instead.
+                tracing::warn!("running under WSL: using a maximized window instead of fullscreen");
+                attrs = attrs.with_maximized(true);
+            } else {
+                attrs = attrs.with_fullscreen(Some(Fullscreen::Borderless(None)));
+            }
         }
         let window = Arc::new(event_loop.create_window(attrs).context("creating window")?);
         // Nobody is pointing at the Pi display.
@@ -143,7 +148,9 @@ impl App {
             &instance,
             Some(&surface),
             self.opts.low_power,
-            self.opts.allow_software,
+            // A window on a machine with no GPU (WSL, a VM) is better slow than refused: the adapter is
+            // named in a warning. Screenshots and benchmarks stay strict, since their numbers would mislead.
+            true,
         )?);
 
         let caps = surface.get_capabilities(&gpu.adapter);
@@ -475,8 +482,31 @@ pub fn run(themes: Vec<Theme>, opts: Options) -> Result<()> {
     Ok(())
 }
 
+/// Whether this process runs under Windows Subsystem for Linux, from its two usual tells: the
+/// `WSL_DISTRO_NAME` variable and a kernel release naming Microsoft.
+fn wsl_from(distro: Option<&str>, osrelease: &str) -> bool {
+    distro.is_some_and(|d| !d.is_empty()) || osrelease.to_ascii_lowercase().contains("microsoft")
+}
+
+fn running_under_wsl() -> bool {
+    let distro = std::env::var("WSL_DISTRO_NAME").ok();
+    let osrelease = std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap_or_default();
+    wsl_from(distro.as_deref(), &osrelease)
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn wsl_is_recognised_by_its_distro_variable_or_kernel() {
+        assert!(super::wsl_from(Some("Ubuntu-24.04"), "6.6.87.2-generic"));
+        assert!(super::wsl_from(
+            None,
+            "5.15.167.4-microsoft-standard-WSL2\n"
+        ));
+        assert!(!super::wsl_from(None, "7.0.0-38-generic\n"));
+        assert!(!super::wsl_from(Some(""), ""));
+    }
+
     use super::inside;
 
     #[test]

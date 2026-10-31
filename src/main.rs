@@ -85,7 +85,8 @@ struct Cli {
     /// Prefer the low-power (integrated) adapter.
     #[arg(long, global = true)]
     low_power: bool,
-    /// Run on a software (CPU) graphics adapter instead of refusing to; `--pi` implies it.
+    /// For `shot` and `bench`: run on a software (CPU) graphics adapter instead of refusing to. The window
+    /// always accepts one, with a warning.
     #[arg(long, global = true)]
     allow_software: bool,
     /// Do not record to the database this run.
@@ -628,7 +629,6 @@ fn main() -> Result<()> {
                         PresentArg::Mailbox => mctl_gui::Present::Mailbox,
                     },
                     low_power: cli.low_power,
-                    allow_software: cli.allow_software || cli.pi,
                     max_fps: cli.max_fps.or(cli.pi.then_some(PI_MAX_FPS)),
                     exit_after_frames: g.exit_after_frames,
                     start_theme: g.theme,
