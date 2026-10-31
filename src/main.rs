@@ -471,9 +471,13 @@ fn main() -> Result<()> {
             Ok(())
         }
         Some(Command::About) => {
-            print!("{}", mctl_gui::about_text());
-            println!("{THIRD_PARTY_NOTICES}");
-            Ok(())
+            use std::io::Write as _;
+            let text = format!("{}{THIRD_PARTY_NOTICES}\n", mctl_gui::about_text());
+            match std::io::stdout().lock().write_all(text.as_bytes()) {
+                // `mctl about | head`: a reader that stops reading is not an error.
+                Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+                other => other.map_err(Into::into),
+            }
         }
         Some(Command::Check) => {
             println!(
