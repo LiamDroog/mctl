@@ -10,7 +10,7 @@ soft=()
 out="$(mktemp -d)"
 trap 'rm -rf "$out"' EXIT
 "$bin" --offline --no-record "${soft[@]}" shot --out-dir "$out" --theme phosphor --pages all --wait-s 5 --warmup 30 >/dev/null 2>&1
-count=$(ls "$out"/*.png | wc -l)
+count=$(find "$out" -maxdepth 1 -name "*.png" | wc -l)
 [ "$count" -ge 20 ] || { echo "FAIL: only $count pages rendered"; exit 1; }
 for f in "$out"/*.png; do
   size=$(stat -c %s "$f")
@@ -20,7 +20,7 @@ distinct=$(md5sum "$out"/*.png | cut -d' ' -f1 | sort -u | wc -l)
 [ "$distinct" -eq "$count" ] || echo "note: $distinct distinct images among $count pages (pages with no source can look alike)"
 # An L2 vehicle has its own pages (halo plots, OPS timeline); render them too.
 "$bin" --offline --no-record "${soft[@]}" --vehicle jwst shot --out-dir "$out/jwst" --theme phosphor --pages master,traj,traj:3,ops,pass --wait-s 5 --warmup 30 >/dev/null 2>&1
-jcount=$(ls "$out"/jwst/*.png | wc -l)
+jcount=$(find "$out/jwst" -maxdepth 1 -name "*.png" | wc -l)
 [ "$jcount" -eq 5 ] || { echo "FAIL: only $jcount JWST pages rendered"; exit 1; }
 for f in "$out"/jwst/*.png; do
   [ "$(stat -c %s "$f")" -gt 20000 ] || { echo "FAIL: JWST $(basename "$f") looks blank"; exit 1; }

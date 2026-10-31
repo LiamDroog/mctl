@@ -114,12 +114,11 @@ for row in "${needs[@]}"; do
     else
         bad "$what"
         problems=$((problems + 1))
+        # One row may name several packages, so the unquoted expansions split on purpose.
+        # shellcheck disable=SC2206
         case "$pm" in
-            # shellcheck disable=SC2206  # one row may name several packages: split on purpose
             apt) missing_pkgs+=($apt_pkg) ;;
-            # shellcheck disable=SC2206
             dnf) missing_pkgs+=($dnf_pkg) ;;
-            # shellcheck disable=SC2206
             pacman) missing_pkgs+=($pac_pkg) ;;
         esac
     fi
@@ -174,7 +173,11 @@ if [ "${#missing_pkgs[@]}" -gt 0 ]; then
     case "$pm" in
         apt) install_cmd=(apt-get install -y "${missing_pkgs[@]}"); refresh=(apt-get update) ;;
         dnf) install_cmd=(dnf install -y "${missing_pkgs[@]}"); refresh=() ;;
-        pacman) install_cmd=(pacman -S --needed --noconfirm "${missing_pkgs[@]}"); refresh=() ;;
+        pacman)
+            install_cmd=(pacman -S --needed --noconfirm "${missing_pkgs[@]}"); refresh=()
+            # A fresh Arch install (or container) has no package databases yet; without them every target is "not found".
+            compgen -G "/var/lib/pacman/sync/*.db" >/dev/null || refresh=(pacman -Sy)
+            ;;
         *) die "no supported package manager (apt, dnf or pacman) found; install the missing items above by hand" ;;
     esac
     if [ "$use_pkg" = 0 ]; then

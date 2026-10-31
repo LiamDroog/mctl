@@ -9,6 +9,7 @@ repo="$(dirname "$(dirname "$self")")"
 
 # cargo is not on PATH in a fresh shell on this machine.
 if ! command -v cargo >/dev/null 2>&1 && [ -r "$HOME/.cargo/env" ]; then
+    # shellcheck source=/dev/null
     . "$HOME/.cargo/env"
 fi
 command -v cargo >/dev/null 2>&1 || { echo "mctl: cargo not found (looked on PATH and in ~/.cargo/env)" >&2; exit 127; }

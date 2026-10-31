@@ -42,6 +42,7 @@ if [ -x "$repo/mctl" ] && [ ! -f "$repo/Cargo.toml" ]; then
     built="$repo/mctl"
 else
     if ! command -v cargo >/dev/null 2>&1 && [ -r "$HOME/.cargo/env" ]; then
+        # shellcheck source=/dev/null
         . "$HOME/.cargo/env"
     fi
     command -v cargo >/dev/null 2>&1 || { echo "install.sh: cargo not found" >&2; exit 127; }

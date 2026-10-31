@@ -23,7 +23,10 @@ while [ $# -gt 0 ]; do
         *) echo "install-display.sh: unknown argument $1" >&2; exit 2 ;;
     esac
 done
-[ -n "$user" ] && [ -n "$bin" ] || { echo "install-display.sh: --user and --bin are required" >&2; exit 2; }
+if [ -z "$user" ] || [ -z "$bin" ]; then
+    echo "install-display.sh: --user and --bin are required" >&2
+    exit 2
+fi
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 unit="$(sed -e "s|@USER@|$user|g" -e "s|@BIN@|$bin|g" "$here/mctl-display.service.in")"
