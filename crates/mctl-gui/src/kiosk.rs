@@ -76,6 +76,7 @@ impl View {
         match (self, regime) {
             (Self::Art, _) => "",
             (Self::Orbit, Regime::L2) => "HALO ORBIT",
+            (Self::Orbit, Regime::Deep) => "SOLAR SYSTEM",
             (Self::Orbit, _) => "ORBIT MAP",
             (Self::Ground, _) => "GROUND TRACK",
             (Self::Sky, _) => "SKY PLOT",
@@ -83,6 +84,7 @@ impl View {
             (Self::Ops, _) => "OBSERVING  [PLAN]",
             (Self::DenseMaster, _) => "MASTER",
             (Self::DenseTraj, Regime::L2) => "HALO ORBIT",
+            (Self::DenseTraj, Regime::Deep) => "SOLAR SYSTEM",
             (Self::DenseTraj, _) => "ORBIT MAP",
             (Self::DensePass, _) => "PASS",
             (Self::DenseProx, _) => "PROX",
@@ -152,7 +154,7 @@ fn views_of(world: &World, v: &VehicleView, mix: Mix) -> Vec<View> {
     let placed = !docked
         && match v.regime {
             Regime::Earth => v.solution.is_some(),
-            Regime::L2 => v.deep.is_some(),
+            Regime::L2 | Regime::Deep => v.deep.is_some(),
         };
     let passes = !docked && v.passes.iter().any(|set| !set.passes.is_empty());
     // A plot of vehicles that are all docked has nothing to show.
@@ -265,6 +267,21 @@ fn readouts(v: &VehicleView) -> (Readouts, Readouts) {
             vec![
                 ("LIGHT TIME", format!("{:.1} S", d.light_time_s)),
                 ("OFF AXIS", format!("{:.1} DEG", d.off_axis_deg)),
+                ("SOURCE", "HORIZONS".into()),
+            ],
+        );
+    }
+    if let Some(d) = v.deep.as_ref().filter(|_| v.regime == Regime::Deep) {
+        let au = d.sun_dist_km / mctl_astro::interplanetary::KM_PER_AU;
+        return (
+            vec![
+                ("FROM SUN", format!("{au:.1} AU")),
+                ("SPEED", format!("{:.2} KM/S", d.speed_km_s)),
+                ("ORBIT", "ESCAPE".into()),
+            ],
+            vec![
+                ("LIGHT TIME", format!("{:.1} H", d.light_time_s / 3600.0)),
+                ("ECL LAT", format!("{:.1} DEG", d.off_axis_deg)),
                 ("SOURCE", "HORIZONS".into()),
             ],
         );
@@ -423,6 +440,19 @@ fn position_lines(v: &VehicleView) -> [(String, Style); 2] {
             (format!("LIGHT TIME {:.1} S", d.light_time_s), fg),
         ];
     }
+    if let Some(d) = v.deep.as_ref().filter(|_| v.regime == Regime::Deep) {
+        return [
+            (
+                format!(
+                    "{:.1} AU FROM THE SUN   {:.2} KM/S",
+                    d.sun_dist_km / mctl_astro::interplanetary::KM_PER_AU,
+                    d.speed_km_s
+                ),
+                bright,
+            ),
+            (format!("LIGHT TIME {:.1} H", d.light_time_s / 3600.0), fg),
+        ];
+    }
     let Some(s) = v.solution.as_ref() else {
         return [("NO SOLUTION YET".to_owned(), fg), (String::new(), fg)];
     };
@@ -459,6 +489,14 @@ fn view_body(grid: &mut Grid, rect: CellRect, v: &VehicleView, view: View) -> La
         | View::DenseEvents => {}
         View::Orbit if v.regime == Regime::L2 => {
             crate::deep::plot(grid, rect, "HALO ORBIT  VIEW FROM EARTH", PlotKind::Halo);
+        }
+        View::Orbit if v.regime == Regime::Deep => {
+            crate::deep::plot(
+                grid,
+                rect,
+                "SOLAR SYSTEM FROM ECLIPTIC NORTH",
+                PlotKind::SolarSystem,
+            );
         }
         View::Orbit => {
             boxed(grid, rect, view.title(v.regime));

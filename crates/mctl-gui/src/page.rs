@@ -1145,6 +1145,46 @@ mod tests {
     }
 
     #[test]
+    fn interplanetary_pages_render_at_every_size_and_queue_their_plots() {
+        use crate::grid::{PlotKind, Widget};
+        let mut v = l2_view();
+        v.id = "voyager-1".into();
+        v.name = "VOYAGER 1".into();
+        v.regime = mctl_core::config::Regime::Deep;
+        v.schedule = None;
+        let w = bare_world();
+        for (cols, rows) in [(160, 45), (100, 30), (60, 20), (20, 6)] {
+            for (page, sub) in [(Page::Master, 0), (Page::Traj, 0), (Page::Traj, 2)] {
+                let (g, _) = render_page(&w, Some(&v), page, sub, cols, rows);
+                if cols >= 100 {
+                    assert!(g.row_text(0).contains("VOYAGER 1"), "{}", g.row_text(0));
+                }
+            }
+        }
+        let kinds = |page, sub| -> Vec<PlotKind> {
+            render_page(&w, Some(&v), page, sub, 160, 45)
+                .1
+                .widgets
+                .iter()
+                .filter_map(|w| match w {
+                    Widget::Plot { kind, .. } => Some(*kind),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert_eq!(kinds(Page::Master, 0), [PlotKind::SolarSystem]);
+        assert_eq!(kinds(Page::Traj, 2).len(), 4);
+        for (page, sub, what) in [
+            (Page::Traj, 1, "GROUND TRACK MEANS NOTHING"),
+            (Page::Traj, 3, "LEAVING THE SOLAR SYSTEM"),
+            (Page::Pass, 0, "NOT PREDICTED"),
+        ] {
+            let (g, _) = render_page(&w, Some(&v), page, sub, 160, 45);
+            assert!(g.text().contains(what), "{what}: {}", g.text());
+        }
+    }
+
+    #[test]
     fn pages_without_a_source_say_why_and_never_show_invented_numbers() {
         let hubble = view(SourceStatus::Active, Health::Ok, None);
         let w = bare_world();

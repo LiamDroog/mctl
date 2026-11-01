@@ -189,6 +189,45 @@ sources = ["horizons"]
 met_epoch = "2026-08-30T11:26:04"
 horizons = { id = "-211", step_s = 21600, past_days = 50, future_days = 100, stale_after_s = 1209600 }
 
+# The Chinese space station. CelesTrak publishes it as the Tianhe core module (the whole station moves as one).
+[[vehicle]]
+id = "tiangong"
+name = "TIANGONG"
+norad = 48274
+sources = ["gp"]
+# Tianhe core module liftoff, 2021-04-29 11:23 Beijing time = 03:23 UTC (assumption; verify).
+met_epoch = "2021-04-29T03:23:00"
+
+# Vehicles on escape trajectories. Horizons gives geocentric vectors; the display works out heliocentric
+# distance, speed and ecliptic position from them. Five-day steps over a decade each way keep the request
+# small (about 1,460 rows) and the path smooth.
+[[vehicle]]
+id = "voyager-1"
+name = "VOYAGER 1"
+regime = "deep"
+sources = ["horizons"]
+# Titan IIIE liftoff, 1977-09-06 12:56 UTC (Horizons header).
+met_epoch = "1977-09-06T12:56:00"
+horizons = { id = "-31", step_s = 432000, past_days = 3650, future_days = 3650, stale_after_s = 1209600 }
+
+[[vehicle]]
+id = "voyager-2"
+name = "VOYAGER 2"
+regime = "deep"
+sources = ["horizons"]
+# Titan IIIE liftoff, 1977-08-20 14:29 UTC (Horizons header).
+met_epoch = "1977-08-20T14:29:00"
+horizons = { id = "-32", step_s = 432000, past_days = 3650, future_days = 3650, stale_after_s = 1209600 }
+
+[[vehicle]]
+id = "new-horizons"
+name = "NEW HORIZONS"
+regime = "deep"
+sources = ["horizons"]
+# Atlas V 551 liftoff, 2006-01-19 19:00 UTC (Horizons header gives the date; the time is the published launch time).
+met_epoch = "2006-01-19T19:00:00"
+horizons = { id = "-98", step_s = 432000, past_days = 3650, future_days = 3650, stale_after_s = 1209600 }
+
 # ---- Caution and warning rules ---------------------------------------------------
 # Every rule says where its limits come from in `basis`. ISS subsystem limits are user-defined and
 # public flight-rule limits are not assumed, so the subsystem rules below are

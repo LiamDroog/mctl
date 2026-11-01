@@ -270,8 +270,9 @@ pub struct VehicleDef {
     /// NORAD catalogue number; 0 for a vehicle with none (it then cannot use the `gp` source).
     #[serde(default)]
     pub norad: u32,
-    /// Where the vehicle is: `earth` orbit, or `l2`, the Sun-Earth L2 point (an Earth-centred
-    /// Kepler orbit means nothing there, so those vehicles get a different display).
+    /// Where the vehicle is: `earth` orbit, `l2`, the Sun-Earth L2 point, or `deep`, on an escape
+    /// trajectory far from Earth (an Earth-centred Kepler orbit means nothing in either, so those
+    /// vehicles get a different display).
     #[serde(default)]
     pub regime: Regime,
     /// Resolve the NORAD object by name at fetch time instead of a fixed number (Dragon's number changes
@@ -307,6 +308,7 @@ pub enum Regime {
     #[default]
     Earth,
     L2,
+    Deep,
 }
 
 /// What to ask Horizons for one vehicle.

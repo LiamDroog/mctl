@@ -7,7 +7,7 @@
 use nalgebra::Vector3;
 
 /// Mean obliquity of the ecliptic at J2000, degrees (changes 47" per century: irrelevant here).
-const OBLIQUITY_J2000_DEG: f64 = 23.439_291;
+pub(crate) const OBLIQUITY_J2000_DEG: f64 = 23.439_291;
 /// Speed of light, km/s.
 pub const C_KM_S: f64 = 299_792.458;
 
