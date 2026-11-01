@@ -6,6 +6,18 @@ change behaviour.
 
 ## [Unreleased]
 
+### Added
+
+- `--kiosk-order random` shows every scene once per cycle in a new random order each cycle, and
+  `--kiosk-order vehicle` shows one vehicle at a time, all its scenes before the next, in a random vehicle order
+  reshuffled each cycle. `--kiosk-vehicles iss,jwst` limits the display to chosen vehicles.
+
+### Changed
+
+- `--pi` is now `--kiosk` (and `--pi-style` is `--kiosk-style`); the old names still work as aliases.
+- The kiosk display scales its fonts to fill the screen, keeping the layout designed for the Pi's 640x480, instead
+  of staying at that size on a larger screen.
+
 ## [0.1.1] - 2026-11-01
 
 ### Changed

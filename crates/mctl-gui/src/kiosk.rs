@@ -1,4 +1,4 @@
-//! The Raspberry Pi / CRT display (`mctl --pi`): big pictures, few numbers, cycling through the vehicles.
+//! The Raspberry Pi / CRT display (`mctl --kiosk`): big pictures, few numbers, cycling through the vehicles.
 //!
 //! This is a screen for looking at rather than operating, so it is built from the same widgets as the
 //! console but has no pages, no command line and no effects: the tube supplies those.
@@ -39,11 +39,126 @@ pub enum Mix {
     Dense,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct KioskConfig {
     /// Seconds a vehicle's scene stays up.
     pub dwell_s: f64,
     pub mix: Mix,
+    pub order: Order,
+    /// Vehicle ids to show; empty means every vehicle.
+    pub vehicles: Vec<String>,
+}
+
+/// The order the display takes its scenes in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Order {
+    /// As configured: each vehicle's scenes in turn, vehicles in the configuration's order.
+    #[default]
+    Sequential,
+    /// Every scene once per cycle in a random order, and a different random order each cycle.
+    Random,
+    /// One vehicle at a time in a random order, all of its scenes before the next vehicle; the vehicle
+    /// order is different each cycle.
+    Vehicle,
+}
+
+/// A small xorshift generator: the display needs variety, not statistical quality, and a seed that tests can
+/// fix, so no dependency is warranted.
+#[derive(Clone, Debug)]
+pub struct Rng(u64);
+
+impl Rng {
+    pub fn new(seed: u64) -> Self {
+        // Zero is the one state xorshift cannot leave.
+        Self(seed.max(1))
+    }
+
+    /// A generator seeded from the clock.
+    pub fn from_clock() -> Self {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos() as u64);
+        Self::new(nanos)
+    }
+
+    fn next(&mut self) -> u64 {
+        let mut x = self.0;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.0 = x;
+        x
+    }
+
+    /// Fisher-Yates.
+    fn shuffle<T>(&mut self, items: &mut [T]) {
+        for i in (1..items.len()).rev() {
+            items.swap(i, (self.next() % (i as u64 + 1)) as usize);
+        }
+    }
+}
+
+/// Which of `scenes` to show, in what order, for one pass of the display. Indices into `scenes`.
+///
+/// `only` limits the vehicles shown (empty: all of them); a gallery interlude follows the vehicle whose art
+/// it came after, so it is dropped with that vehicle. `previous` is the scene shown last, which the new pass
+/// does not start with, so a cycle never opens on what the last one closed on.
+pub fn plan(
+    scenes: &[Scene<'_>],
+    order: Order,
+    only: &[String],
+    previous: Option<usize>,
+    rng: &mut Rng,
+) -> Vec<usize> {
+    // Groups of consecutive scenes belonging to one vehicle. An interlude straight after a vehicle's art
+    // rides with that vehicle; the gallery left over at the end of the cycle is a group of its own.
+    let mut groups: Vec<(Option<&str>, Vec<usize>)> = Vec::new();
+    for (i, sc) in scenes.iter().enumerate() {
+        match sc {
+            Scene::Vehicle(v, _)
+                if groups
+                    .last()
+                    .is_none_or(|(id, _)| *id != Some(v.id.as_str())) =>
+            {
+                groups.push((Some(v.id.as_str()), vec![i]));
+            }
+            Scene::Extra(_) if i > 0 && matches!(scenes[i - 1], Scene::Vehicle(_, View::Art)) => {
+                groups.last_mut().expect("a vehicle precedes").1.push(i);
+            }
+            Scene::Extra(_) => match groups.last_mut() {
+                Some((None, g)) => g.push(i),
+                _ => groups.push((None, vec![i])),
+            },
+            Scene::Vehicle(_, _) => groups.last_mut().expect("same vehicle").1.push(i),
+        }
+    }
+    // The leftover gallery belongs to no vehicle, so a selection of vehicles leaves it out.
+    groups.retain(|(id, _)| match id {
+        Some(id) => only.is_empty() || only.iter().any(|o| o == id),
+        None => only.is_empty(),
+    });
+    let mut out: Vec<usize> = match order {
+        Order::Sequential => groups.into_iter().flat_map(|(_, g)| g).collect(),
+        Order::Random => {
+            let mut all: Vec<usize> = groups.into_iter().flat_map(|(_, g)| g).collect();
+            rng.shuffle(&mut all);
+            all
+        }
+        Order::Vehicle => {
+            rng.shuffle(&mut groups);
+            // A different vehicle from the last pass's first, when there is a choice.
+            if let (Some(prev), true) = (previous, groups.len() > 1)
+                && groups[0].1.contains(&prev)
+            {
+                groups.swap(0, 1);
+            }
+            groups.into_iter().flat_map(|(_, g)| g).collect()
+        }
+    };
+    if order == Order::Random && out.len() > 1 && Some(out[0]) == previous {
+        out.swap(0, 1);
+    }
+    out
 }
 
 /// A dense scene stays up this much longer than a picture, since there is more to read.
@@ -787,5 +902,99 @@ mod tests {
     fn fit_never_splits_a_character() {
         assert_eq!(fit("ÅÅÅ", 2), "ÅÅ");
         assert_eq!(fit("abc", 9), "abc");
+    }
+
+    fn vehicle_of(scenes: &[Scene<'_>], i: usize) -> Option<String> {
+        match scenes[i] {
+            Scene::Vehicle(v, _) => Some(v.id.clone()),
+            Scene::Extra(_) => None,
+        }
+    }
+
+    #[test]
+    fn sequential_keeps_the_configured_order() {
+        let w = test_world(3);
+        let scenes = scenes(&w, Mix::Mixed);
+        let p = plan(&scenes, Order::Sequential, &[], None, &mut Rng::new(7));
+        assert_eq!(p, (0..scenes.len()).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn random_shows_every_scene_once_per_pass_and_a_different_order_each_pass() {
+        let w = test_world(4);
+        let scenes = scenes(&w, Mix::Mixed);
+        let mut rng = Rng::new(42);
+        let mut last = None;
+        let mut passes = Vec::new();
+        for _ in 0..5 {
+            let p = plan(&scenes, Order::Random, &[], last, &mut rng);
+            let mut sorted = p.clone();
+            sorted.sort_unstable();
+            assert_eq!(
+                sorted,
+                (0..scenes.len()).collect::<Vec<_>>(),
+                "each scene once"
+            );
+            assert_ne!(
+                Some(p[0]),
+                last,
+                "never opens on what the last pass closed on"
+            );
+            last = p.last().copied();
+            passes.push(p);
+        }
+        assert!(
+            passes.windows(2).all(|w| w[0] != w[1]),
+            "a new order each pass: {passes:?}"
+        );
+    }
+
+    #[test]
+    fn vehicle_order_runs_a_whole_vehicle_before_the_next_and_reshuffles_each_pass() {
+        let w = test_world(5);
+        let scenes = scenes(&w, Mix::Mixed);
+        let mut rng = Rng::new(3);
+        let mut orders = Vec::new();
+        let mut last = None;
+        for _ in 0..4 {
+            let p = plan(&scenes, Order::Vehicle, &[], last, &mut rng);
+            assert_eq!(p.len(), scenes.len());
+            // Walking the plan, a vehicle's scenes are contiguous: its id never comes back after another's.
+            let mut seen: Vec<String> = Vec::new();
+            for &i in &p {
+                if let Some(id) = vehicle_of(&scenes, i)
+                    && seen.last() != Some(&id)
+                {
+                    assert!(!seen.contains(&id), "{id} split up in {p:?}");
+                    seen.push(id);
+                }
+            }
+            assert_eq!(seen.len(), 5);
+            last = p.last().copied();
+            orders.push(seen);
+        }
+        assert!(orders.windows(2).all(|w| w[0] != w[1]), "{orders:?}");
+    }
+
+    #[test]
+    fn a_selection_limits_the_vehicles_and_takes_their_interludes_with_them() {
+        let w = test_world(4);
+        let scenes = scenes(&w, Mix::Mixed);
+        let only = vec!["v1".to_owned(), "v3".to_owned()];
+        for order in [Order::Sequential, Order::Random, Order::Vehicle] {
+            let p = plan(&scenes, order, &only, None, &mut Rng::new(9));
+            let ids: std::collections::BTreeSet<_> =
+                p.iter().filter_map(|&i| vehicle_of(&scenes, i)).collect();
+            assert_eq!(
+                ids.into_iter().collect::<Vec<_>>(),
+                ["v1", "v3"],
+                "{order:?}"
+            );
+            // An interlude is shown only if it followed a selected vehicle's art.
+            for &i in p.iter().filter(|&&i| vehicle_of(&scenes, i).is_none()) {
+                let before = vehicle_of(&scenes, i - 1).expect("an interlude follows art");
+                assert!(only.contains(&before), "{order:?}");
+            }
+        }
     }
 }
