@@ -179,14 +179,13 @@ impl Console {
         if let Some(t) = self.field_textures.get(&name) {
             return Some(t.id());
         }
-        let img =
-            match image::load_from_memory_with_format(jpeg.as_slice(), image::ImageFormat::Jpeg) {
-                Ok(i) => i.to_rgb8(),
-                Err(e) => {
-                    tracing::warn!(error = %e, key, "field picture is not a decodable JPEG");
-                    return None;
-                }
-            };
+        let img = match image::load_from_memory(jpeg.as_slice()) {
+            Ok(i) => i.to_rgb8(),
+            Err(e) => {
+                tracing::warn!(error = %e, key, "field picture is not a decodable image");
+                return None;
+            }
+        };
         let size = [img.width() as usize, img.height() as usize];
         let color = egui::ColorImage::from_rgb(size, img.as_raw());
         if self.field_textures.len() >= MAX_FIELD_TEXTURES {

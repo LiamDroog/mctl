@@ -343,6 +343,25 @@ fn fit(text: &str, width: usize) -> String {
     text.chars().take(width).collect()
 }
 
+/// How fast a line too long for the screen scrolls, in characters a second.
+const TICKER_CPS: f64 = 5.0;
+/// What separates the end of a scrolling line from its start coming round again.
+const TICKER_GAP: &str = "     ";
+
+/// `text` as it is if it fits in `width` characters; otherwise the `width` characters of it, looping, that
+/// are in view `t` seconds into its scroll, like a news ticker.
+fn ticker(text: &str, width: usize, t: f64) -> String {
+    let n = text.chars().count();
+    if n <= width || width == 0 {
+        return text.to_owned();
+    }
+    let looped: Vec<char> = text.chars().chain(TICKER_GAP.chars()).collect();
+    let start = (t.max(0.0) * TICKER_CPS) as usize % looped.len();
+    (0..width)
+        .map(|i| looped[(start + i) % looped.len()])
+        .collect()
+}
+
 fn centre(grid: &mut Grid, row: usize, text: &str, style: Style) {
     let w = text.chars().count().min(grid.cols);
     grid.put((grid.cols - w) / 2, row, &fit(text, grid.cols), style);
@@ -429,7 +448,7 @@ fn readouts(v: &VehicleView) -> (Readouts, Readouts) {
 }
 
 /// Two lines about what the vehicle is doing now, from whatever is known of it.
-fn status(world: &World, v: &VehicleView, width: usize) -> [(String, Style); 2] {
+fn status(world: &World, v: &VehicleView) -> [(String, Style); 2] {
     let (bright, fg, dim) = (
         Style::new(Role::Bright),
         Style::new(Role::Fg),
@@ -439,15 +458,12 @@ fn status(world: &World, v: &VehicleView, width: usize) -> [(String, Style); 2] 
     match v.ops.as_ref() {
         Some(Ops::Jwst(s)) => {
             let first = match s.current(now) {
-                Some(c) => (fit(&format!("OBSERVING  {}", c.target), width), bright),
+                Some(c) => (format!("OBSERVING  {}", c.target), bright),
                 None => ("BETWEEN OBSERVATIONS".to_owned(), dim),
             };
             let second = match s.upcoming(now).next() {
                 Some(n) => (
-                    fit(
-                        &format!("NEXT IN {}  {}", fmt_dur(n.start.minus(now)), n.target),
-                        width,
-                    ),
+                    format!("NEXT IN {}  {}", fmt_dur(n.start.minus(now)), n.target),
                     fg,
                 ),
                 None => (String::new(), dim),
@@ -456,14 +472,11 @@ fn status(world: &World, v: &VehicleView, width: usize) -> [(String, Style); 2] 
         }
         Some(Ops::Hst(r)) => {
             let first = (
-                fit(
-                    &format!("{} PROGRAMS IN TODAY'S REPORT", r.science.len()),
-                    width,
-                ),
+                format!("{} PROGRAMS IN TODAY'S REPORT", r.science.len()),
                 bright,
             );
             let second = match r.science.first() {
-                Some(p) => (fit(&p.title.to_uppercase(), width), fg),
+                Some(p) => (p.title.to_uppercase(), fg),
                 None => (String::new(), dim),
             };
             return [first, second];
@@ -482,15 +495,12 @@ fn status(world: &World, v: &VehicleView, width: usize) -> [(String, Style); 2] 
             .find(|t| t.id == p.target)
             .map_or(p.target.to_uppercase(), |t| t.name.to_uppercase());
         return [
-            (
-                fit(&format!("{}  {}", p.state.label(), target), width),
-                bright,
-            ),
+            (format!("{}  {}", p.state.label(), target), bright),
             (
                 if p.state == mctl_core::prox::ProxState::Docked {
                     String::new()
                 } else {
-                    fit(&format!("RANGE {:.1} KM", p.range_km), width)
+                    format!("RANGE {:.1} KM", p.range_km)
                 },
                 fg,
             ),
@@ -519,10 +529,7 @@ fn status(world: &World, v: &VehicleView, width: usize) -> [(String, Style); 2] 
             .map(|t| t.name.to_uppercase())
             .collect();
         return [
-            (
-                fit(&format!("VISITORS  {}", names.join("  ")), width),
-                bright,
-            ),
+            (format!("VISITORS  {}", names.join("  ")), bright),
             (String::new(), dim),
         ];
     }
@@ -699,8 +706,13 @@ fn render_dense(grid: &mut Grid, inp: &KioskInput<'_>, v: &VehicleView, view: Vi
     );
     // Below the page: one status line and the marks, in the rows its body leaves free.
     let status_row = rows.saturating_sub(SAFE_BOTTOM + 2);
-    let [(line, style), _] = status(inp.world, v, inner_cols);
-    centre(grid, status_row, &line, style);
+    let [(line, style), _] = status(inp.world, v);
+    centre(
+        grid,
+        status_row,
+        &ticker(&line, inner_cols, inp.world.t.0),
+        style,
+    );
     centre(
         grid,
         status_row + 1,
@@ -805,9 +817,10 @@ pub fn render(grid: &mut Grid, inp: &KioskInput<'_>) -> Layout {
                 right(grid, row, label, dim);
                 right(grid, row + 1, value, bright);
             }
-            let lines = status(inp.world, v, cols.saturating_sub(2 * SAFE_COLS));
+            let lines = status(inp.world, v);
             for (i, (text, style)) in lines.iter().enumerate() {
-                centre(grid, footer + 1 + i, text, *style);
+                let text = ticker(text, cols.saturating_sub(2 * SAFE_COLS), inp.world.t.0);
+                centre(grid, footer + 1 + i, &text, *style);
             }
         }
         Scene::Vehicle(v, View::Orbit | View::Ground) => {
@@ -816,9 +829,10 @@ pub fn render(grid: &mut Grid, inp: &KioskInput<'_>) -> Layout {
             }
         }
         Scene::Vehicle(v, _) => {
-            let lines = status(inp.world, v, cols.saturating_sub(2 * SAFE_COLS));
+            let lines = status(inp.world, v);
             for (i, (text, style)) in lines.iter().enumerate() {
-                centre(grid, footer + 1 + i, text, *style);
+                let text = ticker(text, cols.saturating_sub(2 * SAFE_COLS), inp.world.t.0);
+                centre(grid, footer + 1 + i, &text, *style);
             }
         }
         Scene::Extra(e) => {
@@ -1034,5 +1048,16 @@ mod tests {
                 assert!(only.contains(&before), "{order:?}");
             }
         }
+    }
+
+    #[test]
+    fn a_line_that_fits_stays_put_and_a_longer_one_scrolls_and_loops() {
+        assert_eq!(ticker("SHORT", 9, 123.0), "SHORT");
+        let long = "ABCDEFGHIJKL";
+        assert_eq!(ticker(long, 5, 0.0), "ABCDE");
+        assert_eq!(ticker(long, 5, 1.0), "FGHIJ");
+        assert_eq!(ticker(long, 5, 2.0), "KL   ");
+        assert_eq!(ticker(long, 5, 2.6), "    A"); // into the gap, then round to the start
+        assert_eq!(ticker(long, 5, 3.4), "ABCDE"); // a whole lap is 17 characters
     }
 }

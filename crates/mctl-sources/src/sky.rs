@@ -2,10 +2,12 @@
 //! field. The picture is a DSS2 sky-survey image around the target, never an image taken by Hubble or
 //! JWST, and the display says so.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use mctl_core::config::SkySources;
 use mctl_core::schedule::{FieldRequest, FieldState};
@@ -14,6 +16,9 @@ use crate::tasks::Event;
 
 /// A service that does not even accept the connection in this long is down, however patient the request is.
 const CONNECT_TIMEOUT_S: f64 = 15.0;
+/// A host that could not be reached is not asked again for this long, so a service that is down costs one
+/// connect timeout, not one per picture.
+const HOST_BACKOFF_S: f64 = 600.0;
 /// Largest response read for a picture or a program file, bytes.
 const MAX_BODY: u64 = 8 * 1024 * 1024;
 
@@ -149,6 +154,15 @@ pub fn cutout_url(cfg: &SkySources, ra_deg: f64, dec_deg: f64) -> String {
     )
 }
 
+/// STScI Digitized Sky Survey request for a GIF cutout `fov_deg` across, centred on the position.
+pub fn dss_url(cfg: &SkySources, ra_deg: f64, dec_deg: f64) -> String {
+    let arcmin = cfg.fov_deg * 60.0;
+    format!(
+        "{}?v={}&r={ra_deg:.6}&d={dec_deg:.6}&e=J2000&h={arcmin:.1}&w={arcmin:.1}&f=gif&c=none&fov=NONE&v3=",
+        cfg.dss_url, cfg.dss_survey,
+    )
+}
+
 /// Names a visit list uses for things that are not sky positions.
 fn is_internal_name(name: &str) -> bool {
     let n = name.trim();
@@ -164,6 +178,14 @@ struct Http {
     user_agent: String,
     cache: PathBuf,
     max_age_s: f64,
+    /// When each host that could not be reached last failed.
+    down: RefCell<HashMap<String, Instant>>,
+}
+
+/// `host` of an `http(s)` URL.
+fn host_of(url: &str) -> &str {
+    let rest = url.split_once("://").map_or(url, |(_, r)| r);
+    rest.split(['/', '?']).next().unwrap_or(rest)
 }
 
 impl Http {
@@ -184,6 +206,12 @@ impl Http {
         if let Some(b) = self.cached(key) {
             return Ok(b);
         }
+        let host = host_of(url).to_owned();
+        if let Some(at) = self.down.borrow().get(&host)
+            && at.elapsed().as_secs_f64() < HOST_BACKOFF_S
+        {
+            return Err(format!("{host} could not be reached a moment ago"));
+        }
         let call = || {
             self.agent
                 .get(url)
@@ -191,13 +219,17 @@ impl Http {
                 .call()
         };
         // A service that is merely slow is given a second go; one that refuses is not asked twice.
-        let mut resp = match call() {
+        let reply = match call() {
             Err(ureq::Error::Timeout(why)) => {
                 tracing::warn!(url, %why, "request timed out, trying once more");
-                call().map_err(|e| format!("{url}: {e}"))?
+                call()
             }
-            other => other.map_err(|e| format!("{url}: {e}"))?,
+            other => other,
         };
+        let mut resp = reply.map_err(|e| {
+            self.down.borrow_mut().insert(host, Instant::now());
+            format!("{url}: {e}")
+        })?;
         if resp.status().as_u16() != 200 {
             return Err(format!("{url}: HTTP {}", resp.status().as_u16()));
         }
@@ -239,6 +271,15 @@ fn resolve_name(http: &Http, cfg: &SkySources, name: &str) -> Result<Position, S
             "{name} is a proposal-internal name, not a catalogued object"
         ));
     }
+    let sesame = resolve_sesame(http, cfg, name);
+    let Err(first) = sesame else {
+        return sesame;
+    };
+    // Sesame is down or does not know it: ask MAST, which also searches SIMBAD and NED.
+    resolve_mast(http, cfg, name).map_err(|e| format!("{first}; then {e}"))
+}
+
+fn resolve_sesame(http: &Http, cfg: &SkySources, name: &str) -> Result<Position, String> {
     let mut tried = Vec::new();
     for variant in [name.to_owned(), name.replace('-', " ")] {
         if tried.contains(&variant) {
@@ -254,11 +295,48 @@ fn resolve_name(http: &Http, cfg: &SkySources, name: &str) -> Result<Position, S
     Err(format!("Sesame does not know {name:?}"))
 }
 
+/// The reply of MAST's `Mast.Name.Lookup`: `{"resolvedCoordinate":[{"ra":182.6,"decl":39.4,...}],...}`.
+pub fn parse_mast(text: &str, name: &str) -> Option<Position> {
+    let v: serde_json::Value = serde_json::from_str(text).ok()?;
+    let r = v.get("resolvedCoordinate")?.get(0)?;
+    let (ra, dec) = (r.get("ra")?.as_f64()?, r.get("decl")?.as_f64()?);
+    ((0.0..360.0).contains(&ra) && (-90.0..=90.0).contains(&dec)).then(|| Position {
+        name: name.to_owned(),
+        ra_deg: ra,
+        dec_deg: dec,
+        origin: "MAST name resolver (SIMBAD/NED)".into(),
+    })
+}
+
+fn resolve_mast(http: &Http, cfg: &SkySources, name: &str) -> Result<Position, String> {
+    let mut tried = Vec::new();
+    for variant in [name.to_owned(), name.replace('-', " ")] {
+        if tried.contains(&variant) {
+            continue;
+        }
+        let request = serde_json::json!({
+            "service": "Mast.Name.Lookup",
+            "params": { "input": variant, "format": "json" },
+        });
+        let url = format!(
+            "{}?request={}",
+            cfg.mast_name_url,
+            encode(&request.to_string())
+        );
+        let text = http.text(&format!("mast-{}.json", safe_key(&variant)), &url)?;
+        if let Some(p) = parse_mast(&text, name) {
+            return Ok(p);
+        }
+        tried.push(variant);
+    }
+    Err(format!("MAST does not know {name:?}"))
+}
+
 fn resolve(
     http: &Http,
     cfg: &SkySources,
     req: &FieldRequest,
-) -> Result<(Position, Vec<u8>), String> {
+) -> Result<(Position, Vec<u8>, String), String> {
     let pos = match req {
         FieldRequest::Target(name) => resolve_name(http, cfg, name)?,
         FieldRequest::HstProgram(id) => {
@@ -270,6 +348,15 @@ fn resolve(
             })?
         }
     };
+    let (image, survey) = match cutout(http, cfg, &pos) {
+        Ok(c) => c,
+        Err(first) => dss_cutout(http, cfg, &pos).map_err(|e| format!("{first}; then {e}"))?,
+    };
+    Ok((pos, image, survey))
+}
+
+/// The hips2fits cutout, a JPEG.
+fn cutout(http: &Http, cfg: &SkySources, pos: &Position) -> Result<(Vec<u8>, String), String> {
     let url = cutout_url(cfg, pos.ra_deg, pos.dec_deg);
     let key = format!(
         "cutout-{:.4}-{:+.4}-{}.jpg",
@@ -282,7 +369,23 @@ fn resolve(
     if jpeg.len() < 4 || jpeg[..2] != [0xFF, 0xD8] {
         return Err(format!("{url}: the reply is not a JPEG"));
     }
-    Ok((pos, jpeg))
+    Ok((jpeg, cfg.survey.clone()))
+}
+
+/// The STScI DSS cutout, a GIF.
+fn dss_cutout(http: &Http, cfg: &SkySources, pos: &Position) -> Result<(Vec<u8>, String), String> {
+    let url = dss_url(cfg, pos.ra_deg, pos.dec_deg);
+    let key = format!(
+        "dss-{:.4}-{:+.4}-{}.gif",
+        pos.ra_deg,
+        pos.dec_deg,
+        safe_key(&cfg.dss_survey)
+    );
+    let gif = http.get(&key, &url)?;
+    if !gif.starts_with(b"GIF8") {
+        return Err(format!("{url}: the reply is not a GIF"));
+    }
+    Ok((gif, format!("STScI DSS {}", cfg.dss_survey)))
 }
 
 /// Serve picture requests until the channel closes. Each reply is an `Event::Field`.
@@ -304,6 +407,7 @@ pub fn run(
         user_agent,
         cache: cache_dir.join("sky"),
         max_age_s: cfg.cache_s,
+        down: RefCell::default(),
     };
     while let Ok((vehicle, req)) = requests.recv() {
         let state = if offline {
@@ -334,14 +438,14 @@ pub fn run(
     }
 }
 
-fn ready(cfg: &SkySources, (pos, jpeg): (Position, Vec<u8>)) -> FieldState {
+fn ready(cfg: &SkySources, (pos, jpeg, survey): (Position, Vec<u8>, String)) -> FieldState {
     FieldState::Ready {
         target: pos.name,
         ra_deg: pos.ra_deg,
         dec_deg: pos.dec_deg,
         fov_deg: cfg.fov_deg,
         origin: pos.origin,
-        survey: cfg.survey.clone(),
+        survey,
         jpeg: Arc::new(jpeg),
     }
 }
@@ -439,5 +543,30 @@ mod tests {
             assert!(is_internal_name(n), "{n}");
         }
         assert!(!is_internal_name("V339-Del") && !is_internal_name("HD-209458b"));
+    }
+
+    #[test]
+    fn mast_replies_carry_the_position() {
+        let text = r#"{"resolvedCoordinate":[{"canonicalName":"NGC  4151","ra":182.6357,"decl":39.4059}],"status":""}"#;
+        let p = parse_mast(text, "NGC 4151").unwrap();
+        assert_eq!((p.ra_deg, p.dec_deg), (182.6357, 39.4059));
+        assert!(parse_mast(r#"{"resolvedCoordinate":[],"status":""}"#, "x").is_none());
+        assert!(parse_mast("<html>", "x").is_none());
+    }
+
+    #[test]
+    fn dss_urls_ask_for_a_gif_the_size_of_the_field() {
+        let u = dss_url(&cfg(), 182.6357, 39.4059);
+        assert!(u.starts_with("https://archive.stsci.edu/cgi-bin/dss_search?v=poss2ukstu_red&r=182.635700&d=39.405900"), "{u}");
+        assert!(u.contains("&h=15.0&w=15.0&f=gif"), "{u}");
+    }
+
+    #[test]
+    fn hosts_are_read_from_urls() {
+        assert_eq!(
+            host_of("https://cds.unistra.fr/cgi-bin/x?y=1"),
+            "cds.unistra.fr"
+        );
+        assert_eq!(host_of("https://a.b?c"), "a.b");
     }
 }

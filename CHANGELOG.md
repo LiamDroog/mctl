@@ -28,6 +28,12 @@ change behaviour.
   explanations before values, box titles drop their asides, and plot labels (halo orbit, ecliptic north, event
   timeline, instrument share) avoid each other. JWST and Hubble OPS have narrow layouts. A test fails if a dense
   page clips text it did not truncate on purpose.
+- The survey pictures fall back to the MAST name resolver and the STScI copy of the DSS2 survey (greyscale GIF)
+  when the CDS services cannot be reached, and a host that fails to connect is not retried for ten minutes.
+  `[sources.sky]` gains `mast_name_url`, `dss_url` and `dss_survey`.
+- Rows of numbers line up in narrow panels (state vectors, L2 and deep-space state, sources), and the NEXT PASS
+  panel is two aligned columns.
+- On the kiosk, a status line too long for the screen scrolls like a news ticker instead of being cut off.
 - The survey pictures wait up to `[sources.sky] timeout_s` (default 90 s, was shorter) for the sky services, with a
   separate 15 s connect timeout and one retry on a timeout.
 

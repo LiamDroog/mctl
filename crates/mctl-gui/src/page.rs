@@ -180,6 +180,9 @@ pub(crate) mod clipped {
     }
 }
 
+/// Width of the units column of a narrow `Lines::pair` (`km/s`, `deg`, `km`).
+const UNIT_FIELD: usize = 4;
+
 pub(crate) struct Lines<'a> {
     pub(crate) grid: &'a mut Grid,
     pub(crate) rect: CellRect,
@@ -222,22 +225,56 @@ impl<'a> Lines<'a> {
         }
     }
 
+    /// A label at column 1 and its value at column 8, the value wrapped within the panel with its
+    /// continuation under it, so a block of these reads as two even columns.
+    pub(crate) fn field(&mut self, label: &str, value: &str, style: Style) {
+        let room = self.rect.cols.saturating_sub(9);
+        let dim = Style::new(Role::Dim);
+        for (i, part) in wrap_words(value, room, room).iter().enumerate() {
+            if i == 0 {
+                self.put(1, label, dim);
+            }
+            self.put(8, part, style);
+            self.row += 1;
+        }
+    }
+
     /// A label, a value and a unit. In a panel too narrow for all three the value gives up its padding and
     /// then the unit its explanation ("s one-way" becomes "s"), so the number is never what is cut.
     pub(crate) fn pair(&mut self, label: &str, value: &str, unit: &str, value_style: Style) {
         let dim = Style::new(Role::Dim);
         let width = self.rect.cols;
-        let (mut value, mut unit) = (value, unit);
-        let need = |v: &str, u: &str| 8 + v.chars().count() + 1 + u.chars().count() + 1;
-        if need(value, unit) > width {
-            value = value.trim_start();
-        }
-        if need(value, unit) > width {
-            unit = unit.split(' ').next().unwrap_or_default();
-        }
+        // The form depends on the value alone (every row of a panel formats its numbers to one width), never
+        // on the unit's length, so the rows of one panel always line up.
+        let vw = value.chars().count();
         self.put(1, label, dim);
-        self.put(8, value, value_style);
-        self.put(8 + value.chars().count() + 1, unit, dim);
+        if 8 + vw + 1 + UNIT_FIELD < width {
+            self.put(8, value, value_style);
+            let col = 8 + vw + 1;
+            let first = unit.split(' ').next().unwrap_or_default();
+            let room = width - col - 1;
+            self.put(
+                col,
+                if unit.chars().count() <= room {
+                    unit
+                } else {
+                    first
+                },
+                dim,
+            );
+        } else {
+            // Too narrow for the padded form: units in one column against the right edge and the numbers
+            // right-aligned against them, so rows still line up. The unit loses its explanation first.
+            let (value, unit) = (value.trim(), unit.split(' ').next().unwrap_or_default());
+            let unit_col = width
+                .saturating_sub(UNIT_FIELD.max(unit.chars().count()) + 1)
+                .max(9);
+            let value_col = (unit_col.saturating_sub(1))
+                .saturating_sub(value.chars().count())
+                .max(8);
+            self.put(value_col, value, value_style);
+            self.put(unit_col, unit, dim);
+        }
         self.row += 1;
     }
 
@@ -378,27 +415,28 @@ pub(crate) fn source_row(l: &mut Lines<'_>, s: &SourceView, caution_km: f64) {
             st,
         );
         l.row += 1;
-        let diff = format!("|DR| {:.2} KM  |DV| {:.1} MM/S", r.norm_km, r.dv_mm_s);
-        l.put(
-            3,
-            &if width >= 3 + diff.chars().count() {
-                diff
-            } else {
-                format!("|DR| {:.2}  |DV| {:.1}", r.norm_km, r.dv_mm_s)
-            },
-            st,
-        );
+        // The longest form that fits, down to the bare numbers.
+        let (dr, dv) = (format!("{:.2}", r.norm_km), format!("{:.1}", r.dv_mm_s));
+        let room = width.saturating_sub(3);
+        let forms = [
+            format!("|DR| {dr} KM  |DV| {dv} MM/S"),
+            format!("|DR| {dr}  |DV| {dv}"),
+            format!("|DR| {dr} |DV| {dv}"),
+            format!("|DR| {dr} |DV| {:.0}", r.dv_mm_s),
+        ];
+        let diff = forms.iter().find(|f| f.chars().count() <= room);
+        l.put(3, diff.unwrap_or(&forms[3]), st);
         l.row += 1;
     }
 }
 
-/// `long` at column 24 if it fits there, else against the right edge, else `short` against it, but never
-/// into what is already on the row up to `min_col`.
+/// `long` against the right edge if it fits there, else `short`, but never into what is already on the row
+/// up to `min_col`. Right-aligned, so the figures of a column of rows end together.
 pub(crate) fn trailing(l: &mut Lines<'_>, min_col: usize, long: &str, short: &str, style: Style) {
     let width = l.rect.cols;
     for text in [long, short] {
         let n = text.chars().count();
-        let col = 24.min(width.saturating_sub(n + 1));
+        let col = width.saturating_sub(n + 1);
         if col >= min_col && col + n < width {
             l.put(col, text, style);
             return;
@@ -1562,9 +1600,7 @@ mod tests {
         let t = g.text();
         assert!(layout.sky.is_some(), "the sky plot reports its rectangle");
         assert!(
-            t.contains("AOS IN 10m00s")
-                && t.contains("MAX EL 66.6")
-                && t.contains("DURATION 6m00s"),
+            t.contains("AOS IN 10m00s") && t.contains("MAX EL 66.6") && t.contains("LENGTH 6m00s"),
             "{t}"
         );
         assert!(

@@ -990,6 +990,7 @@ fn current_or_next_pass(
 }
 
 fn pass_state(l: &mut Lines<'_>, inp: &PageInput<'_>) {
+    let (bright, dim) = (Style::new(Role::Bright), Style::new(Role::Dim));
     match inp.world.observer.active_site() {
         None => l.no_data("NO OBSERVER SITE"),
         Some(s) => {
@@ -998,16 +999,16 @@ fn pass_state(l: &mut Lines<'_>, inp: &PageInput<'_>) {
                 "ADDED" => "ADDED THIS SESSION (NOT SAVED)",
                 _ => "CONFIGURED",
             };
-            l.line(
-                &format!("SITE {}  ({src})", s.name),
-                Style::new(Role::Bright),
+            l.field("SITE", &format!("{} ({src})", s.name), bright);
+            l.field(
+                "AT",
+                &format!("{:+.4} {:+.4}  {:.0} M", s.lat_deg, s.lon_deg, s.alt_m),
+                dim,
             );
-            l.line(
-                &format!(
-                    "{:+.4} {:+.4} {:.0} M  MASK {:.0} DEG",
-                    s.lat_deg, s.lon_deg, s.alt_m, inp.world.observer.mask_deg
-                ),
-                Style::new(Role::Dim),
+            l.field(
+                "MASK",
+                &format!("{:.0} DEG", inp.world.observer.mask_deg),
+                dim,
             );
         }
     }
@@ -1038,13 +1039,23 @@ fn pass_sky(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
         };
     };
     let now = inp.world.t;
+    let (bright, fg, dim) = (
+        Style::new(Role::Bright),
+        Style::new(Role::Fg),
+        Style::new(Role::Dim),
+    );
     if let Some(n) = set.look_now {
         let above = n.el_deg >= inp.world.observer.mask_deg;
-        l.line(
+        let st = if above { bright } else { fg };
+        l.field(
+            "NOW",
+            &format!("AZ {:5.1}  EL {:+5.1}", n.az_deg, n.el_deg),
+            st,
+        );
+        l.field(
+            "RANGE",
             &format!(
-                "NOW  AZ {:5.1}  EL {:+5.1}  RANGE {:.0} KM  {}",
-                n.az_deg,
-                n.el_deg,
+                "{:.0} KM  {}",
                 n.range_km,
                 if above {
                     "ABOVE MASK"
@@ -1054,11 +1065,7 @@ fn pass_sky(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
                     "BELOW HORIZON"
                 }
             ),
-            if above {
-                Style::new(Role::Bright)
-            } else {
-                Style::new(Role::Fg)
-            },
+            st,
         );
     }
     match current_or_next_pass(set, now) {
@@ -1068,47 +1075,37 @@ fn pass_sky(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
         ),
         Some(p) => {
             let in_progress = p.aos.0 <= now.0;
-            let fg = Style::new(Role::Fg);
-            l.line(
+            l.row += 1;
+            l.field(
+                "NEXT",
                 &if in_progress {
                     format!("IN PROGRESS  LOS IN {}", fmt_dur(p.los.minus(now)))
                 } else {
                     format!("AOS IN {}", fmt_dur(p.aos.minus(now)))
                 },
-                Style::new(Role::Bright),
+                bright,
             );
-            l.line(
-                &format!("AOS {}  AZ {:5.1}", p.aos.gmt_doy(), p.aos_az_deg),
-                fg,
-            );
-            l.line(
-                &format!(
-                    "TCA {}  AZ {:5.1}  MAX EL {:.1}",
-                    p.tca.gmt_doy(),
-                    p.tca_az_deg,
-                    p.max_el_deg
-                ),
-                fg,
-            );
-            l.line(
-                &format!(
-                    "LOS {}  AZ {:5.1}  DURATION {}",
-                    p.los.gmt_doy(),
-                    p.los_az_deg,
-                    fmt_dur(p.duration_s())
-                ),
-                fg,
-            );
-            l.line(
+            for (label, at, az) in [
+                ("AOS", p.aos, p.aos_az_deg),
+                ("TCA", p.tca, p.tca_az_deg),
+                ("LOS", p.los, p.los_az_deg),
+            ] {
+                l.field(label, &format!("{}  AZ {az:5.1}", at.gmt_doy()), fg);
+            }
+            l.field("MAX EL", &format!("{:.1} DEG", p.max_el_deg), fg);
+            l.field("LENGTH", &fmt_dur(p.duration_s()), fg);
+            l.field(
+                "SKY",
                 match p.visible {
                     Some(true) => "VISIBLE PASS: DARK SKY AND VEHICLE SUNLIT AT CULMINATION",
-                    Some(false) => "NOT VISIBLE (DAYLIGHT OR VEHICLE IN SHADOW AT CULMINATION)",
+                    Some(false) => "NOT VISIBLE: DAYLIGHT OR VEHICLE IN SHADOW AT CULMINATION",
                     None => "VISIBILITY UNKNOWN (NO SUN POSITION)",
                 },
-                Style::new(Role::Dim),
+                dim,
             );
             if p.started_before_window || p.ends_after_window {
-                l.line(
+                l.field(
+                    "NOTE",
                     "PASS CLIPPED BY THE PREDICTION WINDOW",
                     Style::limit(Limit::Caution),
                 );
@@ -1124,24 +1121,19 @@ fn pass_sky(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
         } else {
             "TWILIGHT"
         };
-        let moon = inp
-            .world
-            .observer
-            .active_site()
-            .and_then(|s| s.moon_el_deg)
-            .map_or(String::new(), |m| format!("   MOON EL {m:+.1}"));
-        l.line(
-            &format!("SUN EL {el:+.1}  {sky}{moon}"),
-            Style::new(Role::Dim),
-        );
+        l.field("SUN", &format!("EL {el:+.1}  {sky}"), dim);
+        if let Some(m) = inp.world.observer.active_site().and_then(|s| s.moon_el_deg) {
+            l.field("MOON", &format!("EL {m:+.1}"), dim);
+        }
     }
-    l.line(
+    l.field(
+        "SOURCE",
         &format!(
-            "SOURCE {}  WINDOW {} DAYS",
+            "{}  WINDOW {} DAYS",
             set.source.to_uppercase(),
             ((set.to.minus(set.from)) / 86_400.0).round()
         ),
-        Style::new(Role::Dim),
+        dim,
     );
     Layout {
         sky: Some(plot.inner()),

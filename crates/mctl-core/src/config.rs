@@ -111,6 +111,12 @@ pub struct SkySources {
     /// Field of view of the cutout, degrees, and its size in pixels.
     pub fov_deg: f64,
     pub size_px: u32,
+    /// MAST name resolver (SIMBAD/NED), asked when Sesame cannot be reached or does not know the name.
+    pub mast_name_url: String,
+    /// STScI Digitized Sky Survey cutout service, used when hips2fits cannot be reached, and the plate
+    /// (survey) it is asked for.
+    pub dss_url: String,
+    pub dss_survey: String,
     /// Hubble Phase II program file; `{id}` is the program number.
     pub hst_program_url: String,
     /// Cutouts and program files are reused for this long, seconds.
