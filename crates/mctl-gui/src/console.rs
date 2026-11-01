@@ -100,6 +100,9 @@ pub struct Console {
     keys: KeyMap,
     /// Pixel rectangles of the footer's page legend from the last frame, for mouse clicks.
     legend_px: Vec<([u32; 4], Page)>,
+    /// The pages with nothing to show for the selected vehicle (greyed in the legend), with the reason; they
+    /// cannot be opened. Refreshed every frame.
+    blocked_pages: Vec<(Page, String)>,
     trend_asked: Option<(String, f64, f64)>,
     cmd: Option<CommandLine>,
     history: Vec<String>,
@@ -244,6 +247,7 @@ impl Console {
             trend_asked: None,
             keys: KeyMap::embedded_default(),
             legend_px: Vec::new(),
+            blocked_pages: Vec::new(),
             cmd: None,
             history: Vec::new(),
             status: None,
@@ -276,7 +280,7 @@ impl Console {
             .map(|(_, p)| *p);
         match hit {
             Some(p) => {
-                self.set_page(p, 0);
+                self.open_page(p, 0);
                 true
             }
             None => false,
@@ -343,9 +347,31 @@ impl Console {
         self.sub = sub.min(page.subpages().len() - 1);
     }
 
-    fn cycle_sub(&mut self, delta: isize) {
+    /// Go to `page` unless it has nothing to show for the selected vehicle, in which case say why.
+    fn open_page(&mut self, page: Page, sub: usize) {
+        if page != self.page
+            && let Some((_, why)) = self.blocked_pages.iter().find(|(p, _)| *p == page)
+        {
+            let msg = format!("F{} {}: {why}", page.fkey(), page.title());
+            self.say(msg, true);
+            return;
+        }
+        self.set_page(page, sub);
+    }
+
+    /// Tab: the next (or previous) sub-page that has something to show for the selected vehicle.
+    fn cycle_sub(&mut self, delta: isize, world: &World) {
         let n = self.page.subpages().len() as isize;
-        self.sub = (self.sub as isize + delta).rem_euclid(n) as usize;
+        let vehicle = world.vehicles.iter().find(|v| v.id == self.vehicle_id);
+        for step in 1..=n {
+            let sub = (self.sub as isize + delta * step).rem_euclid(n) as usize;
+            if crate::pages::availability(self.page, sub, vehicle)
+                == crate::pages::Availability::Available
+            {
+                self.sub = sub;
+                return;
+            }
+        }
     }
 
     fn run_ui(&mut self, a: UiAction) -> Outcome {
@@ -358,7 +384,7 @@ impl Console {
                 }
             }
             UiAction::Vehicle(id) => self.vehicle_id = id,
-            UiAction::GoPage { page, sub } => self.set_page(page, sub.unwrap_or(0)),
+            UiAction::GoPage { page, sub } => self.open_page(page, sub.unwrap_or(0)),
             UiAction::Fx { which, on } => self.set_effect(which, on),
             UiAction::Altitude(i) => self.camera.exaggeration_idx = i,
             UiAction::TrendWindow(s) => {
@@ -507,11 +533,11 @@ impl Console {
             KeyInput::Escape => return Outcome::Quit,
             KeyInput::F(n) => {
                 if let Some(p) = Page::from_fkey(n) {
-                    self.set_page(p, 0);
+                    self.open_page(p, 0);
                 }
             }
-            KeyInput::Tab => self.cycle_sub(1),
-            KeyInput::BackTab => self.cycle_sub(-1),
+            KeyInput::Tab => self.cycle_sub(1, world),
+            KeyInput::BackTab => self.cycle_sub(-1, world),
             KeyInput::Left => self.camera.orbit_by(-ARROW_STEP_DEG, 0.0),
             KeyInput::Right => self.camera.orbit_by(ARROW_STEP_DEG, 0.0),
             KeyInput::Up => self.camera.orbit_by(0.0, ARROW_STEP_DEG),
@@ -764,6 +790,13 @@ impl Console {
         );
         let vehicle_idx = world.vehicles.iter().position(|v| v.id == self.vehicle_id);
         let vehicle = vehicle_idx.map(|i| &world.vehicles[i]);
+        self.blocked_pages = crate::pages::ALL_PAGES
+            .into_iter()
+            .filter_map(|p| match crate::pages::availability(p, 0, vehicle) {
+                crate::pages::Availability::NoSource(why) => Some((p, why)),
+                crate::pages::Availability::Available => None,
+            })
+            .collect();
         self.maybe_request_trend(world, stats.elapsed_s);
         let mut grid = Grid::new(cols, rows);
         let cmd_view = self.cmd.as_ref().map(|c| CommandView {
@@ -1389,6 +1422,45 @@ mod tests {
         assert!(rx.try_recv().is_err(), "a is free now");
         press(&mut c, &w, "K");
         assert_eq!(rx.try_recv(), Ok(Command::Ack));
+    }
+
+    #[test]
+    fn a_page_with_nothing_to_show_cannot_be_opened_by_key_click_or_command() {
+        let (mut c, _rx) = console();
+        let w = world();
+        let stats = FrameStats {
+            elapsed_s: 0.0,
+            frame_ms: 16.0,
+            gpu_ms: None,
+        };
+        let mut prepared = c.prepare(headless_input([1920, 1080], 0.0), [1920, 1080], &w, &stats);
+        prepared.textures_delta.clear();
+        // With no vehicle data, GNC (F3) is greyed in the legend.
+        c.handle_key(KeyInput::F(3), &w);
+        assert_eq!(c.page, Page::Master, "F3 does nothing");
+        let said = c.status.as_ref().map(|(m, _)| (m.text.clone(), m.error));
+        assert!(
+            matches!(&said, Some((t, true)) if t.starts_with("F3 GNC:")),
+            "{said:?}"
+        );
+        c.handle_key(KeyInput::F(2), &w);
+        assert_eq!(c.page, Page::Traj, "an available page still opens");
+        // Clicking the greyed legend entry is refused the same way.
+        let cell = c.theme().font.cell_w_px;
+        let row_y = (45.0 - 0.5) * c.theme().font.cell_h_px;
+        let [col, ..] = c.legend_px.iter().find(|(_, p)| *p == Page::Gnc).unwrap().0;
+        let x = col as f32 + cell / 2.0;
+        assert!(c.click(x, row_y));
+        assert_eq!(c.page, Page::Traj);
+        // So is the command line, and Tab does not land on a sub-page that is greyed too.
+        c.run_ui(UiAction::GoPage {
+            page: Page::Gnc,
+            sub: None,
+        });
+        assert_eq!(c.page, Page::Traj);
+        c.set_page(Page::Eps, 0);
+        c.handle_key(KeyInput::Tab, &w);
+        assert_eq!((c.page, c.sub), (Page::Eps, 0));
     }
 
     #[test]
