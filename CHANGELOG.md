@@ -15,6 +15,9 @@ change behaviour.
   and New Horizons, which are on escape trajectories and come from JPL Horizons. They get a solar-system plot
   (path among the planets' orbits, from ecliptic north), distance from the Sun, light time to Earth, heliocentric
   speed and ecliptic direction, and line art of each spacecraft. A new `regime = "deep"` selects these pages.
+- Three themes: Cosmonaut (red and amber, Soviet control room), Teletext (seven saturated colours on black) and
+  Nostromo (cold teal with an orange alarm). They follow Retrowave in the `T` cycle. The Pi display's theme set is
+  unchanged.
 
 ### Changed
 
