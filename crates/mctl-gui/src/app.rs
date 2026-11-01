@@ -9,6 +9,7 @@ use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
+use winit::platform::x11::EventLoopBuilderExtX11;
 use winit::window::{Fullscreen, Window, WindowId};
 
 use crate::console::{Console, FrameStats, KeyInput, Outcome};
@@ -128,14 +129,7 @@ impl App {
             .with_title("mctl")
             .with_inner_size(PhysicalSize::new(self.opts.size[0], self.opts.size[1]));
         if self.opts.fullscreen {
-            if running_under_wsl() {
-                // WSLg's compositor drops the connection of a fullscreen client ("Broken pipe" in the Wayland
-                // event loop), so fill the screen with a maximized window instead.
-                tracing::warn!("running under WSL: using a maximized window instead of fullscreen");
-                attrs = attrs.with_maximized(true);
-            } else {
-                attrs = attrs.with_fullscreen(Some(Fullscreen::Borderless(None)));
-            }
+            attrs = attrs.with_fullscreen(Some(Fullscreen::Borderless(None)));
         }
         let window = Arc::new(event_loop.create_window(attrs).context("creating window")?);
         // Nobody is pointing at the Pi display.
@@ -457,7 +451,20 @@ impl ApplicationHandler for App {
 }
 
 pub fn run(themes: Vec<Theme>, opts: Options) -> Result<()> {
-    let event_loop = EventLoop::new().context("creating event loop (no display server?)")?;
+    let mut builder = EventLoop::builder();
+    if prefer_x11(
+        running_under_wsl(),
+        std::env::var_os("DISPLAY").is_some_and(|d| !d.is_empty()),
+        std::env::var_os("WINIT_UNIX_BACKEND").is_some(),
+    ) {
+        tracing::info!(
+            "running under WSL: using X11, since WSLg's Wayland drops the connection on resize"
+        );
+        builder.with_x11();
+    }
+    let event_loop = builder
+        .build()
+        .context("creating event loop (no display server?)")?;
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = App {
         opts,
@@ -494,8 +501,26 @@ fn running_under_wsl() -> bool {
     wsl_from(distro.as_deref(), &osrelease)
 }
 
+/// Whether to open the window through X11 even though a Wayland compositor is available. Under WSLg the
+/// Wayland connection is dropped ("Broken pipe") when the window is resized, while its X11 server (XWayland)
+/// is fine. An explicit `WINIT_UNIX_BACKEND` is left alone, and without an X server Wayland is all there is.
+fn prefer_x11(wsl: bool, has_x_display: bool, backend_chosen: bool) -> bool {
+    wsl && has_x_display && !backend_chosen
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn x11_is_preferred_only_under_wsl_with_an_x_server_and_no_explicit_choice() {
+        assert!(super::prefer_x11(true, true, false));
+        assert!(!super::prefer_x11(false, true, false), "not WSL");
+        assert!(!super::prefer_x11(true, false, false), "no X server to use");
+        assert!(
+            !super::prefer_x11(true, true, true),
+            "the user chose a backend"
+        );
+    }
+
     #[test]
     fn wsl_is_recognised_by_its_distro_variable_or_kernel() {
         assert!(super::wsl_from(Some("Ubuntu-24.04"), "6.6.87.2-generic"));

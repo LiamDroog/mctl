@@ -10,8 +10,9 @@ change behaviour.
 
 - The window no longer needs `--allow-software` on a machine with only a software Vulkan driver (WSL, a VM): it
   runs, with a warning. `shot` and `bench` still refuse, since their numbers would mislead.
-- Under WSL, `--fullscreen` opens a maximized window, because WSLg's compositor dropped a fullscreen client
-  ("Broken pipe" in the Wayland event loop). Not yet confirmed on a WSL machine.
+- Under WSL the window opens through X11 (WSLg's XWayland) when an X display exists, because WSLg's Wayland
+  connection was dropped ("Broken pipe") as soon as the window was resized. Setting `WINIT_UNIX_BACKEND`
+  overrides this.
 - The window title is `mctl`, not `mctl gfx spike`.
 
 ## [0.1.0] - 2026-10-31
