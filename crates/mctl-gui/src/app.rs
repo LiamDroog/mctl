@@ -9,6 +9,7 @@ use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
+use winit::platform::x11::EventLoopBuilderExtX11;
 use winit::window::{Fullscreen, Window, WindowId};
 
 use crate::console::{Console, FrameStats, KeyInput, Outcome};
@@ -37,8 +38,6 @@ pub struct Options {
     pub fullscreen: bool,
     pub present: Present,
     pub low_power: bool,
-    /// Run on a software (CPU) Vulkan adapter instead of refusing to. The Pi display does this by default.
-    pub allow_software: bool,
     /// Cap the frame rate, leaving the rest of the CPU to the engine and sources (the Pi display does).
     pub max_fps: Option<f32>,
     pub exit_after_frames: Option<u64>,
@@ -127,7 +126,7 @@ fn pick_present(caps: &wgpu::SurfaceCapabilities, want: Present) -> Result<wgpu:
 impl App {
     fn init(&mut self, event_loop: &ActiveEventLoop) -> Result<()> {
         let mut attrs = Window::default_attributes()
-            .with_title("mctl gfx spike")
+            .with_title("mctl")
             .with_inner_size(PhysicalSize::new(self.opts.size[0], self.opts.size[1]));
         if self.opts.fullscreen {
             attrs = attrs.with_fullscreen(Some(Fullscreen::Borderless(None)));
@@ -143,7 +142,9 @@ impl App {
             &instance,
             Some(&surface),
             self.opts.low_power,
-            self.opts.allow_software,
+            // A window on a machine with no GPU (WSL, a VM) is better slow than refused: the adapter is
+            // named in a warning. Screenshots and benchmarks stay strict, since their numbers would mislead.
+            true,
         )?);
 
         let caps = surface.get_capabilities(&gpu.adapter);
@@ -450,7 +451,20 @@ impl ApplicationHandler for App {
 }
 
 pub fn run(themes: Vec<Theme>, opts: Options) -> Result<()> {
-    let event_loop = EventLoop::new().context("creating event loop (no display server?)")?;
+    let mut builder = EventLoop::builder();
+    if prefer_x11(
+        running_under_wsl(),
+        std::env::var_os("DISPLAY").is_some_and(|d| !d.is_empty()),
+        std::env::var_os("WINIT_UNIX_BACKEND").is_some(),
+    ) {
+        tracing::info!(
+            "running under WSL: using X11, since WSLg's Wayland drops the connection on resize"
+        );
+        builder.with_x11();
+    }
+    let event_loop = builder
+        .build()
+        .context("creating event loop (no display server?)")?;
     event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = App {
         opts,
@@ -475,8 +489,49 @@ pub fn run(themes: Vec<Theme>, opts: Options) -> Result<()> {
     Ok(())
 }
 
+/// Whether this process runs under Windows Subsystem for Linux, from its two usual tells: the
+/// `WSL_DISTRO_NAME` variable and a kernel release naming Microsoft.
+fn wsl_from(distro: Option<&str>, osrelease: &str) -> bool {
+    distro.is_some_and(|d| !d.is_empty()) || osrelease.to_ascii_lowercase().contains("microsoft")
+}
+
+fn running_under_wsl() -> bool {
+    let distro = std::env::var("WSL_DISTRO_NAME").ok();
+    let osrelease = std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap_or_default();
+    wsl_from(distro.as_deref(), &osrelease)
+}
+
+/// Whether to open the window through X11 even though a Wayland compositor is available. Under WSLg the
+/// Wayland connection is dropped ("Broken pipe") when the window is resized, while its X11 server (XWayland)
+/// is fine. An explicit `WINIT_UNIX_BACKEND` is left alone, and without an X server Wayland is all there is.
+fn prefer_x11(wsl: bool, has_x_display: bool, backend_chosen: bool) -> bool {
+    wsl && has_x_display && !backend_chosen
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn x11_is_preferred_only_under_wsl_with_an_x_server_and_no_explicit_choice() {
+        assert!(super::prefer_x11(true, true, false));
+        assert!(!super::prefer_x11(false, true, false), "not WSL");
+        assert!(!super::prefer_x11(true, false, false), "no X server to use");
+        assert!(
+            !super::prefer_x11(true, true, true),
+            "the user chose a backend"
+        );
+    }
+
+    #[test]
+    fn wsl_is_recognised_by_its_distro_variable_or_kernel() {
+        assert!(super::wsl_from(Some("Ubuntu-24.04"), "6.6.87.2-generic"));
+        assert!(super::wsl_from(
+            None,
+            "5.15.167.4-microsoft-standard-WSL2\n"
+        ));
+        assert!(!super::wsl_from(None, "7.0.0-38-generic\n"));
+        assert!(!super::wsl_from(Some(""), ""));
+    }
+
     use super::inside;
 
     #[test]
