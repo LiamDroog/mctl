@@ -24,6 +24,12 @@ change behaviour.
 - The desktop console shrinks its font, down to half size, to keep the full 160 x 45 panel layout on windows
   smaller than 1920 x 1080 (a 1080p monitor's window is a title bar short of it), instead of clipping panels.
   The Pi display is unchanged.
+- The kiosk's dense scenes no longer cut text off at 80 columns: long lines wrap, rows give up padding and unit
+  explanations before values, box titles drop their asides, and plot labels (halo orbit, ecliptic north, event
+  timeline, instrument share) avoid each other. JWST and Hubble OPS have narrow layouts. A test fails if a dense
+  page clips text it did not truncate on purpose.
+- The survey pictures wait up to `[sources.sky] timeout_s` (default 90 s, was shorter) for the sky services, with a
+  separate 15 s connect timeout and one retry on a timeout.
 
 ## [0.1.1] - 2026-11-01
 

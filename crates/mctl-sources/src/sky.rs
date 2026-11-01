@@ -12,6 +12,8 @@ use mctl_core::schedule::{FieldRequest, FieldState};
 
 use crate::tasks::Event;
 
+/// A service that does not even accept the connection in this long is down, however patient the request is.
+const CONNECT_TIMEOUT_S: f64 = 15.0;
 /// Largest response read for a picture or a program file, bytes.
 const MAX_BODY: u64 = 8 * 1024 * 1024;
 
@@ -182,12 +184,20 @@ impl Http {
         if let Some(b) = self.cached(key) {
             return Ok(b);
         }
-        let mut resp = self
-            .agent
-            .get(url)
-            .header("User-Agent", &self.user_agent)
-            .call()
-            .map_err(|e| format!("{url}: {e}"))?;
+        let call = || {
+            self.agent
+                .get(url)
+                .header("User-Agent", &self.user_agent)
+                .call()
+        };
+        // A service that is merely slow is given a second go; one that refuses is not asked twice.
+        let mut resp = match call() {
+            Err(ureq::Error::Timeout(why)) => {
+                tracing::warn!(url, %why, "request timed out, trying once more");
+                call().map_err(|e| format!("{url}: {e}"))?
+            }
+            other => other.map_err(|e| format!("{url}: {e}"))?,
+        };
         if resp.status().as_u16() != 200 {
             return Err(format!("{url}: HTTP {}", resp.status().as_u16()));
         }
@@ -279,7 +289,6 @@ fn resolve(
 pub fn run(
     cfg: SkySources,
     user_agent: String,
-    timeout_s: f64,
     cache_dir: &Path,
     requests: &Receiver<(String, FieldRequest)>,
     tx: &SyncSender<Event>,
@@ -287,7 +296,8 @@ pub fn run(
 ) {
     let http = Http {
         agent: ureq::Agent::config_builder()
-            .timeout_global(Some(Duration::from_secs_f64(timeout_s)))
+            .timeout_global(Some(Duration::from_secs_f64(cfg.timeout_s)))
+            .timeout_connect(Some(Duration::from_secs_f64(CONNECT_TIMEOUT_S)))
             .http_status_as_error(false)
             .build()
             .into(),

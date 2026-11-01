@@ -1013,13 +1013,21 @@ impl Console {
                     } else {
                         name.to_owned()
                     };
-                    painter.text(
-                        at,
-                        egui::Align2::LEFT_BOTTOM,
-                        text,
-                        font.clone(),
-                        theme.palette.bright.to_egui(),
+                    // Inside the picture, on the other side of the marker if the right is too close to the edge.
+                    let galley =
+                        painter.layout_no_wrap(text, font.clone(), theme.palette.bright.to_egui());
+                    let bounds = egui::Rect::from_min_size(
+                        Pos2::new(globe_px[0] as f32, globe_px[1] as f32),
+                        egui::vec2(globe_px[2] as f32, globe_px[3] as f32),
                     );
+                    let mut rect = egui::Align2::LEFT_BOTTOM.anchor_size(at, galley.size());
+                    if rect.right() > bounds.right() {
+                        rect = rect.translate(egui::vec2(-(galley.size().x + 28.0), 0.0));
+                    }
+                    let dx = (bounds.left() - rect.left()).max(0.0).min(bounds.width());
+                    let dy = (bounds.top() - rect.top()).max(0.0);
+                    rect = rect.translate(egui::vec2(dx, dy));
+                    painter.galley(rect.min, galley, theme.palette.bright.to_egui());
                 }
             }
             grid.paint(&painter, &theme, Pos2::ZERO, stats.elapsed_s);

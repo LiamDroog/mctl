@@ -224,6 +224,36 @@ pub struct Grid {
     widgets: Vec<Widget>,
 }
 
+/// A box title cut to `max` characters. Titles are a name and then asides after a double space ("GROUND TRACK
+/// PAST SOLID / PREDICTED DASHED"); in a narrow box the asides go first, and only a name that is itself too
+/// long is cut, ending in `~`.
+pub(crate) fn fit_title(title: &str, max: usize) -> String {
+    let mut shown = String::new();
+    for (i, part) in title.split("  ").filter(|p| !p.is_empty()).enumerate() {
+        let next = if i == 0 {
+            part.to_owned()
+        } else {
+            format!("{shown}  {part}")
+        };
+        if next.chars().count() > max {
+            break;
+        }
+        shown = next;
+    }
+    if shown.is_empty() {
+        let n = title.chars().count();
+        if n <= max {
+            return title.to_owned();
+        }
+        return title
+            .chars()
+            .take(max.saturating_sub(1))
+            .chain(['~'])
+            .collect();
+    }
+    shown
+}
+
 impl Grid {
     pub fn new(cols: usize, rows: usize) -> Self {
         let blank = Cell {
@@ -327,7 +357,7 @@ impl Grid {
         }
         if !title.is_empty() && rect.cols > 4 {
             let max = rect.cols - 4;
-            let shown: String = title.chars().take(max).collect();
+            let shown = fit_title(title, max);
             self.put(rect.col + 2, rect.row, &format!(" {shown} "), title_style);
         }
     }

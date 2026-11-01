@@ -115,6 +115,14 @@ pub struct SkySources {
     pub hst_program_url: String,
     /// Cutouts and program files are reused for this long, seconds.
     pub cache_s: f64,
+    /// How long one request to these services may take, seconds. A survey cutout is rendered on demand
+    /// and can take far longer than a data download, so this is longer than `[fetch] timeout_s`.
+    #[serde(default = "default_sky_timeout_s")]
+    pub timeout_s: f64,
+}
+
+fn default_sky_timeout_s() -> f64 {
+    90.0
 }
 
 /// JPL Horizons vector tables (the source for the vehicles other than the ISS).

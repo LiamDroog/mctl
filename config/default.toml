@@ -61,6 +61,9 @@ fov_deg = 0.25
 size_px = 512
 hst_program_url = "https://www.stsci.edu/hst/phase2-public/{id}.pro"
 cache_s = 604800
+# One request to Sesame or hips2fits may take this long. Cutouts are rendered on demand and are slower than
+# the data downloads, so this is longer than [fetch] timeout_s; a timed-out request is tried once more.
+timeout_s = 90
 
 [limits]
 # Inter-source residual (|dr|) that raises a caution on the sources panel. Assumption, not a published limit.

@@ -84,7 +84,7 @@ pub(crate) fn state_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) 
     }
     if let Some(s) = sol {
         l.line(
-            &format!("SOURCE {}  JPL HORIZONS, ICRF", s.source.label()),
+            &format!("SOURCE {}  ICRF", s.source.label()),
             Style::new(Role::Dim),
         );
     }

@@ -480,7 +480,13 @@ pub(crate) fn sources_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>
             }
             let eop = match &inp.world.eop {
                 EopView::Loaded { covers_to, .. } => {
-                    (format!("EOP LOADED THRU {}", &covers_to.iso()[..10]), dim)
+                    let full = format!("EOP LOADED THRU {}", &covers_to.iso()[..10]);
+                    let text = if full.chars().count() < l.rect.cols {
+                        full
+                    } else {
+                        format!("EOP THRU {}", &covers_to.iso()[..10])
+                    };
+                    (text, dim)
                 }
                 EopView::Assumed { .. } => (
                     format!("EOP {}", crate::flags::EST),
@@ -509,9 +515,12 @@ fn eclipse_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) -> CellRe
                 )
             };
             l.put(1, &state.0, state.1);
-            l.put(
-                20,
-                &format!("BETA {:+.1} deg", s.beta_deg),
+            let beta = format!("BETA {:+.1} deg", s.beta_deg);
+            crate::page::trailing(
+                &mut l,
+                2 + state.0.chars().count(),
+                &beta,
+                &format!("B {:+.1}", s.beta_deg),
                 Style::new(Role::Fg),
             );
         }
@@ -528,10 +537,15 @@ fn timeline_panel(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>) {
             let rows = l.rect.rows;
             for e in upcoming_events(tr, inp.world.t).iter().take(rows) {
                 let dt = e.t.minus(inp.world.t);
-                l.line(
-                    &format!("T-{:<9} {:<16} GMT {}", fmt_dur(dt), e.label, e.t.gmt_doy()),
-                    Style::new(Role::Fg),
-                );
+                // The time of day too when the panel has room for it.
+                let full = format!("T-{:<9} {:<16} GMT {}", fmt_dur(dt), e.label, e.t.gmt_doy());
+                let text = if full.chars().count() < l.rect.cols {
+                    full
+                } else {
+                    format!("T-{:<9} {}", fmt_dur(dt), e.label)
+                };
+                l.put(1, &text, Style::new(Role::Fg));
+                l.row += 1;
             }
         }
     }
