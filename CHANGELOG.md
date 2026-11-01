@@ -6,6 +6,12 @@ change behaviour.
 
 ## [Unreleased]
 
+### Changed
+
+- The desktop console shrinks its font, down to half size, to keep the full 160 x 45 panel layout on windows
+  smaller than 1920 x 1080 (a 1080p monitor's window is a title bar short of it), instead of clipping panels.
+  The Pi display is unchanged.
+
 ## [0.1.1] - 2026-11-01
 
 ### Changed

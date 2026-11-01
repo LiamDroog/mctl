@@ -709,6 +709,13 @@ impl Console {
         {
             theme.font = crate::theme::dense_font();
         }
+        // The desktop console shrinks its font to keep the full panel layout on a smaller window; the Pi
+        // display has a fixed tube and fixed fonts.
+        if self.kiosk.is_none() {
+            theme.font = theme
+                .font
+                .fitted(size_px, crate::page::MIN_COLS, crate::page::MIN_ROWS);
+        }
         let (cw, ch) = (theme.font.cell_w_px, theme.font.cell_h_px);
         let (cols, rows) = (
             (size_px[0] as f32 / cw) as usize,

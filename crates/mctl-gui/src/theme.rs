@@ -40,6 +40,31 @@ pub fn dense_font() -> FontSpec {
     }
 }
 
+/// Smallest fraction of its nominal size the desktop font shrinks to; below it the panels clip instead,
+/// since text under half size is no longer legible.
+pub const MIN_FONT_SCALE: f32 = 0.5;
+
+impl FontSpec {
+    /// This font shrunk, if need be, so a `min_cols` x `min_rows` grid fits in `size_px`, never below
+    /// `MIN_FONT_SCALE` and never larger than nominal: a bigger window just gets more cells. The advance and
+    /// line height scale with the size, so the cell-metrics check made at startup still holds.
+    pub fn fitted(&self, size_px: [u32; 2], min_cols: usize, min_rows: usize) -> FontSpec {
+        let fit_w = size_px[0] as f32 / (min_cols as f32 * self.cell_w_px);
+        let fit_h = size_px[1] as f32 / (min_rows as f32 * self.cell_h_px);
+        // A hair under the exact fit, so rounding cannot leave the grid a cell short.
+        let k = (fit_w.min(fit_h) * 0.999).clamp(MIN_FONT_SCALE, 1.0);
+        if k >= 1.0 {
+            return self.clone();
+        }
+        FontSpec {
+            family: self.family,
+            size_px: self.size_px * k,
+            cell_w_px: self.cell_w_px * k,
+            cell_h_px: self.cell_h_px * k,
+        }
+    }
+}
+
 impl Theme {
     /// This theme as the CRT shows it: the display font and no effects, since the tube supplies them.
     fn for_crt(mut self, font: &FontSpec) -> Self {
@@ -349,6 +374,34 @@ pub fn from_dir(dir: &Path) -> Result<Vec<Theme>, ThemeError> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_font_shrinks_to_fit_the_minimum_grid_and_never_grows_or_goes_illegible() {
+        let f = super::FontSpec {
+            family: super::FontFamily::Unscii,
+            size_px: 24.0,
+            cell_w_px: 12.0,
+            cell_h_px: 24.0,
+        };
+        let grid = |f: &super::FontSpec, w: u32, h: u32| {
+            (
+                (w as f32 / f.cell_w_px) as usize,
+                (h as f32 / f.cell_h_px) as usize,
+            )
+        };
+        assert_eq!(
+            f.fitted([3840, 2160], 160, 45).cell_w_px,
+            12.0,
+            "a big window keeps the nominal size"
+        );
+        for (w, h) in [(1920, 985), (1366, 700), (1280, 720)] {
+            let g = grid(&f.fitted([w, h], 160, 45), w, h);
+            assert!(g.0 >= 160 && g.1 >= 45, "{w}x{h} gives {g:?}");
+        }
+        let tiny = f.fitted([400, 300], 160, 45);
+        assert_eq!(tiny.cell_w_px, 6.0, "never below half size");
+        assert_eq!(tiny.size_px, 12.0);
+    }
+
     use super::*;
 
     #[test]
