@@ -52,6 +52,57 @@ pub fn dense_font() -> FontSpec {
     }
 }
 
+/// Smallest fraction of its nominal size the desktop font shrinks to; below it the panels clip instead,
+/// since text under half size is no longer legible.
+pub const MIN_FONT_SCALE: f32 = 0.5;
+
+impl FontSpec {
+    /// This font shrunk, if need be, so a `min_cols` x `min_rows` grid fits in `size_px`, never below
+    /// `MIN_FONT_SCALE` and never larger than nominal: a bigger window just gets more cells. The advance and
+    /// line height scale with the size, so the cell-metrics check made at startup still holds.
+    pub fn fitted(&self, size_px: [u32; 2], min_cols: usize, min_rows: usize) -> FontSpec {
+        let fit_w = size_px[0] as f32 / (min_cols as f32 * self.cell_w_px);
+        let fit_h = size_px[1] as f32 / (min_rows as f32 * self.cell_h_px);
+        // A hair under the exact fit, so rounding cannot leave the grid a cell short.
+        let k = (fit_w.min(fit_h) * 0.999).clamp(MIN_FONT_SCALE, 1.0);
+        if k >= 1.0 {
+            return self.clone();
+        }
+        FontSpec {
+            family: self.family,
+            size_px: self.size_px * k,
+            cell_w_px: self.cell_w_px * k,
+            cell_h_px: self.cell_h_px * k,
+        }
+    }
+}
+
+/// The size the Pi display is designed for: 80 x 30 cells of the dense font. A larger screen scales the fonts
+/// up to keep the same layout instead of showing it small in a corner.
+pub const KIOSK_DESIGN_PX: [u32; 2] = [640, 480];
+/// The kiosk's font scale is kept within these, whatever the screen.
+const KIOSK_SCALE_RANGE: (f32, f32) = (0.5, 8.0);
+
+impl FontSpec {
+    /// This font scaled so the kiosk's designed layout fills `size_px`: the same cells across and down as on
+    /// the Pi's 640 x 480, whatever the screen. Only the limiting dimension is matched, so a wider screen
+    /// gets extra columns rather than stretched text. Advance and line height scale with the size.
+    pub fn for_kiosk(&self, size_px: [u32; 2]) -> FontSpec {
+        let k = (size_px[0] as f32 / KIOSK_DESIGN_PX[0] as f32)
+            .min(size_px[1] as f32 / KIOSK_DESIGN_PX[1] as f32);
+        // The Pi's own screen keeps the font's native size, which is what makes the bitmap crisp; anything
+        // else goes a hair under the exact fit, so rounding cannot leave the grid a row short.
+        let k = if k == 1.0 { k } else { k * 0.999 };
+        let k = k.clamp(KIOSK_SCALE_RANGE.0, KIOSK_SCALE_RANGE.1);
+        FontSpec {
+            family: self.family,
+            size_px: self.size_px * k,
+            cell_w_px: self.cell_w_px * k,
+            cell_h_px: self.cell_h_px * k,
+        }
+    }
+}
+
 impl Theme {
     /// This theme as the CRT shows it: the display font and no effects, since the tube supplies them.
     fn for_crt(mut self, font: &FontSpec) -> Self {
@@ -361,6 +412,34 @@ pub fn from_dir(dir: &Path) -> Result<Vec<Theme>, ThemeError> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_font_shrinks_to_fit_the_minimum_grid_and_never_grows_or_goes_illegible() {
+        let f = super::FontSpec {
+            family: super::FontFamily::Unscii,
+            size_px: 24.0,
+            cell_w_px: 12.0,
+            cell_h_px: 24.0,
+        };
+        let grid = |f: &super::FontSpec, w: u32, h: u32| {
+            (
+                (w as f32 / f.cell_w_px) as usize,
+                (h as f32 / f.cell_h_px) as usize,
+            )
+        };
+        assert_eq!(
+            f.fitted([3840, 2160], 160, 45).cell_w_px,
+            12.0,
+            "a big window keeps the nominal size"
+        );
+        for (w, h) in [(1920, 985), (1366, 700), (1280, 720)] {
+            let g = grid(&f.fitted([w, h], 160, 45), w, h);
+            assert!(g.0 >= 160 && g.1 >= 45, "{w}x{h} gives {g:?}");
+        }
+        let tiny = f.fitted([400, 300], 160, 45);
+        assert_eq!(tiny.cell_w_px, 6.0, "never below half size");
+        assert_eq!(tiny.size_px, 12.0);
+    }
+
     use super::*;
 
     #[test]
@@ -414,5 +493,24 @@ mod tests {
             .replace("semantic_colour = true", "semantic_colour = false");
         let err = Theme::from_toml("t.toml", &text).unwrap_err().to_string();
         assert!(err.contains("no visible encoding"), "{err}");
+    }
+
+    #[test]
+    fn the_kiosk_font_scales_to_fill_the_screen_with_the_designed_grid() {
+        let dense = dense_font();
+        let rows = |f: &FontSpec, h: u32| (h as f32 / f.cell_h_px) as usize;
+        let cols = |f: &FontSpec, w: u32| (w as f32 / f.cell_w_px) as usize;
+        // The Pi's own screen: unchanged.
+        let pi = dense.for_kiosk([640, 480]);
+        assert_eq!((cols(&pi, 640), rows(&pi, 480)), (80, 30));
+        assert_eq!(pi.size_px, dense.size_px);
+        // A 1080p laptop: the same 30 rows, with the extra width as more columns.
+        let hd = dense.for_kiosk([1920, 1080]);
+        assert_eq!(rows(&hd, 1080), 30);
+        assert!(hd.cell_h_px > 2.0 * dense.cell_h_px);
+        assert!(cols(&hd, 1920) >= 80);
+        // The picture scenes' font keeps its own proportions.
+        let crt = crt_themes().unwrap().remove(0).font.for_kiosk([1920, 1080]);
+        assert_eq!(crt.cell_h_px / crt.cell_w_px, 2.0);
     }
 }

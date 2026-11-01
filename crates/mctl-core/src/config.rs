@@ -111,10 +111,24 @@ pub struct SkySources {
     /// Field of view of the cutout, degrees, and its size in pixels.
     pub fov_deg: f64,
     pub size_px: u32,
+    /// MAST name resolver (SIMBAD/NED), asked when Sesame cannot be reached or does not know the name.
+    pub mast_name_url: String,
+    /// STScI Digitized Sky Survey cutout service, used when hips2fits cannot be reached, and the plate
+    /// (survey) it is asked for.
+    pub dss_url: String,
+    pub dss_survey: String,
     /// Hubble Phase II program file; `{id}` is the program number.
     pub hst_program_url: String,
     /// Cutouts and program files are reused for this long, seconds.
     pub cache_s: f64,
+    /// How long one request to these services may take, seconds. A survey cutout is rendered on demand
+    /// and can take far longer than a data download, so this is longer than `[fetch] timeout_s`.
+    #[serde(default = "default_sky_timeout_s")]
+    pub timeout_s: f64,
+}
+
+fn default_sky_timeout_s() -> f64 {
+    90.0
 }
 
 /// JPL Horizons vector tables (the source for the vehicles other than the ISS).
@@ -270,8 +284,9 @@ pub struct VehicleDef {
     /// NORAD catalogue number; 0 for a vehicle with none (it then cannot use the `gp` source).
     #[serde(default)]
     pub norad: u32,
-    /// Where the vehicle is: `earth` orbit, or `l2`, the Sun-Earth L2 point (an Earth-centred
-    /// Kepler orbit means nothing there, so those vehicles get a different display).
+    /// Where the vehicle is: `earth` orbit, `l2`, the Sun-Earth L2 point, or `deep`, on an escape
+    /// trajectory far from Earth (an Earth-centred Kepler orbit means nothing in either, so those
+    /// vehicles get a different display).
     #[serde(default)]
     pub regime: Regime,
     /// Resolve the NORAD object by name at fetch time instead of a fixed number (Dragon's number changes
@@ -307,6 +322,7 @@ pub enum Regime {
     #[default]
     Earth,
     L2,
+    Deep,
 }
 
 /// What to ask Horizons for one vehicle.

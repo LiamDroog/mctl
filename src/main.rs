@@ -35,7 +35,7 @@ fn default_size(pi: bool) -> &'static str {
     }
 }
 
-/// The themes to run with: the CRT theme alone for `--pi`, else the embedded or `--themes-dir` set.
+/// The themes to run with: the CRT theme alone for `--kiosk`, else the embedded or `--themes-dir` set.
 fn themes_for(pi: bool, dir: &Option<PathBuf>) -> anyhow::Result<Vec<mctl_gui::Theme>> {
     if pi {
         return Ok(mctl_gui::crt_themes()?);
@@ -44,7 +44,7 @@ fn themes_for(pi: bool, dir: &Option<PathBuf>) -> anyhow::Result<Vec<mctl_gui::T
 }
 
 #[derive(Clone, Copy, ValueEnum)]
-enum PiStyleArg {
+enum KioskStyleArg {
     /// Pictures and console pages in turn.
     Mixed,
     /// Pictures only: line art, maps, sky plot, survey images.
@@ -53,12 +53,32 @@ enum PiStyleArg {
     Dense,
 }
 
-impl From<PiStyleArg> for mctl_gui::KioskStyle {
-    fn from(s: PiStyleArg) -> Self {
+impl From<KioskStyleArg> for mctl_gui::KioskStyle {
+    fn from(s: KioskStyleArg) -> Self {
         match s {
-            PiStyleArg::Mixed => Self::Mixed,
-            PiStyleArg::Pretty => Self::Pretty,
-            PiStyleArg::Dense => Self::Dense,
+            KioskStyleArg::Mixed => Self::Mixed,
+            KioskStyleArg::Pretty => Self::Pretty,
+            KioskStyleArg::Dense => Self::Dense,
+        }
+    }
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum KioskOrderArg {
+    /// Each vehicle's scenes in turn, vehicles in the configured order.
+    Sequential,
+    /// Every scene once per cycle in a random order, a different order each cycle.
+    Random,
+    /// One vehicle at a time in a random order, all of its scenes before the next, reshuffled each cycle.
+    Vehicle,
+}
+
+impl From<KioskOrderArg> for mctl_gui::KioskOrder {
+    fn from(o: KioskOrderArg) -> Self {
+        match o {
+            KioskOrderArg::Sequential => Self::Sequential,
+            KioskOrderArg::Random => Self::Random,
+            KioskOrderArg::Vehicle => Self::Vehicle,
         }
     }
 }
@@ -95,16 +115,30 @@ struct Cli {
     /// Start in REPLAY of the recording: `start`, an ISO epoch, or an offset from now such as `-2h`.
     #[arg(long, global = true, value_name = "WHEN")]
     replay: Option<String>,
-    /// The Raspberry Pi / CRT display: low resolution, no effects, pictures cycling through the vehicles.
-    #[arg(long, global = true)]
-    pi: bool,
-    /// With `--pi`, which scenes to cycle through.
-    #[arg(long, global = true, value_enum, default_value = "mixed")]
-    pi_style: PiStyleArg,
-    /// Cap the frame rate (default 20 with `--pi`, none otherwise).
+    /// The unattended display (the Raspberry Pi / CRT mode): no effects, scenes cycling through the vehicles,
+    /// scaled to fill whatever screen it runs on. (Formerly `--pi`.)
+    #[arg(long, global = true, alias = "pi")]
+    kiosk: bool,
+    /// With `--kiosk`, which scenes to cycle through.
+    #[arg(
+        long,
+        global = true,
+        value_enum,
+        default_value = "mixed",
+        alias = "pi-style"
+    )]
+    kiosk_style: KioskStyleArg,
+    /// With `--kiosk`, the order of the scenes: as configured, every scene once per cycle in a random
+    /// order, or one vehicle at a time (random vehicle order) with all its scenes before the next.
+    #[arg(long, global = true, value_enum, default_value = "sequential")]
+    kiosk_order: KioskOrderArg,
+    /// With `--kiosk`, only these vehicles (comma-separated ids from the configuration).
+    #[arg(long, global = true, value_delimiter = ',', value_name = "IDS")]
+    kiosk_vehicles: Vec<String>,
+    /// Cap the frame rate (default 20 with `--kiosk`, none otherwise).
     #[arg(long, global = true)]
     max_fps: Option<f32>,
-    /// With `--pi`, seconds each vehicle stays up.
+    /// With `--kiosk`, seconds each vehicle stays up.
     #[arg(long, global = true, default_value_t = mctl_gui::KIOSK_DEFAULT_DWELL_S)]
     dwell: f64,
     #[command(subcommand)]
@@ -118,12 +152,12 @@ struct GuiArgs {
     /// Start theme (name, case-insensitive).
     #[arg(long)]
     theme: Option<String>,
-    /// Window size, `WxH` (default 1920x1080, or 640x480 with `--pi`).
+    /// Window size, `WxH` (default 1920x1080, or 640x480 with `--kiosk`).
     #[arg(long)]
     size: Option<String>,
     #[arg(long)]
     fullscreen: bool,
-    /// With `--pi`, stay in a window instead of taking the whole screen (also implied by `--size`).
+    /// With `--kiosk`, stay in a window instead of taking the whole screen (also implied by `--size`).
     #[arg(long)]
     windowed: bool,
     #[arg(long, value_enum, default_value = "fifo")]
@@ -141,7 +175,7 @@ enum Command {
     Check,
     /// Headless screenshots of the live page, one PNG per theme.
     Shot {
-        /// Image size, `WxH` (default 1920x1080, or 640x480 with `--pi`).
+        /// Image size, `WxH` (default 1920x1080, or 640x480 with `--kiosk`).
         #[arg(long)]
         size: Option<String>,
         #[arg(long)]
@@ -556,9 +590,9 @@ fn main() -> Result<()> {
                 }
             }
             std::thread::sleep(Duration::from_secs_f64(settle_s.max(0.0)));
-            let size = size.unwrap_or_else(|| default_size(cli.pi).to_owned());
+            let size = size.unwrap_or_else(|| default_size(cli.kiosk).to_owned());
             let opts = mctl_gui::ShotOptions {
-                kiosk: cli.pi.then(|| cli.pi_style.into()),
+                kiosk: cli.kiosk.then(|| cli.kiosk_style.into()),
                 size: mctl_gui::parse_size(&size)?,
                 theme,
                 out_dir,
@@ -566,10 +600,10 @@ fn main() -> Result<()> {
                 warmup_frames: warmup,
                 pages,
                 low_power: cli.low_power,
-                allow_software: cli.allow_software || cli.pi,
+                allow_software: cli.allow_software || cli.kiosk,
                 exec,
             };
-            mctl_gui::shots(&live, themes_for(cli.pi, &cli.themes_dir)?, &opts).map(|_| ())
+            mctl_gui::shots(&live, themes_for(cli.kiosk, &cli.themes_dir)?, &opts).map(|_| ())
         }
         Some(Command::Bench {
             sizes,
@@ -596,7 +630,7 @@ fn main() -> Result<()> {
                     theme,
                     out,
                     low_power: cli.low_power,
-                    allow_software: cli.allow_software || cli.pi,
+                    allow_software: cli.allow_software || cli.kiosk,
                     breakdown,
                 },
             )
@@ -610,18 +644,31 @@ fn main() -> Result<()> {
                     .send(mctl_core::command::Command::Replay(from))
                     .map_err(|_| anyhow::anyhow!("the engine stopped before replay could start"))?;
             }
+            for id in &cli.kiosk_vehicles {
+                anyhow::ensure!(
+                    cfg.vehicles.iter().any(|v| &v.id == id),
+                    "--kiosk-vehicles: no vehicle {id:?} in the configuration (have: {})",
+                    cfg.vehicles
+                        .iter()
+                        .map(|v| v.id.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
             let g = cli.gui;
             // The Pi display owns the whole screen, unless a size or --windowed says otherwise.
-            let fullscreen = g.fullscreen || (cli.pi && g.size.is_none() && !g.windowed);
-            let size = g.size.unwrap_or_else(|| default_size(cli.pi).to_owned());
+            let fullscreen = g.fullscreen || (cli.kiosk && g.size.is_none() && !g.windowed);
+            let size = g.size.unwrap_or_else(|| default_size(cli.kiosk).to_owned());
             mctl_gui::run(
-                themes_for(cli.pi, &cli.themes_dir)?,
+                themes_for(cli.kiosk, &cli.themes_dir)?,
                 mctl_gui::Options {
                     size: mctl_gui::parse_size(&size)?,
                     fullscreen,
-                    kiosk: cli.pi.then_some(mctl_gui::KioskConfig {
+                    kiosk: cli.kiosk.then(|| mctl_gui::KioskConfig {
                         dwell_s: cli.dwell,
-                        mix: cli.pi_style.into(),
+                        mix: cli.kiosk_style.into(),
+                        order: cli.kiosk_order.into(),
+                        vehicles: cli.kiosk_vehicles.clone(),
                     }),
                     present: match g.present {
                         PresentArg::Fifo => mctl_gui::Present::Fifo,
@@ -629,7 +676,7 @@ fn main() -> Result<()> {
                         PresentArg::Mailbox => mctl_gui::Present::Mailbox,
                     },
                     low_power: cli.low_power,
-                    max_fps: cli.max_fps.or(cli.pi.then_some(PI_MAX_FPS)),
+                    max_fps: cli.max_fps.or(cli.kiosk.then_some(PI_MAX_FPS)),
                     exit_after_frames: g.exit_after_frames,
                     start_theme: g.theme,
                     live,

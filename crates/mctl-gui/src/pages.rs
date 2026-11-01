@@ -163,8 +163,21 @@ pub fn availability(page: Page, sub: usize, vehicle: Option<&VehicleView>) -> Av
         _ => telemetry(vehicle),
     };
     let l2 = vehicle.is_some_and(|v| v.regime == Regime::L2);
+    let deep = vehicle.is_some_and(|v| v.regime == Regime::Deep);
     match page {
         Page::Master | Page::Sys => Available,
+        Page::Traj if sub == 3 && deep => NoSource(
+            "the maneuver planner models Earth-orbit vehicles; this one is leaving the solar system".into(),
+        ),
+        Page::Traj if sub == 1 && deep => NoSource(
+            "a ground track means nothing billions of km from Earth; see the solar-system plot".into(),
+        ),
+        Page::Pass if deep => NoSource(
+            "passes are not predicted for a vehicle this far out; it is not an Earth-sky target".into(),
+        ),
+        Page::View if deep => NoSource(
+            "the window view is for Earth orbit".into(),
+        ),
         Page::Traj if sub == 3 && l2 => NoSource(
             "the maneuver planner models Earth-orbit vehicles; an L2 halo orbit is not planned here".into(),
         ),

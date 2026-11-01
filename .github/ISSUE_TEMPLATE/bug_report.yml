@@ -23,7 +23,7 @@ body:
     id: system
     attributes:
       label: OS, GPU and compositor (Wayland or X11)
-      description: For a Raspberry Pi, say which model and whether you used --pi.
+      description: For a Raspberry Pi, say which model and whether you used --kiosk (or --pi).
     validations:
       required: true
   - type: textarea

@@ -73,14 +73,20 @@ pub struct TrackPoint {
     pub alt_km: f64,
     /// 1 = full sunlight, 0 = umbra.
     pub illumination: f32,
-    /// Position in the Sun-Earth rotating frame (x away from the Sun, z ecliptic north), km.
+    /// Position in the Sun-Earth rotating frame (x away from the Sun, z ecliptic north), km. For a
+    /// deep-space vehicle: the heliocentric position in the J2000 ecliptic frame instead.
     pub rot_km: [f64; 3],
 }
 
-/// L2 vehicle geometry at the snapshot time (see `mctl_astro::l2`).
+/// Geometry of a vehicle at L2 (see `mctl_astro::l2`) or in deep space (`mctl_astro::interplanetary`) at the
+/// snapshot time. For a deep-space vehicle `speed_km_s` is relative to the Sun, `off_axis_deg` is the
+/// ecliptic latitude and `rot_km` the heliocentric position in the J2000 ecliptic frame.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DeepView {
+    /// Distance from Earth's centre, km.
     pub dist_km: f64,
+    /// Distance from the Sun's centre, km.
+    pub sun_dist_km: f64,
     pub speed_km_s: f64,
     pub range_rate_km_s: f64,
     pub light_time_s: f64,

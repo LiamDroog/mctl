@@ -1,4 +1,4 @@
-//! The Raspberry Pi / CRT display (`mctl --pi`): big pictures, few numbers, cycling through the vehicles.
+//! The Raspberry Pi / CRT display (`mctl --kiosk`): big pictures, few numbers, cycling through the vehicles.
 //!
 //! This is a screen for looking at rather than operating, so it is built from the same widgets as the
 //! console but has no pages, no command line and no effects: the tube supplies those.
@@ -39,11 +39,126 @@ pub enum Mix {
     Dense,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct KioskConfig {
     /// Seconds a vehicle's scene stays up.
     pub dwell_s: f64,
     pub mix: Mix,
+    pub order: Order,
+    /// Vehicle ids to show; empty means every vehicle.
+    pub vehicles: Vec<String>,
+}
+
+/// The order the display takes its scenes in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Order {
+    /// As configured: each vehicle's scenes in turn, vehicles in the configuration's order.
+    #[default]
+    Sequential,
+    /// Every scene once per cycle in a random order, and a different random order each cycle.
+    Random,
+    /// One vehicle at a time in a random order, all of its scenes before the next vehicle; the vehicle
+    /// order is different each cycle.
+    Vehicle,
+}
+
+/// A small xorshift generator: the display needs variety, not statistical quality, and a seed that tests can
+/// fix, so no dependency is warranted.
+#[derive(Clone, Debug)]
+pub struct Rng(u64);
+
+impl Rng {
+    pub fn new(seed: u64) -> Self {
+        // Zero is the one state xorshift cannot leave.
+        Self(seed.max(1))
+    }
+
+    /// A generator seeded from the clock.
+    pub fn from_clock() -> Self {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos() as u64);
+        Self::new(nanos)
+    }
+
+    fn next(&mut self) -> u64 {
+        let mut x = self.0;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.0 = x;
+        x
+    }
+
+    /// Fisher-Yates.
+    fn shuffle<T>(&mut self, items: &mut [T]) {
+        for i in (1..items.len()).rev() {
+            items.swap(i, (self.next() % (i as u64 + 1)) as usize);
+        }
+    }
+}
+
+/// Which of `scenes` to show, in what order, for one pass of the display. Indices into `scenes`.
+///
+/// `only` limits the vehicles shown (empty: all of them); a gallery interlude follows the vehicle whose art
+/// it came after, so it is dropped with that vehicle. `previous` is the scene shown last, which the new pass
+/// does not start with, so a cycle never opens on what the last one closed on.
+pub fn plan(
+    scenes: &[Scene<'_>],
+    order: Order,
+    only: &[String],
+    previous: Option<usize>,
+    rng: &mut Rng,
+) -> Vec<usize> {
+    // Groups of consecutive scenes belonging to one vehicle. An interlude straight after a vehicle's art
+    // rides with that vehicle; the gallery left over at the end of the cycle is a group of its own.
+    let mut groups: Vec<(Option<&str>, Vec<usize>)> = Vec::new();
+    for (i, sc) in scenes.iter().enumerate() {
+        match sc {
+            Scene::Vehicle(v, _)
+                if groups
+                    .last()
+                    .is_none_or(|(id, _)| *id != Some(v.id.as_str())) =>
+            {
+                groups.push((Some(v.id.as_str()), vec![i]));
+            }
+            Scene::Extra(_) if i > 0 && matches!(scenes[i - 1], Scene::Vehicle(_, View::Art)) => {
+                groups.last_mut().expect("a vehicle precedes").1.push(i);
+            }
+            Scene::Extra(_) => match groups.last_mut() {
+                Some((None, g)) => g.push(i),
+                _ => groups.push((None, vec![i])),
+            },
+            Scene::Vehicle(_, _) => groups.last_mut().expect("same vehicle").1.push(i),
+        }
+    }
+    // The leftover gallery belongs to no vehicle, so a selection of vehicles leaves it out.
+    groups.retain(|(id, _)| match id {
+        Some(id) => only.is_empty() || only.iter().any(|o| o == id),
+        None => only.is_empty(),
+    });
+    let mut out: Vec<usize> = match order {
+        Order::Sequential => groups.into_iter().flat_map(|(_, g)| g).collect(),
+        Order::Random => {
+            let mut all: Vec<usize> = groups.into_iter().flat_map(|(_, g)| g).collect();
+            rng.shuffle(&mut all);
+            all
+        }
+        Order::Vehicle => {
+            rng.shuffle(&mut groups);
+            // A different vehicle from the last pass's first, when there is a choice.
+            if let (Some(prev), true) = (previous, groups.len() > 1)
+                && groups[0].1.contains(&prev)
+            {
+                groups.swap(0, 1);
+            }
+            groups.into_iter().flat_map(|(_, g)| g).collect()
+        }
+    };
+    if order == Order::Random && out.len() > 1 && Some(out[0]) == previous {
+        out.swap(0, 1);
+    }
+    out
 }
 
 /// A dense scene stays up this much longer than a picture, since there is more to read.
@@ -76,6 +191,7 @@ impl View {
         match (self, regime) {
             (Self::Art, _) => "",
             (Self::Orbit, Regime::L2) => "HALO ORBIT",
+            (Self::Orbit, Regime::Deep) => "SOLAR SYSTEM",
             (Self::Orbit, _) => "ORBIT MAP",
             (Self::Ground, _) => "GROUND TRACK",
             (Self::Sky, _) => "SKY PLOT",
@@ -83,6 +199,7 @@ impl View {
             (Self::Ops, _) => "OBSERVING  [PLAN]",
             (Self::DenseMaster, _) => "MASTER",
             (Self::DenseTraj, Regime::L2) => "HALO ORBIT",
+            (Self::DenseTraj, Regime::Deep) => "SOLAR SYSTEM",
             (Self::DenseTraj, _) => "ORBIT MAP",
             (Self::DensePass, _) => "PASS",
             (Self::DenseProx, _) => "PROX",
@@ -152,7 +269,7 @@ fn views_of(world: &World, v: &VehicleView, mix: Mix) -> Vec<View> {
     let placed = !docked
         && match v.regime {
             Regime::Earth => v.solution.is_some(),
-            Regime::L2 => v.deep.is_some(),
+            Regime::L2 | Regime::Deep => v.deep.is_some(),
         };
     let passes = !docked && v.passes.iter().any(|set| !set.passes.is_empty());
     // A plot of vehicles that are all docked has nothing to show.
@@ -226,6 +343,25 @@ fn fit(text: &str, width: usize) -> String {
     text.chars().take(width).collect()
 }
 
+/// How fast a line too long for the screen scrolls, in characters a second.
+const TICKER_CPS: f64 = 5.0;
+/// What separates the end of a scrolling line from its start coming round again.
+const TICKER_GAP: &str = "     ";
+
+/// `text` as it is if it fits in `width` characters; otherwise the `width` characters of it, looping, that
+/// are in view `t` seconds into its scroll, like a news ticker.
+fn ticker(text: &str, width: usize, t: f64) -> String {
+    let n = text.chars().count();
+    if n <= width || width == 0 {
+        return text.to_owned();
+    }
+    let looped: Vec<char> = text.chars().chain(TICKER_GAP.chars()).collect();
+    let start = (t.max(0.0) * TICKER_CPS) as usize % looped.len();
+    (0..width)
+        .map(|i| looped[(start + i) % looped.len()])
+        .collect()
+}
+
 fn centre(grid: &mut Grid, row: usize, text: &str, style: Style) {
     let w = text.chars().count().min(grid.cols);
     grid.put((grid.cols - w) / 2, row, &fit(text, grid.cols), style);
@@ -269,6 +405,21 @@ fn readouts(v: &VehicleView) -> (Readouts, Readouts) {
             ],
         );
     }
+    if let Some(d) = v.deep.as_ref().filter(|_| v.regime == Regime::Deep) {
+        let au = d.sun_dist_km / mctl_astro::interplanetary::KM_PER_AU;
+        return (
+            vec![
+                ("FROM SUN", format!("{au:.1} AU")),
+                ("SPEED", format!("{:.2} KM/S", d.speed_km_s)),
+                ("ORBIT", "ESCAPE".into()),
+            ],
+            vec![
+                ("LIGHT TIME", format!("{:.1} H", d.light_time_s / 3600.0)),
+                ("ECL LAT", format!("{:.1} DEG", d.off_axis_deg)),
+                ("SOURCE", "HORIZONS".into()),
+            ],
+        );
+    }
     let Some(s) = v.solution.as_ref() else {
         return (Vec::new(), Vec::new());
     };
@@ -297,7 +448,7 @@ fn readouts(v: &VehicleView) -> (Readouts, Readouts) {
 }
 
 /// Two lines about what the vehicle is doing now, from whatever is known of it.
-fn status(world: &World, v: &VehicleView, width: usize) -> [(String, Style); 2] {
+fn status(world: &World, v: &VehicleView) -> [(String, Style); 2] {
     let (bright, fg, dim) = (
         Style::new(Role::Bright),
         Style::new(Role::Fg),
@@ -307,15 +458,12 @@ fn status(world: &World, v: &VehicleView, width: usize) -> [(String, Style); 2] 
     match v.ops.as_ref() {
         Some(Ops::Jwst(s)) => {
             let first = match s.current(now) {
-                Some(c) => (fit(&format!("OBSERVING  {}", c.target), width), bright),
+                Some(c) => (format!("OBSERVING  {}", c.target), bright),
                 None => ("BETWEEN OBSERVATIONS".to_owned(), dim),
             };
             let second = match s.upcoming(now).next() {
                 Some(n) => (
-                    fit(
-                        &format!("NEXT IN {}  {}", fmt_dur(n.start.minus(now)), n.target),
-                        width,
-                    ),
+                    format!("NEXT IN {}  {}", fmt_dur(n.start.minus(now)), n.target),
                     fg,
                 ),
                 None => (String::new(), dim),
@@ -324,14 +472,11 @@ fn status(world: &World, v: &VehicleView, width: usize) -> [(String, Style); 2] 
         }
         Some(Ops::Hst(r)) => {
             let first = (
-                fit(
-                    &format!("{} PROGRAMS IN TODAY'S REPORT", r.science.len()),
-                    width,
-                ),
+                format!("{} PROGRAMS IN TODAY'S REPORT", r.science.len()),
                 bright,
             );
             let second = match r.science.first() {
-                Some(p) => (fit(&p.title.to_uppercase(), width), fg),
+                Some(p) => (p.title.to_uppercase(), fg),
                 None => (String::new(), dim),
             };
             return [first, second];
@@ -350,15 +495,12 @@ fn status(world: &World, v: &VehicleView, width: usize) -> [(String, Style); 2] 
             .find(|t| t.id == p.target)
             .map_or(p.target.to_uppercase(), |t| t.name.to_uppercase());
         return [
-            (
-                fit(&format!("{}  {}", p.state.label(), target), width),
-                bright,
-            ),
+            (format!("{}  {}", p.state.label(), target), bright),
             (
                 if p.state == mctl_core::prox::ProxState::Docked {
                     String::new()
                 } else {
-                    fit(&format!("RANGE {:.1} KM", p.range_km), width)
+                    format!("RANGE {:.1} KM", p.range_km)
                 },
                 fg,
             ),
@@ -387,10 +529,7 @@ fn status(world: &World, v: &VehicleView, width: usize) -> [(String, Style); 2] 
             .map(|t| t.name.to_uppercase())
             .collect();
         return [
-            (
-                fit(&format!("VISITORS  {}", names.join("  ")), width),
-                bright,
-            ),
+            (format!("VISITORS  {}", names.join("  ")), bright),
             (String::new(), dim),
         ];
     }
@@ -421,6 +560,19 @@ fn position_lines(v: &VehicleView) -> [(String, Style); 2] {
                 bright,
             ),
             (format!("LIGHT TIME {:.1} S", d.light_time_s), fg),
+        ];
+    }
+    if let Some(d) = v.deep.as_ref().filter(|_| v.regime == Regime::Deep) {
+        return [
+            (
+                format!(
+                    "{:.1} AU FROM THE SUN   {:.2} KM/S",
+                    d.sun_dist_km / mctl_astro::interplanetary::KM_PER_AU,
+                    d.speed_km_s
+                ),
+                bright,
+            ),
+            (format!("LIGHT TIME {:.1} H", d.light_time_s / 3600.0), fg),
         ];
     }
     let Some(s) = v.solution.as_ref() else {
@@ -459,6 +611,14 @@ fn view_body(grid: &mut Grid, rect: CellRect, v: &VehicleView, view: View) -> La
         | View::DenseEvents => {}
         View::Orbit if v.regime == Regime::L2 => {
             crate::deep::plot(grid, rect, "HALO ORBIT  VIEW FROM EARTH", PlotKind::Halo);
+        }
+        View::Orbit if v.regime == Regime::Deep => {
+            crate::deep::plot(
+                grid,
+                rect,
+                "SOLAR SYSTEM FROM ECLIPTIC NORTH",
+                PlotKind::SolarSystem,
+            );
         }
         View::Orbit => {
             boxed(grid, rect, view.title(v.regime));
@@ -546,8 +706,13 @@ fn render_dense(grid: &mut Grid, inp: &KioskInput<'_>, v: &VehicleView, view: Vi
     );
     // Below the page: one status line and the marks, in the rows its body leaves free.
     let status_row = rows.saturating_sub(SAFE_BOTTOM + 2);
-    let [(line, style), _] = status(inp.world, v, inner_cols);
-    centre(grid, status_row, &line, style);
+    let [(line, style), _] = status(inp.world, v);
+    centre(
+        grid,
+        status_row,
+        &ticker(&line, inner_cols, inp.world.t.0),
+        style,
+    );
     centre(
         grid,
         status_row + 1,
@@ -652,9 +817,10 @@ pub fn render(grid: &mut Grid, inp: &KioskInput<'_>) -> Layout {
                 right(grid, row, label, dim);
                 right(grid, row + 1, value, bright);
             }
-            let lines = status(inp.world, v, cols.saturating_sub(2 * SAFE_COLS));
+            let lines = status(inp.world, v);
             for (i, (text, style)) in lines.iter().enumerate() {
-                centre(grid, footer + 1 + i, text, *style);
+                let text = ticker(text, cols.saturating_sub(2 * SAFE_COLS), inp.world.t.0);
+                centre(grid, footer + 1 + i, &text, *style);
             }
         }
         Scene::Vehicle(v, View::Orbit | View::Ground) => {
@@ -663,9 +829,10 @@ pub fn render(grid: &mut Grid, inp: &KioskInput<'_>) -> Layout {
             }
         }
         Scene::Vehicle(v, _) => {
-            let lines = status(inp.world, v, cols.saturating_sub(2 * SAFE_COLS));
+            let lines = status(inp.world, v);
             for (i, (text, style)) in lines.iter().enumerate() {
-                centre(grid, footer + 1 + i, text, *style);
+                let text = ticker(text, cols.saturating_sub(2 * SAFE_COLS), inp.world.t.0);
+                centre(grid, footer + 1 + i, &text, *style);
             }
         }
         Scene::Extra(e) => {
@@ -787,5 +954,110 @@ mod tests {
     fn fit_never_splits_a_character() {
         assert_eq!(fit("ÅÅÅ", 2), "ÅÅ");
         assert_eq!(fit("abc", 9), "abc");
+    }
+
+    fn vehicle_of(scenes: &[Scene<'_>], i: usize) -> Option<String> {
+        match scenes[i] {
+            Scene::Vehicle(v, _) => Some(v.id.clone()),
+            Scene::Extra(_) => None,
+        }
+    }
+
+    #[test]
+    fn sequential_keeps_the_configured_order() {
+        let w = test_world(3);
+        let scenes = scenes(&w, Mix::Mixed);
+        let p = plan(&scenes, Order::Sequential, &[], None, &mut Rng::new(7));
+        assert_eq!(p, (0..scenes.len()).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn random_shows_every_scene_once_per_pass_and_a_different_order_each_pass() {
+        let w = test_world(4);
+        let scenes = scenes(&w, Mix::Mixed);
+        let mut rng = Rng::new(42);
+        let mut last = None;
+        let mut passes = Vec::new();
+        for _ in 0..5 {
+            let p = plan(&scenes, Order::Random, &[], last, &mut rng);
+            let mut sorted = p.clone();
+            sorted.sort_unstable();
+            assert_eq!(
+                sorted,
+                (0..scenes.len()).collect::<Vec<_>>(),
+                "each scene once"
+            );
+            assert_ne!(
+                Some(p[0]),
+                last,
+                "never opens on what the last pass closed on"
+            );
+            last = p.last().copied();
+            passes.push(p);
+        }
+        assert!(
+            passes.windows(2).all(|w| w[0] != w[1]),
+            "a new order each pass: {passes:?}"
+        );
+    }
+
+    #[test]
+    fn vehicle_order_runs_a_whole_vehicle_before_the_next_and_reshuffles_each_pass() {
+        let w = test_world(5);
+        let scenes = scenes(&w, Mix::Mixed);
+        let mut rng = Rng::new(3);
+        let mut orders = Vec::new();
+        let mut last = None;
+        for _ in 0..4 {
+            let p = plan(&scenes, Order::Vehicle, &[], last, &mut rng);
+            assert_eq!(p.len(), scenes.len());
+            // Walking the plan, a vehicle's scenes are contiguous: its id never comes back after another's.
+            let mut seen: Vec<String> = Vec::new();
+            for &i in &p {
+                if let Some(id) = vehicle_of(&scenes, i)
+                    && seen.last() != Some(&id)
+                {
+                    assert!(!seen.contains(&id), "{id} split up in {p:?}");
+                    seen.push(id);
+                }
+            }
+            assert_eq!(seen.len(), 5);
+            last = p.last().copied();
+            orders.push(seen);
+        }
+        assert!(orders.windows(2).all(|w| w[0] != w[1]), "{orders:?}");
+    }
+
+    #[test]
+    fn a_selection_limits_the_vehicles_and_takes_their_interludes_with_them() {
+        let w = test_world(4);
+        let scenes = scenes(&w, Mix::Mixed);
+        let only = vec!["v1".to_owned(), "v3".to_owned()];
+        for order in [Order::Sequential, Order::Random, Order::Vehicle] {
+            let p = plan(&scenes, order, &only, None, &mut Rng::new(9));
+            let ids: std::collections::BTreeSet<_> =
+                p.iter().filter_map(|&i| vehicle_of(&scenes, i)).collect();
+            assert_eq!(
+                ids.into_iter().collect::<Vec<_>>(),
+                ["v1", "v3"],
+                "{order:?}"
+            );
+            // An interlude is shown only if it followed a selected vehicle's art.
+            for &i in p.iter().filter(|&&i| vehicle_of(&scenes, i).is_none()) {
+                let before = vehicle_of(&scenes, i - 1).expect("an interlude follows art");
+                assert!(only.contains(&before), "{order:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_line_that_fits_stays_put_and_a_longer_one_scrolls_and_loops() {
+        assert_eq!(ticker("SHORT", 9, 123.0), "SHORT");
+        let long = "ABCDEFGHIJKL";
+        assert_eq!(ticker(long, 5, 0.0), "ABCDE");
+        assert_eq!(ticker(long, 5, 1.0), "FGHIJ");
+        assert_eq!(ticker(long, 5, 2.0), "KL   ");
+        assert_eq!(ticker(long, 5, 2.6), "    A"); // into the gap, then round to the start
+        assert_eq!(ticker(long, 5, 3.4), "ABCDE"); // a whole lap is 17 characters
     }
 }

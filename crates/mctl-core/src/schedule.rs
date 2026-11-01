@@ -216,6 +216,7 @@ pub enum FieldState {
         /// How the position was found, e.g. `SIMBAD via Sesame`.
         origin: String,
         survey: String,
+        /// The cutout as sent by its service: a JPEG, or a GIF from the fallback survey.
         jpeg: std::sync::Arc<Vec<u8>>,
     },
 }

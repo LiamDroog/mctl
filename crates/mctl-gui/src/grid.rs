@@ -189,6 +189,8 @@ pub enum PlotKind {
     TopView,
     /// Distance, off-axis angle, Y/Z offsets or range rate against time, from the track.
     DeepSeries(DeepSeries),
+    /// A deep-space vehicle's path among the planets' orbits, from ecliptic north, on a square-root radial scale.
+    SolarSystem,
     /// R-bar/V-bar relative motion of the visiting vehicles about the station.
     Prox,
     /// Altitude of the nominal and planned orbits against time.
@@ -207,6 +209,12 @@ pub enum DeepSeries {
     OffAxis,
     Offsets,
     RangeRate,
+    /// Deep space: distance from the Sun (AU), from Earth as light time (hours), and the heliocentric
+    /// ecliptic longitude and latitude (degrees).
+    SunDistance,
+    EarthLight,
+    EclLon,
+    EclLat,
 }
 
 pub struct Grid {
@@ -214,6 +222,36 @@ pub struct Grid {
     pub rows: usize,
     cells: Vec<Cell>,
     widgets: Vec<Widget>,
+}
+
+/// A box title cut to `max` characters. Titles are a name and then asides after a double space ("GROUND TRACK
+/// PAST SOLID / PREDICTED DASHED"); in a narrow box the asides go first, and only a name that is itself too
+/// long is cut, ending in `~`.
+pub(crate) fn fit_title(title: &str, max: usize) -> String {
+    let mut shown = String::new();
+    for (i, part) in title.split("  ").filter(|p| !p.is_empty()).enumerate() {
+        let next = if i == 0 {
+            part.to_owned()
+        } else {
+            format!("{shown}  {part}")
+        };
+        if next.chars().count() > max {
+            break;
+        }
+        shown = next;
+    }
+    if shown.is_empty() {
+        let n = title.chars().count();
+        if n <= max {
+            return title.to_owned();
+        }
+        return title
+            .chars()
+            .take(max.saturating_sub(1))
+            .chain(['~'])
+            .collect();
+    }
+    shown
 }
 
 impl Grid {
@@ -319,7 +357,7 @@ impl Grid {
         }
         if !title.is_empty() && rect.cols > 4 {
             let max = rect.cols - 4;
-            let shown: String = title.chars().take(max).collect();
+            let shown = fit_title(title, max);
             self.put(rect.col + 2, rect.row, &format!(" {shown} "), title_style);
         }
     }

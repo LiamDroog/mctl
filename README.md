@@ -1,7 +1,7 @@
 # mctl
 
 mctl is a spacecraft display written in Rust. It follows the ISS, the Crew and Cargo Dragons that visit it,
-Hubble, JWST and Roman, and tries to look like a retro flight control room monitor: a 3D orbit map, ground track, sky plot,
+Hubble, JWST, Roman, the Tiangong station, and Voyager 1 and 2 and New Horizons, and tries to look like a retro flight control room monitor: a 3D orbit map, ground track, sky plot,
 pass predictions, a maneuver planner, and live telemetry from the ISS. I wanted something to leave running on
 a screen at home.
 
@@ -95,7 +95,7 @@ mctl export --out ./dump        # every recorded table as CSV
 mctl shot --out-dir /tmp/shots --pages all    # headless screenshots, one per theme and page
 ```
 
-Currently the kiosk/unattended mode only work with the `--pi` flag, with simplified layouts and a cycle through the screens. In progress for a regular kiosk mode.
+Currently the kiosk/unattended mode only work with the `--kiosk` flag, with simplified layouts and a cycle through the screens. In progress for a regular kiosk mode.
 
 The keys, all of which can be remapped under `[keys]` in the config:
 
@@ -119,14 +119,16 @@ else. `?` has the legend.
 
 ![Pi mode cycling through a few scenes](docs/pi-mode.gif)
 
-`mctl --pi` is a second front end on the same engine, built to be looked at rather than driven. It cycles
-through the vehicles at 640x480, with line art, maps, and the console's own pages, and it draws without the CRT
-effects because the tube does those itself. `--size 1920x1080`  or equivalent can override the auto 640x480 res that the `--pi` flag sets to use on a regular monitor.
+`mctl --kiosk` is a second front end on the same engine, built to be looked at rather than driven. It cycles
+through the vehicles, with line art, maps, and the console's own pages, and it draws without the CRT
+effects because the tube does those itself. It scales to fill whatever screen it is on: the layout is designed for the Pi's 640x480 and a larger screen gets the same layout in bigger text. (`--pi` still works as an alias.) `--size` runs it in a window of that size instead.
 
 ```
-mctl --pi                                       # fullscreen, cycling
-mctl --pi --pi-style dense --theme retrowave    # console pages only, in retrowave
-mctl --pi shot --out-dir /tmp/pi                # one PNG per scene
+mctl --kiosk                                       # fullscreen, cycling
+mctl --kiosk --kiosk-style dense --theme retrowave    # console pages only, in retrowave
+mctl --kiosk --kiosk-order random                  # every scene once per cycle, a new random order each cycle
+mctl --kiosk --kiosk-order vehicle --kiosk-vehicles iss,jwst   # one vehicle at a time, in random order
+mctl --kiosk shot --out-dir /tmp/pi                # one PNG per scene
 ```
 
 The pictures look good on a CRT. The dense console pages are hard to read at that resolution. A Pi 3B+ has no Vulkan GPU, so it renders in software and the frame rate is modest. The setup, the composite output and cross-building for a Pi are in [docs/pi.md](docs/pi.md).
@@ -139,7 +141,7 @@ mctl pulls live data where available. These contain:
 - ISS trajectory: NASA's public ephemeris. ISS telemetry: the public ISSLIVE feed, over its Lightstreamer
   endpoint. That isn't an official API and it could change or vanish depending what their funding looks like ( :( )
 - Earth orientation and leap seconds: IERS and USNO.
-- JWST and Roman trajectories: [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/).
+- JWST, Roman, Voyager and New Horizons trajectories: [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/).
 - JWST visit plans and Hubble reports: [STScI](https://www.stsci.edu).
 - Sky pictures: the Digitized Sky Survey (DSS2) through CDS Strasbourg, see the
   [DSS acknowledgement](https://archive.stsci.edu/dss/acknowledging.html).

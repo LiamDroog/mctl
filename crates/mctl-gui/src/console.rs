@@ -132,7 +132,17 @@ const KIOSK_DRIFT_DEG_S: f64 = 6.0;
 struct Kiosk {
     dwell_s: f64,
     mix: crate::kiosk::Mix,
-    scene: usize,
+    order: crate::kiosk::Order,
+    /// Vehicles to show; empty for all.
+    only: Vec<String>,
+    rng: crate::kiosk::Rng,
+    /// The scenes of the current pass, as indices into the cycle, and where in it the display is.
+    plan: Vec<usize>,
+    /// How many scenes the plan was made for; a different count (a vehicle came or went) replans it.
+    planned_for: usize,
+    pos: usize,
+    /// Scenes the operator asked to skip (negative: back) since the last frame.
+    skip: i32,
     /// When the current scene came up, in the UI's elapsed seconds.
     since_s: f64,
     held: bool,
@@ -169,14 +179,13 @@ impl Console {
         if let Some(t) = self.field_textures.get(&name) {
             return Some(t.id());
         }
-        let img =
-            match image::load_from_memory_with_format(jpeg.as_slice(), image::ImageFormat::Jpeg) {
-                Ok(i) => i.to_rgb8(),
-                Err(e) => {
-                    tracing::warn!(error = %e, key, "field picture is not a decodable JPEG");
-                    return None;
-                }
-            };
+        let img = match image::load_from_memory(jpeg.as_slice()) {
+            Ok(i) => i.to_rgb8(),
+            Err(e) => {
+                tracing::warn!(error = %e, key, "field picture is not a decodable image");
+                return None;
+            }
+        };
         let size = [img.width() as usize, img.height() as usize];
         let color = egui::ColorImage::from_rgb(size, img.as_raw());
         if self.field_textures.len() >= MAX_FIELD_TEXTURES {
@@ -590,7 +599,13 @@ impl Console {
         self.kiosk = Some(Kiosk {
             dwell_s: cfg.dwell_s,
             mix: cfg.mix,
-            scene: 0,
+            order: cfg.order,
+            only: cfg.vehicles,
+            rng: crate::kiosk::Rng::from_clock(),
+            plan: Vec::new(),
+            planned_for: 0,
+            pos: 0,
+            skip: 0,
             since_s: self.now_s,
             held: false,
             last_s: self.now_s,
@@ -606,21 +621,39 @@ impl Console {
         let now = self.now_s;
         let mix = self.kiosk.as_ref()?.mix;
         let scenes = crate::kiosk::scenes(world, mix);
-        let n = scenes.len().max(1);
         let k = self.kiosk.as_mut()?;
         // The orbit map turns slowly by itself, since nobody is there to drag it.
         let dt = (now - k.last_s).clamp(0.0, 0.5);
         k.last_s = now;
         self.camera.orbit_by((KIOSK_DRIFT_DEG_S * dt) as f32, 0.0);
-        k.scene %= n;
-        if let Some(sc) = scenes.get(k.scene)
+        if k.planned_for != scenes.len() || k.plan.is_empty() {
+            k.plan = crate::kiosk::plan(&scenes, k.order, &k.only, None, &mut k.rng);
+            k.planned_for = scenes.len();
+            k.pos = k.pos.min(k.plan.len().saturating_sub(1));
+        }
+        let mut step = std::mem::take(&mut k.skip);
+        let current = k.plan.get(k.pos).and_then(|&i| scenes.get(i));
+        if let Some(sc) = current
             && !k.held
             && now - k.since_s >= sc.dwell_s(k.dwell_s)
         {
-            k.scene = (k.scene + 1) % n;
-            k.since_s = now;
+            step += 1;
         }
-        let out = (k.scene, k.held);
+        if step != 0 {
+            k.since_s = now;
+            let len = k.plan.len().max(1) as i32;
+            let next = k.pos as i32 + step;
+            if next >= len {
+                // A new pass, in a new order that does not open on the scene this one closed with.
+                let last = k.plan.get(k.pos).copied();
+                k.plan = crate::kiosk::plan(&scenes, k.order, &k.only, last, &mut k.rng);
+                k.pos = 0;
+            } else {
+                k.pos = next.max(0) as usize;
+            }
+        }
+        let scene = k.plan.get(k.pos).copied().unwrap_or(0);
+        let out = (scene, k.held);
         if let Some(crate::kiosk::Scene::Vehicle(v, _)) = scenes.get(out.0) {
             self.vehicle_id = v.id.clone();
         }
@@ -630,7 +663,7 @@ impl Console {
     /// Show scene `n` of the kiosk's cycle now (for screenshots).
     pub fn set_kiosk_scene(&mut self, n: usize) {
         if let Some(k) = self.kiosk.as_mut() {
-            k.scene = n;
+            k.pos = n;
             k.since_s = self.now_s;
         }
     }
@@ -647,12 +680,10 @@ impl Console {
         match (key, action) {
             (KeyInput::Escape, _) | (_, Some(KeyAction::Quit)) => return Outcome::Quit,
             (KeyInput::Right | KeyInput::Down, _) | (_, Some(KeyAction::Vehicle)) => {
-                k.scene += 1;
-                k.since_s = self.now_s;
+                k.skip += 1;
             }
             (KeyInput::Left | KeyInput::Up, _) => {
-                k.scene = k.scene.saturating_sub(1);
-                k.since_s = self.now_s;
+                k.skip -= 1;
             }
             (_, Some(KeyAction::Pause)) => {
                 k.held = !k.held;
@@ -708,6 +739,15 @@ impl Console {
                 .is_some_and(|s| s.dense())
         {
             theme.font = crate::theme::dense_font();
+        }
+        // Whatever the screen, the kiosk keeps the layout it was designed with on the Pi's 640 x 480; the
+        // desktop console shrinks its font to keep the full panel layout on a smaller window.
+        if self.kiosk.is_some() {
+            theme.font = theme.font.for_kiosk(size_px);
+        } else {
+            theme.font = theme
+                .font
+                .fitted(size_px, crate::page::MIN_COLS, crate::page::MIN_ROWS);
         }
         let (cw, ch) = (theme.font.cell_w_px, theme.font.cell_h_px);
         let (cols, rows) = (
@@ -972,13 +1012,21 @@ impl Console {
                     } else {
                         name.to_owned()
                     };
-                    painter.text(
-                        at,
-                        egui::Align2::LEFT_BOTTOM,
-                        text,
-                        font.clone(),
-                        theme.palette.bright.to_egui(),
+                    // Inside the picture, on the other side of the marker if the right is too close to the edge.
+                    let galley =
+                        painter.layout_no_wrap(text, font.clone(), theme.palette.bright.to_egui());
+                    let bounds = egui::Rect::from_min_size(
+                        Pos2::new(globe_px[0] as f32, globe_px[1] as f32),
+                        egui::vec2(globe_px[2] as f32, globe_px[3] as f32),
                     );
+                    let mut rect = egui::Align2::LEFT_BOTTOM.anchor_size(at, galley.size());
+                    if rect.right() > bounds.right() {
+                        rect = rect.translate(egui::vec2(-(galley.size().x + 28.0), 0.0));
+                    }
+                    let dx = (bounds.left() - rect.left()).max(0.0).min(bounds.width());
+                    let dy = (bounds.top() - rect.top()).max(0.0);
+                    rect = rect.translate(egui::vec2(dx, dy));
+                    painter.galley(rect.min, galley, theme.palette.bright.to_egui());
                 }
             }
             grid.paint(&painter, &theme, Pos2::ZERO, stats.elapsed_s);
@@ -1084,6 +1132,8 @@ mod tests {
         c.set_kiosk(crate::kiosk::KioskConfig {
             dwell_s: 10.0,
             mix: crate::kiosk::Mix::Mixed,
+            order: crate::kiosk::Order::Sequential,
+            vehicles: Vec::new(),
         });
         assert!(!c.toggles.any(), "the CRT does the effects");
         assert_eq!(c.advance_kiosk(&w).map(|s| s.0), Some(0));
