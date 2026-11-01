@@ -51,6 +51,12 @@ change behaviour.
 - The survey pictures wait up to `[sources.sky] timeout_s` (default 90 s, was shorter) for the sky services, with a
   separate 15 s connect timeout and one retry on a timeout.
 
+### Fixed
+
+- A page with nothing to show for the selected vehicle (greyed in the footer legend, such as GNC, EPS, TCS and
+  COMM for Hubble) can no longer be opened by its F key, a click on the legend or a `:go` command: the status line
+  says why instead. Tab skips sub-pages that have nothing to show.
+
 ## [0.1.1] - 2026-11-01
 
 ### Changed
