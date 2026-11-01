@@ -5,18 +5,20 @@ Hubble, JWST, Roman, the Tiangong station, and Voyager 1 and 2 and New Horizons,
 pass predictions, a maneuver planner, and live telemetry from the ISS. I wanted something to leave running on
 a screen at home.
 
-It's got four themes (green phosphor, amber, retrowave, and a plain dark one). It also
+It's got seven themes (green phosphor, amber, retrowave, a plain dark one, and Soviet red, Teletext and Nostromo teal). It also
 has a low-resolution mode for a Raspberry Pi feeding a Commodore 1702 CRT over composite, which is how I run
 mine, r/casettefuturism unite!
 
 ![The MASTER page in the Phosphor theme](docs/screenshot.png)
 
-The four themes, on the same page (`T` cycles them):
+The themes, on the same page (`T` cycles them):
 
 | | |
 |---|---|
 | ![Phosphor](docs/theme-phosphor.png) | ![Retro](docs/theme-retro.png) |
 | ![Retrowave](docs/theme-retrowave.png) | ![Modern](docs/theme-modern.png) |
+| ![Cosmonaut](docs/theme-cosmonaut.png) | ![Teletext](docs/theme-teletext.png) |
+| ![Nostromo](docs/theme-nostromo.png) | |
 
 Full disclaimer, most of the code was written with Claude, Rust is not my expertise but my implementation with Python ran, well, it was seconds per frame rather than frames per second.
 
