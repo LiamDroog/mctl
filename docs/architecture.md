@@ -5,7 +5,7 @@ propagator.** Sources produce events, one engine thread turns them into an immut
 only reads that snapshot and sends commands back.
 
 ```
- source threads                      engine thread (50 Hz)              GUI (winit + wgpu + egui)
+ source threads                      engine thread (50 Hz; 5 on the kiosk)              GUI (winit + wgpu + egui)
  ──────────────                      ─────────────────────              ─────────────────────────
  CelesTrak GP / NASA OEM   ─┐
  IERS earth orientation     │ Event   ┌──────────────────┐  World      ┌──────────────────────┐

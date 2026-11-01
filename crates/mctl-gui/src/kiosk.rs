@@ -15,6 +15,15 @@ use crate::screens::boxed;
 
 /// Seconds each vehicle is shown, unless `--dwell` says otherwise.
 pub const DEFAULT_DWELL_S: f64 = 20.0;
+/// The kiosk's frame-rate cap: enough for turning art, and it leaves CPU for the engine and sources.
+pub const FPS: f32 = 20.0;
+/// Its cap on a software adapter (a Pi 3 has no Vulkan GPU): the rasteriser is most of the CPU there, and the
+/// slowest thing on screen turns 6 degrees a second.
+pub const SOFTWARE_FPS: f32 = 10.0;
+/// The kiosk's engine tick, Hz, at most: the screen shows seconds, and a vehicle moves a pixel in about a second.
+pub const ENGINE_TICK_HZ: f64 = 5.0;
+/// The least age, seconds, at which the kiosk rebuilds a vehicle's track.
+pub const TRACK_REBUILD_S: f64 = 10.0;
 /// An interlude (art without a live vehicle behind it) is shown for this fraction of a vehicle's time.
 pub const EXTRA_DWELL_FRACTION: f64 = 0.6;
 

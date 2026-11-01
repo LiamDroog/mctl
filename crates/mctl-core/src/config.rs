@@ -37,6 +37,8 @@ pub struct Config {
     pub engine: Engine,
     #[serde(default)]
     pub store: StoreConfig,
+    #[serde(default)]
+    pub display: DisplayConfig,
     pub observer: ObserverConfig,
     #[serde(rename = "site", default)]
     pub sites: Vec<SiteDef>,
@@ -255,6 +257,21 @@ pub struct StoreConfig {
     pub max_size_mb: f64,
 }
 
+/// How the window is drawn.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct DisplayConfig {
+    /// Frames a second at most; 0 for the default: the kiosk draws 20, or 10 on a software graphics adapter,
+    /// and the desktop window is not capped. `--max-fps` overrides it.
+    pub max_fps: f32,
+}
+
+impl Default for DisplayConfig {
+    fn default() -> Self {
+        Self { max_fps: 0.0 }
+    }
+}
+
 impl Default for StoreConfig {
     fn default() -> Self {
         Self {
@@ -274,6 +291,14 @@ pub struct Engine {
     pub track_past_rev: f64,
     pub track_future_rev: f64,
     pub track_samples: usize,
+    /// How old a vehicle's drawn track may get before it is rebuilt, seconds. Rebuilding is the engine's
+    /// largest cost; the display kiosk raises this because its screen is small.
+    #[serde(default = "default_track_rebuild_s")]
+    pub track_rebuild_s: f64,
+}
+
+fn default_track_rebuild_s() -> f64 {
+    1.0
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -543,13 +568,17 @@ impl Config {
         {
             return bad("limits: residual_warning_km must be >= residual_caution_km > 0".into());
         }
+        if self.display.max_fps != 0.0 && !(1.0..=240.0).contains(&self.display.max_fps) {
+            return bad("display.max_fps must be 0 (automatic) or 1..=240".into());
+        }
         let e = &self.engine;
         if !(1.0..=500.0).contains(&e.tick_hz)
+            || !(0.1..=600.0).contains(&e.track_rebuild_s)
             || e.track_samples < 16
             || e.track_past_rev < 0.0
             || e.track_future_rev <= 0.0
         {
-            return bad("engine: tick_hz must be 1..=500, track_samples >= 16, track_past_rev >= 0, track_future_rev > 0".into());
+            return bad("engine: tick_hz must be 1..=500, track_rebuild_s 0.1..=600, track_samples >= 16, track_past_rev >= 0, track_future_rev > 0".into());
         }
         if self.vehicles.is_empty() {
             return bad("no [[vehicle]] entries".into());
@@ -817,6 +846,7 @@ mod tests {
                 "residual_warning_km",
             ),
             ("[engine]\ntick_hz = 0\n", "tick_hz"),
+            ("[display]\nmax_fps = 500\n", "max_fps"),
             ("[fetch]\ntimeout_s = -1\n", "timeout_s"),
             (
                 "[sources.celestrak_gp]\nmin_refresh_s = 1\n",

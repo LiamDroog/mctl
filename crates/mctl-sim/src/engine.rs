@@ -44,8 +44,6 @@ const LOG_CAPACITY: usize = 200;
 const CW_STARTUP_GRACE_S: f64 = 10.0;
 /// Samples per revolution of the event search (period / 200).
 const EVENT_STEPS_PER_REV: f64 = 200.0;
-/// Track is rebuilt at least this often, seconds.
-const TRACK_REBUILD_S: f64 = 1.0;
 /// Track window for an L2 vehicle, days either side of now (a halo orbit takes about six months).
 const DEEP_TRACK_DAYS: f64 = 90.0;
 /// Half-width of the track window of a deep-space vehicle, days: a decade each way shows where it has been
@@ -1665,6 +1663,7 @@ impl Model {
             self.cfg.engine.track_future_rev,
             self.cfg.engine.track_samples,
         );
+        let track_rebuild_s = self.cfg.engine.track_rebuild_s;
         let replaying = clock.mode == mctl_core::world::ClockMode::Replay;
         if replaying {
             self.refresh_replay(t, wall);
@@ -1686,6 +1685,7 @@ impl Model {
                     stale,
                     &limits,
                     (past_rev, future_rev, samples),
+                    track_rebuild_s,
                     eop.as_deref(),
                     &mut revision,
                     clock.is_live(),
@@ -1878,6 +1878,7 @@ fn vehicle_view(
     stale: (f64, f64, f64),
     limits: &mctl_core::config::Limits,
     track_cfg: (f64, f64, usize),
+    track_rebuild_s: f64,
     eop: Option<&EopTable>,
     revision: &mut u64,
     live: bool,
@@ -2013,7 +2014,7 @@ fn vehicle_view(
             let due = v
                 .track
                 .as_ref()
-                .is_none_or(|(built, k, _)| *k != kind || t.minus(*built).abs() >= TRACK_REBUILD_S);
+                .is_none_or(|(built, k, _)| *k != kind || t.minus(*built).abs() >= track_rebuild_s);
             if due {
                 *revision += 1;
                 let traj: Option<&dyn Trajectory> = match kind {

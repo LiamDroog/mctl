@@ -110,6 +110,12 @@ alt_m = 10.0
 # lon_deg = -65.4321
 # alt_m = 100.0
 
+[display]
+# The most frames a second the window draws, 0 for the default: the kiosk draws 20, or 10 on a software graphics
+# adapter (a Raspberry Pi 3), and the desktop window is not capped. Fewer frames use less CPU.
+# `--max-fps` overrides this.
+max_fps = 0
+
 [store]
 # Recording to SQLite. path = "" means $XDG_DATA_HOME/mctl/mctl.db.
 enabled = true
@@ -134,6 +140,9 @@ tick_hz = 50
 track_past_rev = 0.6
 track_future_rev = 1.4
 track_samples = 400
+# A vehicle's drawn track is rebuilt when it is this old, seconds. This is the engine's largest cost, so the
+# kiosk display (--kiosk) raises it to 10.
+track_rebuild_s = 1.0
 
 [[vehicle]]
 id = "iss"
