@@ -25,6 +25,18 @@ const EMBEDDED_THEMES: &[(&str, &str)] = &[
         "retrowave.toml",
         include_str!("../../../config/themes/retrowave.toml"),
     ),
+    (
+        "cosmonaut.toml",
+        include_str!("../../../config/themes/cosmonaut.toml"),
+    ),
+    (
+        "teletext.toml",
+        include_str!("../../../config/themes/teletext.toml"),
+    ),
+    (
+        "nostromo.toml",
+        include_str!("../../../config/themes/nostromo.toml"),
+    ),
 ];
 
 /// The display theme for `--pi`: a small CRT fed by the Pi's composite output.
@@ -354,7 +366,18 @@ mod tests {
     #[test]
     fn embedded_themes_load_and_are_the_four_from_the_design() {
         let names: Vec<_> = embedded().unwrap().into_iter().map(|t| t.name).collect();
-        assert_eq!(names, ["Phosphor", "Retro", "Modern", "Retrowave"]);
+        assert_eq!(
+            names,
+            [
+                "Phosphor",
+                "Retro",
+                "Modern",
+                "Retrowave",
+                "Cosmonaut",
+                "Teletext",
+                "Nostromo"
+            ]
+        );
     }
 
     #[test]

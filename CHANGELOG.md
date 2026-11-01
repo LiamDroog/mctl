@@ -6,6 +6,12 @@ change behaviour.
 
 ## [Unreleased]
 
+### Added
+
+- Three themes: Cosmonaut (red and amber, Soviet control room), Teletext (seven saturated colours on black) and
+  Nostromo (cold teal with an orange alarm). They follow Retrowave in the `T` cycle. The Pi display's theme set is
+  unchanged.
+
 ## [0.1.1] - 2026-11-01
 
 ### Changed
