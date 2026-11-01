@@ -315,6 +315,7 @@ pub fn shots(live: &Live, themes: Vec<Theme>, opts: &ShotOptions) -> Result<Vec<
             dwell_s: f64::MAX,
             mix,
             order: crate::kiosk::Order::Sequential,
+            cycle_themes: false,
             vehicles: Vec::new(),
         });
         let count = crate::kiosk::scenes(&live.bus.latest(), mix).len();

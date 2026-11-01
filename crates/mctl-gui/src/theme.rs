@@ -116,13 +116,21 @@ impl Theme {
     }
 }
 
-/// The themes of the Pi display, in `T` cycle order: its own cyan one, then the green phosphor, amber and
-/// retrowave looks of the console with the display font and every effect off.
+/// The themes of the Pi display, in `T` cycle order: its own cyan one, then the green phosphor, amber,
+/// retrowave, Cosmonaut, Teletext and Nostromo looks of the console with the display font and every effect off.
 pub fn crt_themes() -> Result<Vec<Theme>, ThemeError> {
     let crt = Theme::from_toml(CRT_THEME.0, CRT_THEME.1)?;
     let mut out = vec![crt.clone()];
     for (name, text) in EMBEDDED_THEMES {
-        if matches!(*name, "phosphor.toml" | "retro.toml" | "retrowave.toml") {
+        if matches!(
+            *name,
+            "phosphor.toml"
+                | "retro.toml"
+                | "retrowave.toml"
+                | "cosmonaut.toml"
+                | "teletext.toml"
+                | "nostromo.toml"
+        ) {
             out.push(Theme::from_toml(name, text)?.for_crt(&crt.font));
         }
     }
@@ -463,7 +471,18 @@ mod tests {
     fn the_crt_themes_have_every_effect_off_and_the_display_font() {
         let themes = crt_themes().unwrap();
         let names: Vec<_> = themes.iter().map(|t| t.name.as_str()).collect();
-        assert_eq!(names, ["CRT", "Phosphor", "Retro", "Retrowave"]);
+        assert_eq!(
+            names,
+            [
+                "CRT",
+                "Phosphor",
+                "Retro",
+                "Retrowave",
+                "Cosmonaut",
+                "Teletext",
+                "Nostromo"
+            ]
+        );
         for t in &themes {
             let e = t.effects;
             assert!(!e.scanlines.enabled && !e.bloom.enabled, "{}", t.name);

@@ -45,6 +45,8 @@ pub struct KioskConfig {
     pub dwell_s: f64,
     pub mix: Mix,
     pub order: Order,
+    /// Change to another random theme with every scene.
+    pub cycle_themes: bool,
     /// Vehicle ids to show; empty means every vehicle.
     pub vehicles: Vec<String>,
 }
@@ -88,6 +90,15 @@ impl Rng {
         x ^= x << 17;
         self.0 = x;
         x
+    }
+
+    /// An index below `n` other than `not` (any index below `n` if there is no other).
+    pub fn other_than(&mut self, n: usize, not: usize) -> usize {
+        if n < 2 {
+            return 0;
+        }
+        let i = (self.next() % (n as u64 - 1)) as usize;
+        if i >= not { i + 1 } else { i }
     }
 
     /// Fisher-Yates.
