@@ -58,8 +58,16 @@ struct Running {
     gpu: Arc<Gpu>,
 }
 
+/// Frame timings kept for the end-of-run report: the newest this many.
+const FRAME_LOG_MAX: usize = 100_000;
+/// How often the achieved frame rate is logged, seconds.
+const FPS_LOG_PERIOD_S: f32 = 30.0;
+
 struct App {
     opts: Options,
+    /// Frames drawn since `window_start`, for the logged frame rate.
+    frames_in_window: u32,
+    window_start: Instant,
     themes: Option<Vec<Theme>>,
     running: Option<Running>,
     started: Instant,
@@ -178,6 +186,14 @@ impl App {
         );
         if let Some(cfg) = self.opts.kiosk.clone() {
             console.set_kiosk(cfg);
+            if self.opts.max_fps.is_none() {
+                let software = gpu.info.device_type == wgpu::DeviceType::Cpu;
+                self.opts.max_fps = Some(if software {
+                    crate::kiosk::SOFTWARE_FPS
+                } else {
+                    crate::kiosk::FPS
+                });
+            }
         }
         console.connect(
             Some(self.opts.live.commands.clone()),
@@ -270,7 +286,21 @@ impl App {
         let work_ms = work_start.elapsed().as_secs_f32() * 1000.0;
         // The first frames include startup and shader compilation; keep them out of the statistics.
         if self.frames > 5 {
+            // Only the newest are kept: the display runs unattended for weeks.
+            if self.frame_log.len() >= FRAME_LOG_MAX {
+                self.frame_log.drain(..FRAME_LOG_MAX / 2);
+            }
             self.frame_log.push([self.frame_ms, acquire_ms, work_ms]);
+        }
+        self.frames_in_window += 1;
+        if self.window_start.elapsed().as_secs_f32() >= FPS_LOG_PERIOD_S {
+            tracing::info!(
+                fps = self.frames_in_window as f32 / self.window_start.elapsed().as_secs_f32(),
+                cap = ?self.opts.max_fps,
+                "frame rate"
+            );
+            self.frames_in_window = 0;
+            self.window_start = Instant::now();
         }
         r.window.pre_present_notify();
         r.gpu.queue.present(frame);
@@ -465,9 +495,12 @@ pub fn run(themes: Vec<Theme>, opts: Options) -> Result<()> {
     let event_loop = builder
         .build()
         .context("creating event loop (no display server?)")?;
-    event_loop.set_control_flow(ControlFlow::Poll);
+    // Sleep between frames: `Poll` spins a whole core waiting for the compositor's frame callback.
+    event_loop.set_control_flow(ControlFlow::Wait);
     let mut app = App {
         opts,
+        frames_in_window: 0,
+        window_start: Instant::now(),
         themes: Some(themes),
         running: None,
         started: Instant::now(),

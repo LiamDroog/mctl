@@ -134,6 +134,9 @@ tick_hz = 50
 track_past_rev = 0.6
 track_future_rev = 1.4
 track_samples = 400
+# A vehicle's drawn track is rebuilt when it is this old, seconds. This is the engine's largest cost, so the
+# kiosk display (--kiosk) raises it to 10.
+track_rebuild_s = 1.0
 
 [[vehicle]]
 id = "iss"

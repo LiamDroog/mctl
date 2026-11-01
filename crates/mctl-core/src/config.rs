@@ -274,6 +274,14 @@ pub struct Engine {
     pub track_past_rev: f64,
     pub track_future_rev: f64,
     pub track_samples: usize,
+    /// How old a vehicle's drawn track may get before it is rebuilt, seconds. Rebuilding is the engine's
+    /// largest cost; the display kiosk raises this because its screen is small.
+    #[serde(default = "default_track_rebuild_s")]
+    pub track_rebuild_s: f64,
+}
+
+fn default_track_rebuild_s() -> f64 {
+    1.0
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -545,11 +553,12 @@ impl Config {
         }
         let e = &self.engine;
         if !(1.0..=500.0).contains(&e.tick_hz)
+            || !(0.1..=600.0).contains(&e.track_rebuild_s)
             || e.track_samples < 16
             || e.track_past_rev < 0.0
             || e.track_future_rev <= 0.0
         {
-            return bad("engine: tick_hz must be 1..=500, track_samples >= 16, track_past_rev >= 0, track_future_rev > 0".into());
+            return bad("engine: tick_hz must be 1..=500, track_rebuild_s 0.1..=600, track_samples >= 16, track_past_rev >= 0, track_future_rev > 0".into());
         }
         if self.vehicles.is_empty() {
             return bad("no [[vehicle]] entries".into());
