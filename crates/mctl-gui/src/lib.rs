@@ -37,7 +37,8 @@ mod window;
 
 pub use app::{Options, Present, run};
 pub use kiosk::{
-    DEFAULT_DWELL_S as KIOSK_DEFAULT_DWELL_S, KioskConfig, Mix as KioskStyle, Order as KioskOrder,
+    DEFAULT_DWELL_S as KIOSK_DEFAULT_DWELL_S, ENGINE_TICK_HZ as KIOSK_ENGINE_TICK_HZ, KioskConfig,
+    Mix as KioskStyle, Order as KioskOrder, TRACK_REBUILD_S as KIOSK_TRACK_REBUILD_S,
 };
 /// Check the `[keys]` table, so a bad binding fails at start-up with its reason.
 pub fn check_keys(keys: &std::collections::BTreeMap<String, Vec<String>>) -> Result<(), String> {

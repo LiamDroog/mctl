@@ -178,6 +178,8 @@ struct Http {
     user_agent: String,
     cache: PathBuf,
     max_age_s: f64,
+    /// Nothing is fetched: only what is cached, however old, is served.
+    offline: bool,
     /// When each host that could not be reached last failed.
     down: RefCell<HashMap<String, Instant>>,
 }
@@ -197,7 +199,7 @@ impl Http {
             .ok()?
             .elapsed()
             .ok()?;
-        (age.as_secs_f64() < self.max_age_s)
+        (self.offline || age.as_secs_f64() < self.max_age_s)
             .then(|| std::fs::read(&path).ok())
             .flatten()
     }
@@ -205,6 +207,9 @@ impl Http {
     fn get(&self, key: &str, url: &str) -> Result<Vec<u8>, String> {
         if let Some(b) = self.cached(key) {
             return Ok(b);
+        }
+        if self.offline {
+            return Err(format!("offline and {key} is not cached"));
         }
         let host = host_of(url).to_owned();
         if let Some(at) = self.down.borrow().get(&host)
@@ -407,11 +412,12 @@ pub fn run(
         user_agent,
         cache: cache_dir.join("sky"),
         max_age_s: cfg.cache_s,
+        offline,
         down: RefCell::default(),
     };
     while let Ok((vehicle, req)) = requests.recv() {
         let state = if offline {
-            // Cached pictures still work offline; the cache layer answers before any request is made.
+            // Cached pictures still work offline; the HTTP layer answers from the cache and never connects.
             match resolve(&http, &cfg, &req) {
                 Ok(r) => ready(&cfg, r),
                 Err(_) => FieldState::Unavailable("offline and not cached".into()),
@@ -568,5 +574,32 @@ mod tests {
             "cds.unistra.fr"
         );
         assert_eq!(host_of("https://a.b?c"), "a.b");
+    }
+
+    fn http(dir: &Path, offline: bool, max_age_s: f64) -> Http {
+        Http {
+            agent: ureq::Agent::config_builder().build().into(),
+            user_agent: "test".into(),
+            cache: dir.to_owned(),
+            max_age_s,
+            offline,
+            down: RefCell::default(),
+        }
+    }
+
+    #[test]
+    fn offline_serves_the_cache_at_any_age_and_never_connects() {
+        let dir = std::env::temp_dir().join(format!("mctl-sky-offline-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("old.txt"), b"cached").unwrap();
+        // Nothing listens on port 1, so a request would fail with a connection error, not "offline".
+        let url = "http://127.0.0.1:1/x";
+        let online = http(&dir, false, 0.0);
+        assert!(online.get("old.txt", url).is_err(), "too old to use online");
+        let offline = http(&dir, true, 0.0);
+        assert_eq!(offline.get("old.txt", url).unwrap(), b"cached");
+        let err = offline.get("missing.txt", url).unwrap_err();
+        assert!(err.starts_with("offline and missing.txt"), "{err}");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
