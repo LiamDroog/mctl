@@ -16,8 +16,9 @@ change behaviour.
   (path among the planets' orbits, from ecliptic north), distance from the Sun, light time to Earth, heliocentric
   speed and ecliptic direction, and line art of each spacecraft. A new `regime = "deep"` selects these pages.
 - Three themes: Cosmonaut (red and amber, Soviet control room), Teletext (seven saturated colours on black) and
-  Nostromo (cold teal with an orange alarm). They follow Retrowave in the `T` cycle. The Pi display's theme set is
-  unchanged.
+  Nostromo (cold teal with an orange alarm). They follow Retrowave in the `T` cycle, and the Pi display's `T` cycle has them too.
+- `--kiosk-theme-cycle` shows each kiosk scene in a different random theme. `install-display.sh --args` sets the
+  arguments the service runs with.
 
 ### Changed
 

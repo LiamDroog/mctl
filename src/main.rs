@@ -132,6 +132,9 @@ struct Cli {
     /// order, or one vehicle at a time (random vehicle order) with all its scenes before the next.
     #[arg(long, global = true, value_enum, default_value = "sequential")]
     kiosk_order: KioskOrderArg,
+    /// With `--kiosk`, change to another random theme with every scene.
+    #[arg(long, global = true)]
+    kiosk_theme_cycle: bool,
     /// With `--kiosk`, only these vehicles (comma-separated ids from the configuration).
     #[arg(long, global = true, value_delimiter = ',', value_name = "IDS")]
     kiosk_vehicles: Vec<String>,
@@ -668,6 +671,7 @@ fn main() -> Result<()> {
                         dwell_s: cli.dwell,
                         mix: cli.kiosk_style.into(),
                         order: cli.kiosk_order.into(),
+                        cycle_themes: cli.kiosk_theme_cycle,
                         vehicles: cli.kiosk_vehicles.clone(),
                     }),
                     present: match g.present {

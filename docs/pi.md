@@ -86,7 +86,7 @@ The network is the only other need: with no network, `mctl --kiosk --offline` ru
 sudo packaging/pi/install-display.sh --user pi --bin /home/pi/mctl/bin/mctl --enable
 ```
 
-(`--user` is the account to run as, `--bin` the aarch64 binary; `--dry-run` prints the unit.) It needs
+(`--user` is the account to run as, `--bin` the aarch64 binary, `--args` what to run it with, by default `--kiosk`, for example `--args "--kiosk --kiosk-order random --kiosk-theme-cycle"`; `--dry-run` prints the unit.) It needs
 `cage` and `seatd`. For a display-only Pi, also boot without the desktop:
 `sudo systemctl set-default multi-user.target`. `--kiosk` caps the frame rate at 20 (`--max-fps` overrides) and
 turns on `--allow-software`, since a Pi 3 has no Vulkan GPU and runs Mesa's software renderer (llvmpipe). The

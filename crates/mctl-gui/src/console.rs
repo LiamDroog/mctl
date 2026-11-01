@@ -133,6 +133,8 @@ struct Kiosk {
     dwell_s: f64,
     mix: crate::kiosk::Mix,
     order: crate::kiosk::Order,
+    /// Whether each scene is shown in a different random theme.
+    cycle_themes: bool,
     /// Vehicles to show; empty for all.
     only: Vec<String>,
     rng: crate::kiosk::Rng,
@@ -600,6 +602,7 @@ impl Console {
             dwell_s: cfg.dwell_s,
             mix: cfg.mix,
             order: cfg.order,
+            cycle_themes: cfg.cycle_themes,
             only: cfg.vehicles,
             rng: crate::kiosk::Rng::from_clock(),
             plan: Vec::new(),
@@ -654,8 +657,13 @@ impl Console {
         }
         let scene = k.plan.get(k.pos).copied().unwrap_or(0);
         let out = (scene, k.held);
+        let new_theme = (step != 0 && k.cycle_themes)
+            .then(|| k.rng.other_than(self.themes.len(), self.theme_idx));
         if let Some(crate::kiosk::Scene::Vehicle(v, _)) = scenes.get(out.0) {
             self.vehicle_id = v.id.clone();
+        }
+        if let Some(i) = new_theme {
+            self.set_theme(i);
         }
         Some(out)
     }
@@ -1126,6 +1134,35 @@ mod tests {
     }
 
     #[test]
+    fn the_kiosk_changes_theme_with_every_scene_when_asked_and_not_otherwise() {
+        for cycle in [false, true] {
+            let (mut c, _rx) = console();
+            let w = crate::kiosk::test_world(3);
+            c.set_kiosk(crate::kiosk::KioskConfig {
+                dwell_s: 10.0,
+                mix: crate::kiosk::Mix::Mixed,
+                order: crate::kiosk::Order::Sequential,
+                cycle_themes: cycle,
+                vehicles: Vec::new(),
+            });
+            c.advance_kiosk(&w);
+            let mut seen = Vec::new();
+            for n in 1..=12 {
+                let before = c.theme_idx;
+                c.now_s = 20.0 * f64::from(n);
+                c.advance_kiosk(&w);
+                if cycle {
+                    assert_ne!(c.theme_idx, before, "scene {n} kept the theme");
+                } else {
+                    assert_eq!(c.theme_idx, before);
+                }
+                seen.push(c.theme_idx);
+            }
+            assert_eq!(seen.iter().any(|&i| i != seen[0]), cycle);
+        }
+    }
+
+    #[test]
     fn the_kiosk_cycles_on_its_dwell_and_ignores_the_operating_keys() {
         let (mut c, _rx) = console();
         let w = crate::kiosk::test_world(3);
@@ -1133,6 +1170,7 @@ mod tests {
             dwell_s: 10.0,
             mix: crate::kiosk::Mix::Mixed,
             order: crate::kiosk::Order::Sequential,
+            cycle_themes: false,
             vehicles: Vec::new(),
         });
         assert!(!c.toggles.any(), "the CRT does the effects");

@@ -6,6 +6,7 @@
 # --user    the account the display runs as (it needs to be in the video, render and input groups, as the
 #           first user Raspberry Pi OS creates is)
 # --bin     the mctl binary to run (built for aarch64; see docs/pi.md for cross-building)
+# --args    the arguments to run it with (default --kiosk), e.g. "--kiosk --kiosk-order random --kiosk-theme-cycle"
 # --enable  also start it at every boot (otherwise only install it: `systemctl start mctl-display` to try)
 # --dry-run print the unit instead of installing it
 #
@@ -13,11 +14,12 @@
 #   sudo systemctl set-default multi-user.target
 set -euo pipefail
 
-user="" bin="" enable=0 dry=0
+user="" bin="" args="--kiosk" enable=0 dry=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --user) user="${2:?--user needs a name}"; shift 2 ;;
         --bin) bin="${2:?--bin needs a path}"; shift 2 ;;
+        --args) args="${2:?--args needs the mctl arguments}"; shift 2 ;;
         --enable) enable=1; shift ;;
         --dry-run) dry=1; shift ;;
         *) echo "install-display.sh: unknown argument $1" >&2; exit 2 ;;
@@ -29,7 +31,7 @@ if [ -z "$user" ] || [ -z "$bin" ]; then
 fi
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-unit="$(sed -e "s|@USER@|$user|g" -e "s|@BIN@|$bin|g" "$here/mctl-display.service.in")"
+unit="$(sed -e "s|@USER@|$user|g" -e "s|@BIN@|$bin|g" -e "s|@ARGS@|$args|g" "$here/mctl-display.service.in")"
 
 if [ "$dry" = 1 ]; then
     printf '%s\n' "$unit"
