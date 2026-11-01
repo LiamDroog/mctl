@@ -1,7 +1,7 @@
 # mctl
 
 mctl is a spacecraft display written in Rust. It follows the ISS, the Crew and Cargo Dragons that visit it,
-Hubble, JWST and Roman, and tries to look like a retro flight control room monitor: a 3D orbit map, ground track, sky plot,
+Hubble, JWST, Roman, the Tiangong station, and Voyager 1 and 2 and New Horizons, and tries to look like a retro flight control room monitor: a 3D orbit map, ground track, sky plot,
 pass predictions, a maneuver planner, and live telemetry from the ISS. I wanted something to leave running on
 a screen at home.
 
@@ -137,7 +137,7 @@ mctl pulls live data where available. These contain:
 - ISS trajectory: NASA's public ephemeris. ISS telemetry: the public ISSLIVE feed, over its Lightstreamer
   endpoint. That isn't an official API and it could change or vanish depending what their funding looks like ( :( )
 - Earth orientation and leap seconds: IERS and USNO.
-- JWST and Roman trajectories: [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/).
+- JWST, Roman, Voyager and New Horizons trajectories: [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/).
 - JWST visit plans and Hubble reports: [STScI](https://www.stsci.edu).
 - Sky pictures: the Digitized Sky Survey (DSS2) through CDS Strasbourg, see the
   [DSS acknowledgement](https://archive.stsci.edu/dss/acknowledging.html).

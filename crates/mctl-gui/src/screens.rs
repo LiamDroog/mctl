@@ -51,9 +51,11 @@ fn sub_title(inp: &PageInput<'_>) -> String {
     if subs.len() > 1 {
         let sub = subs[inp.sub.min(subs.len() - 1)];
         // At L2 the orbit-map and elements sub-pages show different things under the same keys.
-        let sub = match (is_l2(inp), inp.page, inp.sub) {
-            (true, Page::Traj, 0) => "HALO ORBIT",
-            (true, Page::Traj, 2) => "DISTANCE AND ANGLE",
+        let sub = match (is_l2(inp), is_deep(inp), inp.page, inp.sub) {
+            (true, _, Page::Traj, 0) => "HALO ORBIT",
+            (true, _, Page::Traj, 2) => "DISTANCE AND ANGLE",
+            (_, true, Page::Traj, 0) => "SOLAR SYSTEM",
+            (_, true, Page::Traj, 2) => "DISTANCE AND DIRECTION",
             _ => sub,
         };
         format!("{} / {sub}", inp.page.title())
@@ -199,7 +201,7 @@ fn footer(grid: &mut Grid, inp: &PageInput<'_>) -> Vec<(usize, usize, usize, Pag
         (
             format!(
                 "{}  {common}",
-                if is_l2(inp) && matches!(inp.page, Page::Master | Page::Traj) {
+                if (is_l2(inp) || is_deep(inp)) && matches!(inp.page, Page::Master | Page::Traj) {
                     "TAB SUBPAGE".to_owned()
                 } else {
                     page_hints(inp.page, inp.sub, k)
@@ -1683,6 +1685,11 @@ fn basis_flag(basis: &str) -> String {
     }
 }
 
+fn is_deep(inp: &PageInput<'_>) -> bool {
+    inp.vehicle
+        .is_some_and(|v| v.regime == mctl_core::config::Regime::Deep)
+}
+
 fn is_l2(inp: &PageInput<'_>) -> bool {
     inp.vehicle
         .is_some_and(|v| v.regime == mctl_core::config::Regime::L2)
@@ -1696,6 +1703,9 @@ pub fn render_body(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             (Page::Master, _) if is_l2(inp) => crate::deep::master(grid, inp),
             (Page::Traj, 0) if is_l2(inp) => crate::deep::traj_orbit(grid, inp),
             (Page::Traj, 2) if is_l2(inp) => crate::deep::traj_series(grid, inp),
+            (Page::Master, _) if is_deep(inp) => crate::interplanetary::master(grid, inp),
+            (Page::Traj, 0) if is_deep(inp) => crate::interplanetary::traj_orbit(grid, inp),
+            (Page::Traj, 2) if is_deep(inp) => crate::interplanetary::traj_series(grid, inp),
             (Page::Traj, 3) => crate::planner_page::planner(grid, inp),
             (Page::Ops, _) => crate::deep::ops(grid, inp),
             (Page::Prox, _) => crate::vehicle_pages::prox(grid, inp),

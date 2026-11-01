@@ -189,6 +189,8 @@ pub enum PlotKind {
     TopView,
     /// Distance, off-axis angle, Y/Z offsets or range rate against time, from the track.
     DeepSeries(DeepSeries),
+    /// A deep-space vehicle's path among the planets' orbits, from ecliptic north, on a square-root radial scale.
+    SolarSystem,
     /// R-bar/V-bar relative motion of the visiting vehicles about the station.
     Prox,
     /// Altitude of the nominal and planned orbits against time.
@@ -207,6 +209,12 @@ pub enum DeepSeries {
     OffAxis,
     Offsets,
     RangeRate,
+    /// Deep space: distance from the Sun (AU), from Earth as light time (hours), and the heliocentric
+    /// ecliptic longitude and latitude (degrees).
+    SunDistance,
+    EarthLight,
+    EclLon,
+    EclLat,
 }
 
 pub struct Grid {

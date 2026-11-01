@@ -48,6 +48,9 @@ const EVENT_STEPS_PER_REV: f64 = 200.0;
 const TRACK_REBUILD_S: f64 = 1.0;
 /// Track window for an L2 vehicle, days either side of now (a halo orbit takes about six months).
 const DEEP_TRACK_DAYS: f64 = 90.0;
+/// Half-width of the track window of a deep-space vehicle, days: a decade each way shows where it has been
+/// and where it is going without the path being a straight line.
+const INTERPLANETARY_TRACK_DAYS: f64 = 3650.0;
 /// The predicted relative path is recomputed when the clock has moved this far, seconds.
 const PROX_PREDICT_REFRESH_S: f64 = 30.0;
 /// Pictures shown per vehicle: JWST's current and next targets, or Hubble's first programs.
@@ -1188,8 +1191,9 @@ impl Model {
             .collect::<Vec<_>>()
             .join(";");
         for (vm, view) in self.vehicles.iter().zip(vehicles.iter_mut()) {
-            // A vehicle at L2 is above the horizon for about half of every day; passes are meaningless.
-            if vm.def.regime == Regime::L2 {
+            // A vehicle at L2 is above the horizon for about half of every day, and one in deep space for as long
+            // as the sky turns it into view; passes are meaningless for both.
+            if vm.def.regime != Regime::Earth {
                 continue;
             }
             let mut parts: Vec<Arc<dyn Trajectory>> = Vec::new();
@@ -2044,14 +2048,30 @@ fn vehicle_view(
             None
         }
     };
-    let deep_view = (v.def.regime == Regime::L2)
+    let deep_view = (v.def.regime != Regime::Earth)
         .then(|| {
             solution.as_ref().map(|s| {
                 let (r, vel) = (s.state_gcrf.r, s.state_gcrf.v);
                 let sun = nalgebra::Vector3::from(s.sun_gcrf_km);
+                if v.def.regime == Regime::Deep {
+                    // The Sun's velocity relative to Earth, by differencing the analytic Sun over a minute.
+                    let at = |dt: f64| sun_gcrf(t.plus(dt), orientation.dut1_s).unwrap_or(sun);
+                    let sun_v = (at(30.0) - at(-30.0)) / 60.0;
+                    let d = mctl_astro::interplanetary::summary(&r, &vel, &sun, &sun_v);
+                    return DeepView {
+                        dist_km: d.earth_dist_km,
+                        sun_dist_km: d.sun_dist_km,
+                        speed_km_s: d.helio_speed_km_s,
+                        range_rate_km_s: d.range_rate_km_s,
+                        light_time_s: d.light_time_s,
+                        off_axis_deg: d.ecl_lat_deg,
+                        rot_km: d.helio_ecl_km,
+                    };
+                }
                 let d = mctl_astro::l2::summary(&r, &vel, &sun);
                 DeepView {
                     dist_km: d.dist_km,
+                    sun_dist_km: (r - sun).norm(),
                     speed_km_s: d.speed_km_s,
                     range_rate_km_s: d.range_rate_km_s,
                     light_time_s: d.light_time_s,
@@ -2158,6 +2178,10 @@ fn build_track(
     let (past, future) = match regime {
         Regime::Earth => (past_rev * period, future_rev * period),
         Regime::L2 => (DEEP_TRACK_DAYS * 86_400.0, DEEP_TRACK_DAYS * 86_400.0),
+        Regime::Deep => (
+            INTERPLANETARY_TRACK_DAYS * 86_400.0,
+            INTERPLANETARY_TRACK_DAYS * 86_400.0,
+        ),
     };
     let dt = (past + future) / (samples - 1) as f64;
     let mut points = Vec::with_capacity(samples);
@@ -2185,7 +2209,10 @@ fn build_track(
             lon_deg: g.lon_deg,
             alt_km: g.alt_km,
             illumination: illumination(&s.r, &sun) as f32,
-            rot_km: mctl_astro::l2::to_rotating(&s.r, &sun),
+            rot_km: match regime {
+                Regime::Deep => mctl_astro::interplanetary::to_ecliptic(&(s.r - sun)).into(),
+                _ => mctl_astro::l2::to_rotating(&s.r, &sun),
+            },
         });
     }
     let now_index = points.partition_point(|p| p.t.0 < now.0);
@@ -2201,7 +2228,7 @@ fn build_track(
         .into_iter()
         .map(|e| (e.t, e.kind))
         .collect(),
-        Regime::L2 => Vec::new(),
+        Regime::L2 | Regime::Deep => Vec::new(),
     };
     Track {
         revision,
@@ -2464,6 +2491,48 @@ mod tests {
         assert!(v.passes.is_empty(), "no pass prediction for an L2 vehicle");
         // An Earth-orbit vehicle has no deep view.
         assert!(w.vehicles[0].deep.is_none());
+    }
+
+    /// 13 five-day Voyager 1 vectors from a real Horizons reply (2026-10-01 .. 2026-12-01).
+    const HORIZONS_VOYAGER1: &str =
+        include_str!("../../mctl-astro/fixtures/horizons-voyager1-sample.txt");
+
+    #[test]
+    fn an_interplanetary_vehicle_gets_sun_distance_and_ecliptic_coordinates() {
+        let mut m = model();
+        let o = mctl_astro::horizons::parse(HORIZONS_VOYAGER1, Utc(0.0)).unwrap();
+        let t = Utc(o.states[6].t.0 + 3600.0);
+        m.apply(Event::Data {
+            key: SourceKey::Horizons("voyager-1".into()),
+            payload: Payload::Horizons(Box::new(o)),
+            info: DataInfo {
+                from_cache: false,
+                fetched_at: t,
+                raw: None,
+            },
+        });
+        let w = m.world(t);
+        let v = w.vehicles.iter().find(|v| v.id == "voyager-1").unwrap();
+        let d = v.deep.expect("an interplanetary vehicle has a deep view");
+        let au = |km: f64| km / mctl_astro::interplanetary::KM_PER_AU;
+        // Voyager 1 is about 170 AU out, a little further from Earth than from the Sun by Earth's offset.
+        assert!(
+            (160.0..190.0).contains(&au(d.sun_dist_km)),
+            "{}",
+            au(d.sun_dist_km)
+        );
+        assert!((au(d.dist_km) - au(d.sun_dist_km)).abs() < 1.1);
+        // Light time is distance over c: about a day.
+        assert!(
+            (20.0 * 3600.0..28.0 * 3600.0).contains(&d.light_time_s),
+            "{}",
+            d.light_time_s
+        );
+        // The heliocentric speed is near 17 km/s, and the vehicle is well north of the ecliptic.
+        assert!((16.0..18.0).contains(&d.speed_km_s), "{}", d.speed_km_s);
+        assert!((20.0..50.0).contains(&d.off_axis_deg), "{}", d.off_axis_deg);
+        assert!((d.rot_km.iter().map(|c| c * c).sum::<f64>().sqrt() - d.sun_dist_km).abs() < 1.0e3);
+        assert!(v.passes.is_empty() && v.track.as_ref().unwrap().events.is_empty());
     }
 
     #[test]

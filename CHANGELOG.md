@@ -12,6 +12,13 @@ change behaviour.
   smaller than 1920 x 1080 (a 1080p monitor's window is a title bar short of it), instead of clipping panels.
   The Pi display is unchanged.
 
+### Added
+
+- Four more vehicles: the Tiangong space station (Earth orbit, from CelesTrak elements), and Voyager 1, Voyager 2
+  and New Horizons, which are on escape trajectories and come from JPL Horizons. They get a solar-system plot
+  (path among the planets' orbits, from ecliptic north), distance from the Sun, light time to Earth, heliocentric
+  speed and ecliptic direction, and line art of each spacecraft. A new `regime = "deep"` selects these pages.
+
 ## [0.1.1] - 2026-11-01
 
 ### Changed

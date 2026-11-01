@@ -13,6 +13,7 @@ use crate::theme::Theme;
 
 /// Mean distance of the Moon, km: the scale bar of the L2 top view.
 const MOON_ORBIT_KM: f64 = 384_400.0;
+use mctl_astro::interplanetary::KM_PER_AU;
 /// Hours of the JWST timeline before and after now.
 const TIMELINE_PAST_H: f64 = 6.0;
 const TIMELINE_FUTURE_H: f64 = 42.0;
@@ -98,6 +99,7 @@ pub fn paint(
                 PlotKind::Halo => halo(painter, theme, px, v, now),
                 PlotKind::TopView => top_view(painter, theme, px, v, now),
                 PlotKind::DeepSeries(s) => deep_series(painter, theme, px, v, now, *s),
+                PlotKind::SolarSystem => solar_system(painter, theme, px, v),
                 PlotKind::PlanAltitude | PlotKind::PlanSeparation => {}
                 PlotKind::Prox => prox_plot(painter, theme, px, prox),
                 PlotKind::Timeline => timeline(painter, theme, px, v, now),
@@ -749,6 +751,39 @@ fn deep_series(
                     .collect(),
             ),
         ],
+        DeepSeries::SunDistance => vec![(
+            "DISTANCE FROM THE SUN (AU)",
+            pts.iter()
+                .map(|q| (q.t.0, (norm3(&q.rot_km) / KM_PER_AU) as f32))
+                .collect(),
+        )],
+        DeepSeries::EarthLight => vec![(
+            "ONE-WAY LIGHT TIME TO EARTH (hours)",
+            pts.iter()
+                .map(|q| (q.t.0, (dist(q) / mctl_astro::l2::C_KM_S / 3600.0) as f32))
+                .collect(),
+        )],
+        DeepSeries::EclLon => vec![(
+            "ECLIPTIC LONGITUDE (deg)",
+            unwrapped_degrees(
+                pts.iter()
+                    .map(|q| (q.t.0, q.rot_km[1].atan2(q.rot_km[0]).to_degrees())),
+            ),
+        )],
+        DeepSeries::EclLat => vec![(
+            "ECLIPTIC LATITUDE (deg)",
+            pts.iter()
+                .map(|q| {
+                    (
+                        q.t.0,
+                        (q.rot_km[2] / norm3(&q.rot_km))
+                            .clamp(-1.0, 1.0)
+                            .asin()
+                            .to_degrees() as f32,
+                    )
+                })
+                .collect(),
+        )],
         DeepSeries::RangeRate => vec![(
             "RANGE RATE, FROM TRACK (m/s)",
             pts.windows(2)
@@ -762,6 +797,137 @@ fn deep_series(
         )],
     };
     time_plot(painter, theme, px, &series, now);
+}
+
+fn norm3(v: &[f64; 3]) -> f64 {
+    v.iter().map(|c| c * c).sum::<f64>().sqrt()
+}
+
+/// Angles in degrees made continuous across the 180 degree wrap, so a slow drift past it is not a jump.
+fn unwrapped_degrees(angles: impl Iterator<Item = (f64, f64)>) -> Vec<(f64, f32)> {
+    let mut out = Vec::new();
+    let (mut offset, mut prev) = (0.0, None::<f64>);
+    for (t, a) in angles {
+        if let Some(p) = prev {
+            if a - p > 180.0 {
+                offset -= 360.0;
+            } else if a - p < -180.0 {
+                offset += 360.0;
+            }
+        }
+        prev = Some(a);
+        out.push((t, (a + offset) as f32));
+    }
+    out
+}
+
+/// The planets' mean distances from the Sun, AU, with their names, for the solar-system plot.
+const PLANET_RINGS: [(f64, &str); 5] = [
+    (1.0, "EARTH"),
+    (5.2, "JUPITER"),
+    (9.58, "SATURN"),
+    (19.2, "URANUS"),
+    (30.07, "NEPTUNE"),
+];
+/// About where the Sun's wind gives way to interstellar space: Voyager 1 crossed it at 121.6 AU and
+/// Voyager 2 at 119 AU. Drawn as a guide, not a boundary.
+const HELIOPAUSE_AU: f64 = 120.0;
+
+/// A deep-space vehicle's path among the planets' orbits, seen from ecliptic north: ecliptic longitude is
+/// the angle (0 to the right, counter-clockwise) and the radius goes as the square root of the distance,
+/// so the inner planets are not crushed against the Sun by a vehicle a hundred AU out.
+fn solar_system(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleView) {
+    let Some(track) = v.track.as_deref().filter(|t| t.points.len() >= 2) else {
+        return;
+    };
+    let r = rect_of(px).shrink(8.0);
+    if r.width() < 100.0 || r.height() < 80.0 {
+        return;
+    }
+    let p = &theme.palette;
+    let font = crate::fonts::font_id(theme);
+    let au = |q: &TrackPoint| norm3(&q.rot_km) / KM_PER_AU;
+    // Out to the vehicle's farthest point in the window, but never less than Neptune's orbit.
+    let far = track
+        .points
+        .iter()
+        .map(au)
+        .fold(PLANET_RINGS[4].0 * 1.15, f64::max)
+        * 1.08;
+    let c = r.center();
+    let radius = (r.width().min(r.height()) / 2.0 - 4.0).max(10.0);
+    let at = |x_au: f64, y_au: f64| {
+        let d = x_au.hypot(y_au);
+        let k = if d > 0.0 {
+            (d / far).sqrt() as f32 * radius / d as f32
+        } else {
+            0.0
+        };
+        Pos2::new(c.x + x_au as f32 * k, c.y - y_au as f32 * k)
+    };
+    let ring = |au_r: f64| (au_r / far).sqrt() as f32 * radius;
+    for (i, (d, name)) in PLANET_RINGS.iter().enumerate() {
+        painter.add(Shape::dashed_line(
+            &circle_points(c, ring(*d)),
+            Stroke::new(1.0, p.dim.to_egui()),
+            3.0,
+            4.0,
+        ));
+        // Labels step round the ring so neighbouring ones do not collide at this scale.
+        let a = 0.9 + 0.9 * i as f32;
+        painter.text(
+            c + vec2(ring(*d) * a.cos(), ring(*d) * a.sin()),
+            Align2::CENTER_CENTER,
+            *name,
+            font.clone(),
+            fade(p.dim.to_egui(), 220),
+        );
+    }
+    if HELIOPAUSE_AU < far {
+        painter.add(Shape::dashed_line(
+            &circle_points(c, ring(HELIOPAUSE_AU)),
+            Stroke::new(1.0, p.info.to_egui()),
+            8.0,
+            5.0,
+        ));
+        painter.text(
+            c + vec2(0.0, -ring(HELIOPAUSE_AU) - 2.0),
+            Align2::CENTER_BOTTOM,
+            "HELIOPAUSE ~120 AU",
+            font.clone(),
+            p.info.to_egui(),
+        );
+    }
+    painter.circle_filled(c, 3.5, p.bright.to_egui());
+    painter.text(
+        c + vec2(-6.0, -4.0),
+        Align2::RIGHT_BOTTOM,
+        "SUN",
+        font.clone(),
+        p.bright.to_egui(),
+    );
+    painter.text(
+        Pos2::new(r.right(), r.bottom()),
+        Align2::RIGHT_BOTTOM,
+        "LONGITUDE 0 ->   RADIUS ~ SQRT(AU)",
+        font.clone(),
+        p.dim.to_egui(),
+    );
+    let pts: Vec<Pos2> = track
+        .points
+        .iter()
+        .map(|q| at(q.rot_km[0] / KM_PER_AU, q.rot_km[1] / KM_PER_AU))
+        .collect();
+    past_future(painter, theme, &pts, track.now_index);
+    if let Some(d) = v.deep {
+        let here = at(d.rot_km[0] / KM_PER_AU, d.rot_km[1] / KM_PER_AU);
+        now_marker(
+            painter,
+            theme,
+            here,
+            &format!("{} {:.1} AU", v.name, d.sun_dist_km / KM_PER_AU),
+        );
+    }
 }
 
 fn time_plot(

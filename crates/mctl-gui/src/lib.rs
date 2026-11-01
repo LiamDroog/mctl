@@ -17,6 +17,7 @@ mod fonts;
 mod globe;
 mod gpu;
 mod grid;
+mod interplanetary;
 mod keys;
 mod kiosk;
 mod offline;

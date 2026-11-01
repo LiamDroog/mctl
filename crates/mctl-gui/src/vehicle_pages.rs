@@ -193,6 +193,7 @@ fn facts(l: &mut Lines<'_>, v: &VehicleView, now: mctl_core::time::Utc) {
             match v.regime {
                 mctl_core::config::Regime::Earth => "EARTH ORBIT",
                 mctl_core::config::Regime::L2 => "SUN-EARTH L2 (HALO)",
+                mctl_core::config::Regime::Deep => "INTERPLANETARY (ESCAPE)",
             }
         ),
         fg,

@@ -176,6 +176,31 @@ impl Model {
         }
     }
 
+    /// A parabolic dish about the y axis, vertex at height `vy`, opening toward +y, with ribs and a
+    /// subreflector on three struts at the focus.
+    fn dish(&mut self, vy: f32, rim_r: f32, depth: f32, c: (f32, f32), ribs: usize, feed_h: f32) {
+        let ring_at = |m: &mut Model, f: f32, major: bool| -> Vec<P3> {
+            m.ring_y(20, rim_r * f, vy + depth * f * f, c, major)
+        };
+        let rings = [
+            ring_at(self, 0.35, false),
+            ring_at(self, 0.7, false),
+            ring_at(self, 1.0, true),
+        ];
+        for k in 0..ribs {
+            let i = k * 20 / ribs;
+            let vertex = [c.0, vy, c.1];
+            self.line(vertex, rings[0][i], false);
+            self.line(rings[0][i], rings[1][i], false);
+            self.line(rings[1][i], rings[2][i], false);
+        }
+        let feed_y = vy + depth + feed_h;
+        let feed = self.ring_y(8, rim_r * 0.12, feed_y, c, true);
+        for k in 0..3 {
+            self.line(rings[2][k * 20 / 3 + 1], feed[k * 8 / 3], false);
+        }
+    }
+
     /// A hexagon in the xz plane at height `y`.
     fn hex_xz(&mut self, cx: f32, cz: f32, y: f32, r: f32, major: bool) {
         let pts: Vec<P3> = (0..6)
@@ -260,6 +285,177 @@ fn iss() -> Model {
     // The Cupola and docking ports.
     m.sphere([0.0, -8.0, -4.0], 1.0, 4, 6, false);
     m.line([0.0, -3.0, 0.0], [0.0, -1.0, 0.0], false);
+    m
+}
+
+/// Tiangong, the Chinese space station in its three-module T configuration: the Tianhe core with its node and
+/// the aft port, Wentian and Mengtian either side of the node, the big arrays, and a Shenzhou and a Tianzhou
+/// docked at the ends. One unit is one metre; the core runs along z with its node toward +z, the lab modules
+/// along x. Lengths follow the published figures (core about 16.6 m by 4.2 m, labs about 17.9 m by 4.2 m);
+/// the array layout is drawn from photographs and is approximate.
+fn tiangong() -> Model {
+    let mut m = Model::default();
+    let node_z = 7.2;
+    // Tianhe: the 4.2 m main cylinder, the narrower 2.8 m forward section, the node sphere and the aft cone.
+    m.tube_z(14, 2.1, -8.4, 4.4, (0.0, 0.0), true);
+    m.tube_z(14, 1.4, 4.4, node_z - 1.4, (0.0, 0.0), true);
+    m.sphere([0.0, 0.0, node_z], 1.45, 5, 8, true);
+    m.tube_z(14, 2.1, -9.4, -8.4, (0.0, 0.0), false);
+    m.tube_z(10, 0.9, -10.4, -9.4, (0.0, 0.0), false);
+    m.ring_z(14, 2.1, -3.0, (0.0, 0.0), false);
+    m.ring_z(14, 2.1, 1.0, (0.0, 0.0), false);
+    // Wentian and Mengtian on the node's side ports: 17.9 m by 4.2 m, with a node-side collar.
+    for side in [-1.0f32, 1.0] {
+        let (x0, x1) = (side * 1.5, side * 19.4);
+        let (lo, hi) = if side < 0.0 { (x1, x0) } else { (x0, x1) };
+        m.tube_x(14, 2.1, lo, hi, (0.0, node_z));
+        let mid = side * 10.0;
+        m.tube_x(14, 2.1, mid - 0.3, mid + 0.3, (0.0, node_z));
+        // The end port of each lab (Wentian's small airlock and Mengtian's payload hatch stay folded).
+        m.ring_z(8, 0.7, node_z + 2.1, (side * 15.0, 0.0), false);
+        // The big pair of lab arrays: from the outboard end, each a 27 m blanket reaching fore and aft.
+        let x = side * 17.2;
+        for dir in [-1.0f32, 1.0] {
+            let (z0, z1) = (node_z, node_z + dir * 27.5);
+            m.line([x, 0.0, z0], [x, 0.0, z1], false);
+            m.panel(
+                [x - 1.4, 0.0, z0.min(z1)],
+                [2.8, 0.0, 0.0],
+                [0.0, 0.0, (z1 - z0).abs()],
+                2,
+                9,
+                true,
+            );
+        }
+    }
+    // Tianhe's own arrays: two pairs of wings out of the plane of the T, each wing about 30 m by 3 m.
+    for dy in [-1.0f32, 1.0] {
+        for z in [-5.6, -0.4] {
+            m.line([0.0, dy * 2.1, z], [0.0, dy * 3.0, z], false);
+            m.panel(
+                [-1.5, if dy < 0.0 { -33.0 } else { 3.0 }, z - 1.5],
+                [3.0, 0.0, 0.0],
+                [0.0, 30.0, 0.0],
+                1,
+                8,
+                true,
+            );
+        }
+    }
+    // The robotic arms: Tianhe's long one along the core, a short one on Wentian.
+    m.line([1.4, 2.3, 2.0], [1.4, 2.5, 9.6], false);
+    m.line([1.4, 2.5, 9.6], [2.6, 3.4, 11.0], false);
+    // A Shenzhou crew ship on the forward port: orbital and descent modules, service module, two wings.
+    let sz = node_z + 1.45;
+    m.tube_z(10, 1.1, sz, sz + 2.8, (0.0, 0.0), true);
+    m.tube_z(10, 1.1, sz + 2.8, sz + 5.2, (0.0, 0.0), false);
+    m.tube_z(10, 1.2, sz + 5.2, sz + 8.0, (0.0, 0.0), true);
+    for side in [-1.0f32, 1.0] {
+        m.panel(
+            [if side < 0.0 { -8.4 } else { 1.2 }, 0.0, sz + 5.8],
+            [7.2, 0.0, 0.0],
+            [0.0, 0.0, 2.0],
+            4,
+            1,
+            false,
+        );
+    }
+    // A Tianzhou cargo ship on the aft port: a 10.6 m cylinder, 3.35 m across, with two wings.
+    m.tube_z(12, 1.65, -21.0, -10.4, (0.0, 0.0), true);
+    m.ring_z(12, 1.65, -15.0, (0.0, 0.0), false);
+    for side in [-1.0f32, 1.0] {
+        m.panel(
+            [if side < 0.0 { -9.0 } else { 1.7 }, 0.0, -20.4],
+            [7.3, 0.0, 0.0],
+            [0.0, 0.0, 2.6],
+            3,
+            1,
+            false,
+        );
+    }
+    m
+}
+
+/// Voyager 1 and 2 (the two are twins): the ten-sided bus, the 3.7 m dish, the three radioisotope generators
+/// on their boom, the science boom with the scan platform, the 13 m magnetometer boom and the two 10 m
+/// plasma-wave antennas. One unit is one metre; the dish looks along +y.
+fn voyager() -> Model {
+    let mut m = Model::default();
+    // Bus: a decagonal prism 1.8 m across the corners and 0.47 m deep, with the propellant tank's dome below.
+    m.tube_y(10, 0.9, 0.9, -0.235, 0.235, (0.0, 0.0), true);
+    m.ring_y(10, 0.45, 0.235, (0.0, 0.0), false);
+    // The 3.66 m high-gain dish on the top deck, with its subreflector on three struts.
+    m.dish(0.5, 1.83, 0.75, (0.0, 0.0), 10, 1.1);
+    for k in 0..5 {
+        let a = k as f32 / 5.0 * std::f32::consts::TAU;
+        m.line(
+            [0.4 * a.cos(), 0.235, 0.4 * a.sin()],
+            [0.0, 0.5, 0.0],
+            false,
+        );
+    }
+    // RTG boom out one side: a lattice with three generators stacked on its end.
+    m.line([-0.9, 0.0, 0.0], [-3.6, 0.0, 0.0], true);
+    for z in [-0.12f32, 0.12] {
+        m.line([-0.9, 0.12, z], [-3.6, 0.12, z], false);
+    }
+    for k in 0..3 {
+        let x0 = -3.6 - 0.8 * k as f32;
+        m.tube_x(8, 0.2, x0 - 0.7, x0, (0.0, 0.0));
+    }
+    // Science boom the other way: a short mast with the scan platform and its cameras at the end.
+    m.line([0.9, 0.0, 0.0], [3.0, 0.0, 0.0], true);
+    m.cuboid([3.0, -0.45, -0.45], [3.9, 0.45, 0.45], true);
+    m.tube_x(8, 0.22, 3.9, 4.6, (0.15, 0.0));
+    m.tube_x(8, 0.12, 3.9, 4.3, (-0.2, 0.2));
+    // The 13 m magnetometer boom, a triangular lattice along z.
+    let n = 13;
+    for k in 0..n {
+        let z0 = 0.9 + k as f32;
+        let tri = |z: f32| -> [P3; 3] { [[0.0, 0.17, z], [-0.15, -0.085, z], [0.15, -0.085, z]] };
+        let (a, b) = (tri(z0), tri(z0 + 1.0));
+        m.poly(&a, true, false);
+        for i in 0..3 {
+            m.line(a[i], b[i], k % 4 == 0);
+            m.line(a[i], b[(i + 1) % 3], false);
+        }
+    }
+    m.cuboid([-0.18, -0.18, 13.9], [0.18, 0.18, 14.4], false);
+    // The two 10 m plasma-wave antennas, a V below the bus.
+    for side in [-1.0f32, 1.0] {
+        m.line([0.0, -0.235, 0.0], [side * 5.5, -8.4, 0.0], true);
+    }
+    m
+}
+
+/// New Horizons: the triangular bus under the 2.1 m dish, the single RTG on its side, and the instrument
+/// bay. One unit is one metre; the dish looks along +y.
+fn new_horizons() -> Model {
+    let mut m = Model::default();
+    // Bus: an equilateral-ish prism, about 2.1 m on a side and 0.76 m deep, apex toward +x.
+    let tri = |y: f32| -> [P3; 3] { [[1.2, y, 0.0], [-0.9, y, 1.05], [-0.9, y, -1.05]] };
+    let (lo, hi) = (tri(-0.38), tri(0.38));
+    m.poly(&lo, true, true);
+    m.poly(&hi, true, true);
+    for i in 0..3 {
+        m.line(lo[i], hi[i], true);
+    }
+    // The dish: 2.1 m across, on the top deck, with its subreflector on struts.
+    m.dish(0.5, 1.05, 0.38, (-0.2, 0.0), 8, 0.7);
+    m.line([-0.2, 0.38, 0.0], [-0.2, 0.5, 0.0], false);
+    // The RTG: a 0.4 m by 1.1 m generator on a short boom off the aft face, with cooling fins.
+    m.line([-0.9, 0.0, 0.0], [-1.4, 0.0, 0.0], false);
+    m.tube_x(10, 0.22, -2.5, -1.4, (0.0, 0.0));
+    for k in 0..4 {
+        m.ring_z(10, 0.27, 0.0, (0.0, 0.0), false);
+        let x = -1.55 - 0.25 * k as f32;
+        m.tube_x(10, 0.27, x - 0.04, x, (0.0, 0.0));
+    }
+    // Instruments on the sides: the long-range imager's aperture, the solar-wind detector and the star trackers.
+    m.tube_x(8, 0.2, 0.2, 0.9, (-0.38, 0.9));
+    m.ring_z(8, 0.16, 0.0, (0.0, 0.0), false);
+    m.cuboid([-0.5, -0.38, -1.15], [0.1, -0.1, -0.9], false);
+    m.cuboid([0.2, 0.0, 0.55], [0.5, 0.2, 0.75], false);
     m
 }
 
@@ -690,6 +886,9 @@ pub fn model(id: &str) -> Option<Model> {
         "hubble" => hubble(),
         "jwst" => jwst(),
         "roman" => roman(),
+        "tiangong" => tiangong(),
+        "voyager-1" | "voyager-2" => voyager(),
+        "new-horizons" => new_horizons(),
         "dragon-crew" => dragon_crew(),
         "dragon-cargo" => dragon_cargo(),
         "falcon9" => falcon9(),
@@ -830,11 +1029,15 @@ pub fn paint(painter: &Painter, theme: &Theme, rect_px: [u32; 4], m: &Model, t_s
 mod tests {
     use super::*;
 
-    const IDS: [&str; 9] = [
+    const IDS: [&str; 13] = [
         "iss",
         "hubble",
         "jwst",
         "roman",
+        "tiangong",
+        "voyager-1",
+        "voyager-2",
+        "new-horizons",
         "dragon-crew",
         "dragon-cargo",
         "falcon9",
@@ -854,7 +1057,7 @@ mod tests {
                 "{id}"
             );
             let r = radius(&m);
-            assert!((3.0..120.0).contains(&r), "{id} radius {r}");
+            assert!((2.0..120.0).contains(&r), "{id} radius {r}");
             assert!(
                 m.segs.iter().any(|s| s.major) && m.segs.iter().any(|s| !s.major),
                 "{id}"
@@ -880,6 +1083,10 @@ mod tests {
         let sizes: Vec<usize> = IDS.iter().map(|i| model(i).unwrap().segs.len()).collect();
         for (i, a) in IDS.iter().enumerate() {
             for b in &IDS[i + 1..] {
+                // The two Voyagers are twins, so one drawing serves both.
+                if (*a, *b) == ("voyager-1", "voyager-2") {
+                    continue;
+                }
                 assert_ne!(
                     format!("{:?}", model(a).unwrap().segs),
                     format!("{:?}", model(b).unwrap().segs),
