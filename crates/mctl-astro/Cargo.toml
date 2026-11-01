@@ -12,7 +12,7 @@ description = "Astrodynamics for mctl: SGP4, OEM, frames, pass prediction and a 
 workspace = true
 
 [dependencies]
-mctl-core = { version = "0.1.0", path = "../mctl-core" }
+mctl-core = { version = "0.1.1", path = "../mctl-core" }
 nalgebra = "0.35.0"
 ode_solvers = "0.6.2"
 serde = { version = "1.0.229", features = ["derive"] }

@@ -1637,7 +1637,7 @@ dependencies = [
 
 [[package]]
 name = "mctl"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1653,7 +1653,7 @@ dependencies = [
 
 [[package]]
 name = "mctl-astro"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mctl-core",
  "nalgebra 0.35.0",
@@ -1668,7 +1668,7 @@ dependencies = [
 
 [[package]]
 name = "mctl-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "arc-swap",
  "directories",
@@ -1683,7 +1683,7 @@ dependencies = [
 
 [[package]]
 name = "mctl-gui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -1709,7 +1709,7 @@ dependencies = [
 
 [[package]]
 name = "mctl-sim"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mctl-astro",
  "mctl-core",
@@ -1723,7 +1723,7 @@ dependencies = [
 
 [[package]]
 name = "mctl-sources"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1746,7 +1746,7 @@ dependencies = [
 
 [[package]]
 name = "mctl-store"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mctl-core",
  "rusqlite",
@@ -1758,7 +1758,7 @@ dependencies = [
 
 [[package]]
 name = "mctl-tui"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "memchr"

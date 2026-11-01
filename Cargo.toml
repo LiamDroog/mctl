@@ -7,7 +7,7 @@ members = [
 
 [workspace.package]
 edition = "2024"
-version = "0.1.0"
+version = "0.1.1"
 publish = false
 license = "GPL-3.0-or-later"
 repository = "https://github.com/LiamDroog/mctl"
@@ -52,11 +52,11 @@ strip = true
 [dependencies]
 anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
-mctl-core = { version = "0.1.0", path = "crates/mctl-core" }
-mctl-gui = { version = "0.1.0", path = "crates/mctl-gui" }
+mctl-core = { version = "0.1.1", path = "crates/mctl-core" }
+mctl-gui = { version = "0.1.1", path = "crates/mctl-gui" }
 mctl-store = { path = "crates/mctl-store" }
-mctl-sim = { version = "0.1.0", path = "crates/mctl-sim" }
-mctl-sources = { version = "0.1.0", path = "crates/mctl-sources" }
+mctl-sim = { version = "0.1.1", path = "crates/mctl-sim" }
+mctl-sources = { version = "0.1.1", path = "crates/mctl-sources" }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "time", "signal"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
