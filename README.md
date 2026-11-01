@@ -43,7 +43,7 @@ The function keys switch pages and Tab steps through the sub-pages of each one.
 ### A release
 
 Each [release](https://github.com/LiamDroog/mctl/releases) has a tarball for x86-64 and one for aarch64 (a
-Raspberry Pi 3 or later running a 64-bit OS), plus checksums. Unpack one and run `./mctl`. If it complains about
+Raspberry Pi 3 or later running a 64-bit OS), plus checksums. They are built against glibc 2.35, so they need Ubuntu 22.04, Debian 12 or newer. Unpack one and run `./mctl`. If it complains about
 a missing library, `packaging/bootstrap.sh` in the tarball works out what's missing and installs it, and
 `packaging/install.sh` puts the binary and a desktop entry in `~/.local`. One can also just run `packaging/bootstrap.sh` to install from source, details below.
 

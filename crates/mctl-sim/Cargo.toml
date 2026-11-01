@@ -12,10 +12,10 @@ description = "The mctl engine: simulation clock, propagation, passes and the ma
 workspace = true
 
 [dependencies]
-mctl-astro = { version = "0.1.0", path = "../mctl-astro" }
-mctl-core = { version = "0.1.0", path = "../mctl-core" }
-mctl-sources = { version = "0.1.0", path = "../mctl-sources" }
-mctl-store = { version = "0.1.0", path = "../mctl-store" }
+mctl-astro = { version = "0.1.1", path = "../mctl-astro" }
+mctl-core = { version = "0.1.1", path = "../mctl-core" }
+mctl-sources = { version = "0.1.1", path = "../mctl-sources" }
+mctl-store = { version = "0.1.1", path = "../mctl-store" }
 nalgebra = "0.35.0"
 tracing = "0.1.44"
 

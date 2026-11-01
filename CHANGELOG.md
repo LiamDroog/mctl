@@ -6,6 +6,12 @@ change behaviour.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-01
+
+### Changed
+
+- Updated rusqlite to 0.41.1.
+
 ### Fixed
 
 - The window no longer needs `--allow-software` on a machine with only a software Vulkan driver (WSL, a VM): it
