@@ -39,6 +39,94 @@ fn rect_of(px: [u32; 4]) -> Rect {
     Rect::from_min_size(Pos2::new(x, y), vec2(w, h))
 }
 
+/// The text labels of one plot, placed in priority order. A label that would overlap one already placed is
+/// left out, and one that sticks out of the plot is slid back inside (or left out if it cannot fit), so a
+/// small plot loses its minor labels instead of printing them over each other.
+struct Labels<'a> {
+    painter: &'a Painter,
+    font: egui::FontId,
+    bounds: Rect,
+    taken: Vec<Rect>,
+}
+
+impl<'a> Labels<'a> {
+    fn new(painter: &'a Painter, theme: &Theme, bounds: Rect) -> Self {
+        Self {
+            painter,
+            font: crate::fonts::font_id(theme),
+            bounds,
+            taken: Vec::new(),
+        }
+    }
+
+    /// Set `text` beside the point `at`, on the right if there is room, else the left, above or below, so the
+    /// label never lands on the marker it names; whether it was drawn. A label that fits nowhere without
+    /// moving is slid inside the plot on the right, like `text`.
+    fn text_near(&mut self, at: Pos2, gap: f32, text: impl ToString, colour: Color32) -> bool {
+        let text = text.to_string();
+        let galley = self
+            .painter
+            .layout_no_wrap(text.clone(), self.font.clone(), colour);
+        let size = galley.size();
+        let sides = [
+            (at + vec2(gap, 0.0), Align2::LEFT_CENTER),
+            (at + vec2(-gap, 0.0), Align2::RIGHT_CENTER),
+            (at + vec2(0.0, -gap), Align2::CENTER_BOTTOM),
+            (at + vec2(0.0, gap), Align2::CENTER_TOP),
+        ];
+        for (pos, align) in sides {
+            let rect = align.anchor_size(pos, size);
+            if self.bounds.contains_rect(rect)
+                && !self.taken.iter().any(|t| t.expand(1.0).intersects(rect))
+            {
+                return self.text(pos, align, text, colour);
+            }
+        }
+        self.text(sides[0].0, sides[0].1, text, colour)
+    }
+
+    /// Set `text` anchored at `pos`; whether it was drawn.
+    fn text(&mut self, pos: Pos2, align: Align2, text: impl ToString, colour: Color32) -> bool {
+        let galley = self
+            .painter
+            .layout_no_wrap(text.to_string(), self.font.clone(), colour);
+        let size = galley.size();
+        if size.x > self.bounds.width() || size.y > self.bounds.height() {
+            return false;
+        }
+        let mut rect = align.anchor_size(pos, size);
+        let shift = |lo: f32, hi: f32, blo: f32, bhi: f32| {
+            if lo < blo {
+                blo - lo
+            } else if hi > bhi {
+                bhi - hi
+            } else {
+                0.0
+            }
+        };
+        rect = rect.translate(vec2(
+            shift(
+                rect.left(),
+                rect.right(),
+                self.bounds.left(),
+                self.bounds.right(),
+            ),
+            shift(
+                rect.top(),
+                rect.bottom(),
+                self.bounds.top(),
+                self.bounds.bottom(),
+            ),
+        ));
+        if self.taken.iter().any(|t| t.expand(1.0).intersects(rect)) {
+            return false;
+        }
+        self.painter.galley(rect.min, galley, colour);
+        self.taken.push(rect);
+        true
+    }
+}
+
 /// Paint one widget. `px` is its pixel rectangle `[x, y, w, h]`.
 #[allow(clippy::too_many_arguments)]
 pub fn paint(
@@ -493,43 +581,35 @@ fn past_future(painter: &Painter, theme: &Theme, pts: &[Pos2], now_index: usize)
 fn day_ticks(
     painter: &Painter,
     theme: &Theme,
+    labels: &mut Labels<'_>,
     points: &[TrackPoint],
     now: Utc,
     to_screen: &dyn Fn(&TrackPoint) -> Pos2,
 ) {
     let p = &theme.palette;
-    let font = crate::fonts::font_id(theme);
     for d in [-60.0, -30.0, 30.0, 60.0] {
         if let Some(pt) = nearest(points, now.plus(d * 86_400.0))
             && (pt.t.0 - now.0 - d * 86_400.0).abs() < 2.0 * 86_400.0
         {
             let at = to_screen(pt);
             painter.circle_filled(at, 2.5, p.dim.to_egui());
-            painter.text(
+            labels.text(
                 at + vec2(5.0, -2.0),
                 Align2::LEFT_BOTTOM,
                 format!("{d:+.0}d"),
-                font.clone(),
                 p.dim.to_egui(),
             );
         }
     }
 }
 
-fn now_marker(painter: &Painter, theme: &Theme, at: Pos2, name: &str) {
+fn now_marker(painter: &Painter, theme: &Theme, labels: &mut Labels<'_>, at: Pos2, name: &str) {
     let p = &theme.palette;
     painter.circle_filled(at, 5.0, p.bright.to_egui());
     painter.circle_stroke(at, 8.0, Stroke::new(1.0, p.bright.to_egui()));
-    painter.text(
-        at + vec2(11.0, 0.0),
-        Align2::LEFT_CENTER,
-        name,
-        crate::fonts::font_id(theme),
-        p.bright.to_egui(),
-    );
+    labels.text_near(at, 11.0, name, p.bright.to_egui());
 }
 
-/// View from Earth along the Sun-Earth line: the vehicle's halo in (Y, Z), with Earth's motion to the left.
 fn halo(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleView, now: Utc) {
     let Some(track) = v.track.as_deref().filter(|t| t.points.len() >= 2) else {
         return;
@@ -540,7 +620,7 @@ fn halo(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleView, now: Ut
         return;
     }
     let p = &theme.palette;
-    let font = crate::fonts::font_id(theme);
+    let mut labels = Labels::new(painter, theme, r);
     let c = r.center();
     let max_km = track
         .points
@@ -553,54 +633,52 @@ fn halo(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleView, now: Ut
     let at = |y: f64, z: f64| Pos2::new(c.x - (y * scale) as f32, c.y - (z * scale) as f32);
     // Rings are radii from the Sun-Earth line; the crosshair is that line seen end-on.
     let step = nice_step(max_km);
+    let mut rings = Vec::new();
     let mut ring = step;
     while ring < max_km {
         let rad = (ring * scale) as f32;
         painter.circle_stroke(c, rad, Stroke::new(1.0, fade(p.border.to_egui(), 160)));
-        painter.text(
-            c + vec2(3.0, -rad),
-            Align2::LEFT_BOTTOM,
-            km_label(ring),
-            font.clone(),
-            p.dim.to_egui(),
-        );
+        rings.push((ring, rad));
         ring += step;
     }
     let cross = Stroke::new(1.0, p.dim.to_egui());
     painter.line_segment([c - vec2(half, 0.0), c + vec2(half, 0.0)], cross);
     painter.line_segment([c - vec2(0.0, half), c + vec2(0.0, half)], cross);
-    painter.text(
-        c + vec2(4.0, 4.0),
-        Align2::LEFT_TOP,
-        "SUN-EARTH LINE",
-        font.clone(),
-        p.dim.to_egui(),
-    );
-    painter.text(
-        Pos2::new(c.x, r.top()),
-        Align2::CENTER_TOP,
-        "ECLIPTIC NORTH",
-        font.clone(),
-        p.dim.to_egui(),
-    );
-    painter.text(
-        Pos2::new(r.left(), c.y - 14.0),
-        Align2::LEFT_BOTTOM,
-        "<- EARTH'S MOTION",
-        font.clone(),
-        p.dim.to_egui(),
-    );
     let pts: Vec<Pos2> = track
         .points
         .iter()
         .map(|q| at(q.rot_km[1], q.rot_km[2]))
         .collect();
     past_future(painter, theme, &pts, track.now_index);
-    day_ticks(painter, theme, &track.points, now, &|q| {
+    // Labels, most important first: what is where, then the ticks, then the plot's own legend.
+    if let Some(d) = v.deep {
+        now_marker(
+            painter,
+            theme,
+            &mut labels,
+            at(d.rot_km[1], d.rot_km[2]),
+            &v.name,
+        );
+    }
+    day_ticks(painter, theme, &mut labels, &track.points, now, &|q| {
         at(q.rot_km[1], q.rot_km[2])
     });
-    if let Some(d) = v.deep {
-        now_marker(painter, theme, at(d.rot_km[1], d.rot_km[2]), &v.name);
+    let dim = p.dim.to_egui();
+    labels.text(
+        Pos2::new(c.x, r.top()),
+        Align2::CENTER_TOP,
+        "ECLIPTIC NORTH",
+        dim,
+    );
+    labels.text(c + vec2(4.0, 4.0), Align2::LEFT_TOP, "SUN-EARTH LINE", dim);
+    labels.text(
+        Pos2::new(r.left(), c.y - 14.0),
+        Align2::LEFT_BOTTOM,
+        "<- EARTH'S MOTION",
+        dim,
+    );
+    for (km, rad) in rings {
+        labels.text(c + vec2(3.0, -rad), Align2::LEFT_BOTTOM, km_label(km), dim);
     }
 }
 
@@ -614,7 +692,7 @@ fn top_view(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleView, now
         return;
     }
     let p = &theme.palette;
-    let font = crate::fonts::font_id(theme);
+    let mut labels = Labels::new(painter, theme, r);
     let (xmin, xmax) = (
         -1.25 * MOON_ORBIT_KM,
         track
@@ -647,40 +725,12 @@ fn top_view(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleView, now
             4.0,
             4.0,
         ));
-        painter.text(
-            origin + vec2(0.0, -moon - 2.0),
-            Align2::CENTER_BOTTOM,
-            "MOON ORBIT",
-            font.clone(),
-            p.dim.to_egui(),
-        );
     }
     painter.circle_filled(origin, ((6378.0 * scale) as f32).max(3.5), p.info.to_egui());
-    painter.text(
-        origin + vec2(0.0, 7.0),
-        Align2::CENTER_TOP,
-        "EARTH",
-        font.clone(),
-        p.info.to_egui(),
-    );
-    painter.text(
-        Pos2::new(r.left() + 2.0, origin.y - 4.0),
-        Align2::LEFT_BOTTOM,
-        "<- SUN",
-        font.clone(),
-        p.dim.to_egui(),
-    );
     let l2 = at(1.5e6, 0.0);
     painter.line_segment(
         [l2 - vec2(0.0, 4.0), l2 + vec2(0.0, 4.0)],
         Stroke::new(1.0, p.dim.to_egui()),
-    );
-    painter.text(
-        l2 + vec2(0.0, 6.0),
-        Align2::CENTER_TOP,
-        "~L2 1.5M km",
-        font.clone(),
-        p.dim.to_egui(),
     );
     let pts: Vec<Pos2> = track
         .points
@@ -688,11 +738,44 @@ fn top_view(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleView, now
         .map(|q| at(q.rot_km[0], q.rot_km[1]))
         .collect();
     past_future(painter, theme, &pts, track.now_index);
-    day_ticks(painter, theme, &track.points, now, &|q| {
+    // Labels, most important first.
+    if let Some(d) = v.deep {
+        now_marker(
+            painter,
+            theme,
+            &mut labels,
+            at(d.rot_km[0], d.rot_km[1]),
+            &v.name,
+        );
+    }
+    labels.text(
+        origin + vec2(0.0, 7.0),
+        Align2::CENTER_TOP,
+        "EARTH",
+        p.info.to_egui(),
+    );
+    labels.text(
+        l2 + vec2(0.0, 6.0),
+        Align2::CENTER_TOP,
+        "~L2 1.5M km",
+        p.dim.to_egui(),
+    );
+    labels.text(
+        Pos2::new(r.left() + 2.0, origin.y - 4.0),
+        Align2::LEFT_BOTTOM,
+        "<- SUN",
+        p.dim.to_egui(),
+    );
+    day_ticks(painter, theme, &mut labels, &track.points, now, &|q| {
         at(q.rot_km[0], q.rot_km[1])
     });
-    if let Some(d) = v.deep {
-        now_marker(painter, theme, at(d.rot_km[0], d.rot_km[1]), &v.name);
+    if moon > 6.0 {
+        labels.text(
+            origin + vec2(0.0, -moon - 2.0),
+            Align2::CENTER_BOTTOM,
+            "MOON ORBIT",
+            p.dim.to_egui(),
+        );
     }
 }
 
@@ -845,7 +928,7 @@ fn solar_system(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleView)
         return;
     }
     let p = &theme.palette;
-    let font = crate::fonts::font_id(theme);
+    let mut labels = Labels::new(painter, theme, r);
     let au = |q: &TrackPoint| norm3(&q.rot_km) / KM_PER_AU;
     // Out to the vehicle's farthest point in the window, but never less than Neptune's orbit.
     let far = track
@@ -866,22 +949,13 @@ fn solar_system(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleView)
         Pos2::new(c.x + x_au as f32 * k, c.y - y_au as f32 * k)
     };
     let ring = |au_r: f64| (au_r / far).sqrt() as f32 * radius;
-    for (i, (d, name)) in PLANET_RINGS.iter().enumerate() {
+    for (d, _) in PLANET_RINGS.iter() {
         painter.add(Shape::dashed_line(
             &circle_points(c, ring(*d)),
             Stroke::new(1.0, p.dim.to_egui()),
             3.0,
             4.0,
         ));
-        // Labels step round the ring so neighbouring ones do not collide at this scale.
-        let a = 0.9 + 0.9 * i as f32;
-        painter.text(
-            c + vec2(ring(*d) * a.cos(), ring(*d) * a.sin()),
-            Align2::CENTER_CENTER,
-            *name,
-            font.clone(),
-            fade(p.dim.to_egui(), 220),
-        );
     }
     if HELIOPAUSE_AU < far {
         painter.add(Shape::dashed_line(
@@ -890,44 +964,55 @@ fn solar_system(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleView)
             8.0,
             5.0,
         ));
-        painter.text(
-            c + vec2(0.0, -ring(HELIOPAUSE_AU) - 2.0),
-            Align2::CENTER_BOTTOM,
-            "HELIOPAUSE ~120 AU",
-            font.clone(),
-            p.info.to_egui(),
-        );
     }
     painter.circle_filled(c, 3.5, p.bright.to_egui());
-    painter.text(
-        c + vec2(-6.0, -4.0),
-        Align2::RIGHT_BOTTOM,
-        "SUN",
-        font.clone(),
-        p.bright.to_egui(),
-    );
-    painter.text(
-        Pos2::new(r.right(), r.bottom()),
-        Align2::RIGHT_BOTTOM,
-        "LONGITUDE 0 ->   RADIUS ~ SQRT(AU)",
-        font.clone(),
-        p.dim.to_egui(),
-    );
     let pts: Vec<Pos2> = track
         .points
         .iter()
         .map(|q| at(q.rot_km[0] / KM_PER_AU, q.rot_km[1] / KM_PER_AU))
         .collect();
     past_future(painter, theme, &pts, track.now_index);
+    // Labels, most important first.
     if let Some(d) = v.deep {
         let here = at(d.rot_km[0] / KM_PER_AU, d.rot_km[1] / KM_PER_AU);
         now_marker(
             painter,
             theme,
+            &mut labels,
             here,
             &format!("{} {:.1} AU", v.name, d.sun_dist_km / KM_PER_AU),
         );
     }
+    labels.text(
+        c + vec2(-6.0, -4.0),
+        Align2::RIGHT_BOTTOM,
+        "SUN",
+        p.bright.to_egui(),
+    );
+    if HELIOPAUSE_AU < far {
+        labels.text(
+            c + vec2(0.0, -ring(HELIOPAUSE_AU) - 2.0),
+            Align2::CENTER_BOTTOM,
+            "HELIOPAUSE ~120 AU",
+            p.info.to_egui(),
+        );
+    }
+    // Planet names step round their rings so neighbours do not land on one another at this scale.
+    for (i, (d, name)) in PLANET_RINGS.iter().enumerate().rev() {
+        let a = 0.9 + 0.9 * i as f32;
+        labels.text(
+            c + vec2(ring(*d) * a.cos(), ring(*d) * a.sin()),
+            Align2::CENTER_CENTER,
+            *name,
+            fade(p.dim.to_egui(), 220),
+        );
+    }
+    labels.text(
+        Pos2::new(r.right(), r.bottom()),
+        Align2::RIGHT_BOTTOM,
+        "LONGITUDE 0 ->   RADIUS ~ SQRT(AU)",
+        p.dim.to_egui(),
+    );
 }
 
 fn time_plot(
@@ -1058,15 +1143,17 @@ fn timeline(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleView, now
         return;
     };
     let r = rect_of(px).shrink2(vec2(4.0, 4.0));
-    let label_w = 96.0;
-    if r.width() < label_w + 80.0 || r.height() < 60.0 {
+    // Lane names are at most eight characters wide, and the text above and below the lanes a line each.
+    let (cw, ch) = (theme.font.cell_w_px, theme.font.cell_h_px);
+    let label_w = 8.0 * cw;
+    if r.width() < label_w + 6.0 * cw || r.height() < 4.0 * ch {
         return;
     }
     let p = &theme.palette;
     let font = crate::fonts::font_id(theme);
     let area = Rect::from_min_max(
-        Pos2::new(r.left() + label_w, r.top() + 24.0),
-        Pos2::new(r.right(), r.bottom() - 16.0),
+        Pos2::new(r.left() + label_w, r.top() + ch),
+        Pos2::new(r.right(), r.bottom() - ch),
     );
     let (t0, t1) = (
         now.0 - TIMELINE_PAST_H * 3600.0,
@@ -1075,18 +1162,33 @@ fn timeline(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleView, now
     let x_of = |t: f64| area.left() + area.width() * ((t - t0) / (t1 - t0)).clamp(0.0, 1.0) as f32;
     let lane_h = area.height() / LANES.len() as f32;
     let current = s.current(now).map(|c| c.id.clone());
-    for (i, name) in LANES.iter().enumerate() {
+    // Lanes with something in the window are named first; if the lanes are closer than a line of text the
+    // others lose their names rather than printing over their neighbours.
+    let busy = |lane: usize| {
+        s.visits
+            .iter()
+            .any(|vis| lane_of(vis) == lane && vis.end().0 >= t0 && vis.start.0 <= t1)
+    };
+    let mut order: Vec<usize> = (0..LANES.len()).collect();
+    order.sort_by_key(|&i| !busy(i));
+    let mut lane_names = Labels::new(
+        painter,
+        theme,
+        Rect::from_min_max(r.left_top(), area.left_bottom()),
+    );
+    for i in order {
+        lane_names.text(
+            Pos2::new(r.left(), area.top() + i as f32 * lane_h + lane_h / 2.0),
+            Align2::LEFT_CENTER,
+            LANES[i],
+            p.dim.to_egui(),
+        );
+    }
+    for i in 0..LANES.len() {
         let y = area.top() + i as f32 * lane_h;
         painter.line_segment(
             [Pos2::new(area.left(), y), Pos2::new(area.right(), y)],
             Stroke::new(1.0, fade(p.border.to_egui(), 140)),
-        );
-        painter.text(
-            Pos2::new(r.left(), y + lane_h / 2.0),
-            Align2::LEFT_CENTER,
-            *name,
-            font.clone(),
-            p.dim.to_egui(),
         );
     }
     painter.rect_stroke(
@@ -1142,11 +1244,11 @@ fn timeline(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleView, now
             fade(p.info.to_egui(), 190)
         };
         painter.rect_filled(blk, 0.0, colour);
-        if blk.width() > 50.0 && !vis.target.is_empty() {
+        if blk.width() > 4.0 * cw && blk.height() >= ch && !vis.target.is_empty() {
             let text: String = vis
                 .target
                 .chars()
-                .take(((blk.width() - 6.0) / 7.0) as usize)
+                .take(((blk.width() - 6.0) / cw) as usize)
                 .collect();
             painter.with_clip_rect(blk).text(
                 blk.left_center() + vec2(3.0, 0.0),
@@ -1160,13 +1262,14 @@ fn timeline(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleView, now
     let nx = x_of(now.0);
     painter.line_segment(
         [
-            Pos2::new(nx, area.top() - 6.0),
+            Pos2::new(nx, area.top() - 2.0),
             Pos2::new(nx, area.bottom()),
         ],
         Stroke::new(2.0, p.bright.to_egui()),
     );
+    // In the strip between the plot's frame and the lanes, which is one line of text tall.
     painter.text(
-        Pos2::new(nx, area.top() - 8.0),
+        Pos2::new(nx, area.top() - 2.0),
         Align2::CENTER_BOTTOM,
         "NOW",
         font,
@@ -1179,7 +1282,8 @@ fn instrument_share(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleV
         return;
     };
     let r = rect_of(px).shrink2(vec2(4.0, 4.0));
-    if r.width() < 120.0 || r.height() < 30.0 {
+    let (cw, ch) = (theme.font.cell_w_px, theme.font.cell_h_px);
+    if r.width() < 14.0 * cw || r.height() < ch {
         return;
     }
     let p = &theme.palette;
@@ -1197,9 +1301,14 @@ fn instrument_share(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleV
         return;
     }
     let max = hours.iter().map(|(_, h)| *h).fold(0.0, f64::max);
-    let row_h = (r.height() / hours.len().max(1) as f32).min(26.0);
-    let (label_w, value_w) = (110.0, 170.0);
-    for (i, (name, h)) in hours.iter().enumerate() {
+    // As many instruments as there are lines of text to name them, the busiest first.
+    let shown = hours.len().min((r.height() / ch) as usize).max(1);
+    let row_h = (r.height() / shown as f32).min(1.6 * ch);
+    // Names are up to eight characters; the figures are "123.4 h 100%", or "123h 100%" in a narrow panel.
+    let narrow = r.width() < 34.0 * cw;
+    let label_w = 9.0 * cw;
+    let value_w = if narrow { 9.0 * cw } else { 14.0 * cw };
+    for (i, (name, h)) in hours.iter().take(shown).enumerate() {
         let y = r.top() + i as f32 * row_h;
         let mid = y + row_h / 2.0;
         painter.text(
@@ -1212,7 +1321,7 @@ fn instrument_share(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleV
         let bar = Rect::from_min_max(
             Pos2::new(r.left() + label_w, y + 3.0),
             Pos2::new(
-                r.left() + label_w + (r.width() - label_w - value_w) * (*h / max) as f32,
+                r.left() + label_w + (r.width() - label_w - value_w).max(0.0) * (*h / max) as f32,
                 y + row_h - 3.0,
             ),
         );
@@ -1225,7 +1334,11 @@ fn instrument_share(painter: &Painter, theme: &Theme, px: [u32; 4], v: &VehicleV
         painter.text(
             Pos2::new(r.right(), mid),
             Align2::RIGHT_CENTER,
-            format!("{h:6.1} h {:3.0}%", h / total * 100.0),
+            if narrow {
+                format!("{h:.0}h {:.0}%", h / total * 100.0)
+            } else {
+                format!("{h:6.1} h {:3.0}%", h / total * 100.0)
+            },
             font.clone(),
             p.dim.to_egui(),
         );

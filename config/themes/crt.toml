@@ -1,4 +1,4 @@
-# The Raspberry Pi / Commodore 1702 display (`mctl --pi`). Not in the T-key cycle: the CRT does the
+# The Raspberry Pi / Commodore 1702 display (`mctl --kiosk`). Not in the T-key cycle: the CRT does the
 # scanlines, glow and curvature, so every effect here is off. Colours are saturated and few, since
 # composite video smears fine detail and desaturates dark colours.
 name = "CRT"

@@ -6,18 +6,36 @@ change behaviour.
 
 ## [Unreleased]
 
-### Changed
-
-- The desktop console shrinks its font, down to half size, to keep the full 160 x 45 panel layout on windows
-  smaller than 1920 x 1080 (a 1080p monitor's window is a title bar short of it), instead of clipping panels.
-  The Pi display is unchanged.
-
 ### Added
 
+- `--kiosk-order random` shows every scene once per cycle in a new random order each cycle, and
+  `--kiosk-order vehicle` shows one vehicle at a time, all its scenes before the next, in a random vehicle order
+  reshuffled each cycle. `--kiosk-vehicles iss,jwst` limits the display to chosen vehicles.
 - Four more vehicles: the Tiangong space station (Earth orbit, from CelesTrak elements), and Voyager 1, Voyager 2
   and New Horizons, which are on escape trajectories and come from JPL Horizons. They get a solar-system plot
   (path among the planets' orbits, from ecliptic north), distance from the Sun, light time to Earth, heliocentric
   speed and ecliptic direction, and line art of each spacecraft. A new `regime = "deep"` selects these pages.
+
+### Changed
+
+- `--pi` is now `--kiosk` (and `--pi-style` is `--kiosk-style`); the old names still work as aliases.
+- The kiosk display scales its fonts to fill the screen, keeping the layout designed for the Pi's 640x480, instead
+  of staying at that size on a larger screen.
+- The desktop console shrinks its font, down to half size, to keep the full 160 x 45 panel layout on windows
+  smaller than 1920 x 1080 (a 1080p monitor's window is a title bar short of it), instead of clipping panels.
+  The Pi display is unchanged.
+- The kiosk's dense scenes no longer cut text off at 80 columns: long lines wrap, rows give up padding and unit
+  explanations before values, box titles drop their asides, and plot labels (halo orbit, ecliptic north, event
+  timeline, instrument share) avoid each other. JWST and Hubble OPS have narrow layouts. A test fails if a dense
+  page clips text it did not truncate on purpose.
+- The survey pictures fall back to the MAST name resolver and the STScI copy of the DSS2 survey (greyscale GIF)
+  when the CDS services cannot be reached, and a host that fails to connect is not retried for ten minutes.
+  `[sources.sky]` gains `mast_name_url`, `dss_url` and `dss_survey`.
+- Rows of numbers line up in narrow panels (state vectors, L2 and deep-space state, sources), and the NEXT PASS
+  panel is two aligned columns.
+- On the kiosk, a status line too long for the screen scrolls like a news ticker instead of being cut off.
+- The survey pictures wait up to `[sources.sky] timeout_s` (default 90 s, was shorter) for the sky services, with a
+  separate 15 s connect timeout and one retry on a timeout.
 
 ## [0.1.1] - 2026-11-01
 

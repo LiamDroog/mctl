@@ -161,6 +161,28 @@ pub fn terminator_lat_deg(lon_deg: f64, subsolar_lon_deg: f64, dec_deg: f64) -> 
         .to_degrees()
 }
 
+/// What `Lines::put` had to cut, for tests that a layout leaves nothing clipped.
+#[cfg(test)]
+pub(crate) mod clipped {
+    use std::cell::RefCell;
+
+    thread_local! {
+        static CUT: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    }
+
+    pub(crate) fn record(text: &str) {
+        CUT.with(|c| c.borrow_mut().push(text.to_owned()));
+    }
+
+    /// Take (and clear) what has been cut on this thread so far.
+    pub(crate) fn take() -> Vec<String> {
+        CUT.with(|c| std::mem::take(&mut *c.borrow_mut()))
+    }
+}
+
+/// Width of the units column of a narrow `Lines::pair` (`km/s`, `deg`, `km`).
+const UNIT_FIELD: usize = 4;
+
 pub(crate) struct Lines<'a> {
     pub(crate) grid: &'a mut Grid,
     pub(crate) rect: CellRect,
@@ -176,25 +198,83 @@ impl<'a> Lines<'a> {
         }
     }
 
+    /// `text` at `col` on the current row. Text that does not fit ends in `~` rather than being cut off
+    /// without a sign.
     pub(crate) fn put(&mut self, col: usize, text: &str, style: Style) {
         if self.row < self.rect.rows && col < self.rect.cols {
             let room = self.rect.cols - col;
-            let t: String = text.chars().take(room).collect();
+            #[cfg(test)]
+            if text.chars().count() > room {
+                clipped::record(text);
+            }
+            let t = truncate(text, room);
             self.grid
                 .put(self.rect.col + col, self.rect.row + self.row, &t, style);
         }
     }
 
+    /// A line of text, wrapped at spaces to the panel's width if it is too long, the continuation indented.
     pub(crate) fn line(&mut self, text: &str, style: Style) {
-        self.put(1, text, style);
-        self.row += 1;
+        let room = self.rect.cols.saturating_sub(1);
+        for (i, part) in wrap_words(text, room, room.saturating_sub(2))
+            .iter()
+            .enumerate()
+        {
+            self.put(if i == 0 { 1 } else { 3 }, part, style);
+            self.row += 1;
+        }
     }
 
+    /// A label at column 1 and its value at column 8, the value wrapped within the panel with its
+    /// continuation under it, so a block of these reads as two even columns.
+    pub(crate) fn field(&mut self, label: &str, value: &str, style: Style) {
+        let room = self.rect.cols.saturating_sub(9);
+        let dim = Style::new(Role::Dim);
+        for (i, part) in wrap_words(value, room, room).iter().enumerate() {
+            if i == 0 {
+                self.put(1, label, dim);
+            }
+            self.put(8, part, style);
+            self.row += 1;
+        }
+    }
+
+    /// A label, a value and a unit. In a panel too narrow for all three the value gives up its padding and
+    /// then the unit its explanation ("s one-way" becomes "s"), so the number is never what is cut.
     pub(crate) fn pair(&mut self, label: &str, value: &str, unit: &str, value_style: Style) {
         let dim = Style::new(Role::Dim);
+        let width = self.rect.cols;
+        // The form depends on the value alone (every row of a panel formats its numbers to one width), never
+        // on the unit's length, so the rows of one panel always line up.
+        let vw = value.chars().count();
         self.put(1, label, dim);
-        self.put(8, value, value_style);
-        self.put(8 + value.chars().count() + 1, unit, dim);
+        if 8 + vw + 1 + UNIT_FIELD < width {
+            self.put(8, value, value_style);
+            let col = 8 + vw + 1;
+            let first = unit.split(' ').next().unwrap_or_default();
+            let room = width - col - 1;
+            self.put(
+                col,
+                if unit.chars().count() <= room {
+                    unit
+                } else {
+                    first
+                },
+                dim,
+            );
+        } else {
+            // Too narrow for the padded form: units in one column against the right edge and the numbers
+            // right-aligned against them, so rows still line up. The unit loses its explanation first.
+            let (value, unit) = (value.trim(), unit.split(' ').next().unwrap_or_default());
+            let unit_col = width
+                .saturating_sub(UNIT_FIELD.max(unit.chars().count()) + 1)
+                .max(9);
+            let value_col = (unit_col.saturating_sub(1))
+                .saturating_sub(value.chars().count())
+                .max(8);
+            self.put(value_col, value, value_style);
+            self.put(unit_col, unit, dim);
+        }
         self.row += 1;
     }
 
@@ -217,6 +297,52 @@ impl<'a> Lines<'a> {
     }
 }
 
+/// `s` cut to `n` characters, ending in `~` if anything was cut.
+pub(crate) fn truncate(s: &str, n: usize) -> String {
+    if s.chars().count() <= n {
+        s.to_owned()
+    } else {
+        s.chars().take(n.saturating_sub(1)).chain(['~']).collect()
+    }
+}
+
+/// `text` broken at spaces into lines of at most `width` characters (`rest` for the lines after the first,
+/// which are indented); a word longer than that is cut.
+pub(crate) fn wrap_words(text: &str, width: usize, rest: usize) -> Vec<String> {
+    if width == 0 {
+        return Vec::new();
+    }
+    // Text that fits is left exactly as it is: its spacing may be aligning columns.
+    if text.chars().count() <= width {
+        return vec![text.to_owned()];
+    }
+    let mut out: Vec<String> = Vec::new();
+    // Leading spaces are kept: some lines are indented on purpose.
+    let indent = text.len() - text.trim_start().len();
+    for word in text.split_whitespace() {
+        let limit = if out.len() <= 1 { width } else { rest };
+        match out.last_mut() {
+            Some(l) if l.chars().count() + 1 + word.chars().count() <= limit => {
+                l.push(' ');
+                l.push_str(word);
+            }
+            _ => {
+                let lead = if out.is_empty() { indent } else { 0 };
+                let w: String = " ".repeat(lead) + word;
+                out.push(
+                    w.chars()
+                        .take(if out.is_empty() { width } else { rest })
+                        .collect(),
+                );
+            }
+        }
+    }
+    if out.is_empty() {
+        out.push(String::new());
+    }
+    out
+}
+
 pub(crate) fn source_row(l: &mut Lines<'_>, s: &SourceView, caution_km: f64) {
     let (status, style) = match &s.status {
         SourceStatus::Active => ("ACTIVE", Style::new(Role::Bright)),
@@ -227,9 +353,17 @@ pub(crate) fn source_row(l: &mut Lines<'_>, s: &SourceView, caution_km: f64) {
         SourceStatus::Failed(_) => ("FAILED", Style::limit(Limit::Warning)),
     };
     let age = s.age_s.map_or("--".to_owned(), fmt_dur);
+    let width = l.rect.cols;
+    let status_end = 10 + status.chars().count() + 1;
     l.put(1, s.kind.label(), Style::new(Role::Fg));
     l.put(10, status, style);
-    l.put(24, &format!("AGE {age}"), Style::new(Role::Dim));
+    trailing(
+        l,
+        status_end,
+        &format!("AGE {age}"),
+        &age,
+        Style::new(Role::Dim),
+    );
     l.row += 1;
     let health = match &s.health {
         Health::Starting => "STARTING".to_owned(),
@@ -247,11 +381,15 @@ pub(crate) fn source_row(l: &mut Lines<'_>, s: &SourceView, caution_km: f64) {
     } else {
         Style::new(Role::Dim)
     };
-    l.put(3, &format!("{health}{origin}"), hs);
+    let health = format!("{health}{origin}");
+    l.put(3, &health, hs);
     if let Some((a, b)) = s.validity {
-        l.put(
-            24,
-            &format!("SPAN {}", fmt_dur(b.minus(a))),
+        let span = fmt_dur(b.minus(a));
+        trailing(
+            l,
+            3 + health.chars().count() + 1,
+            &format!("SPAN {span}"),
+            &span,
             Style::new(Role::Dim),
         );
     }
@@ -262,21 +400,47 @@ pub(crate) fn source_row(l: &mut Lines<'_>, s: &SourceView, caution_km: f64) {
         } else {
             Style::new(Role::Fg)
         };
+        // The long forms when there is room, the bare numbers when there is not.
+        let rtn = format!(
+            "R{:+.1} T{:+.1} N{:+.1} KM",
+            r.rtn_km[0], r.rtn_km[1], r.rtn_km[2]
+        );
         l.put(
             3,
-            &format!(
-                "vs ACTIVE R{:+.1} T{:+.1} N{:+.1} KM",
-                r.rtn_km[0], r.rtn_km[1], r.rtn_km[2]
-            ),
+            &if width >= 3 + 10 + rtn.chars().count() {
+                format!("vs ACTIVE {rtn}")
+            } else {
+                rtn
+            },
             st,
         );
         l.row += 1;
-        l.put(
-            3,
-            &format!("|DR| {:.2} KM  |DV| {:.1} MM/S", r.norm_km, r.dv_mm_s),
-            st,
-        );
+        // The longest form that fits, down to the bare numbers.
+        let (dr, dv) = (format!("{:.2}", r.norm_km), format!("{:.1}", r.dv_mm_s));
+        let room = width.saturating_sub(3);
+        let forms = [
+            format!("|DR| {dr} KM  |DV| {dv} MM/S"),
+            format!("|DR| {dr}  |DV| {dv}"),
+            format!("|DR| {dr} |DV| {dv}"),
+            format!("|DR| {dr} |DV| {:.0}", r.dv_mm_s),
+        ];
+        let diff = forms.iter().find(|f| f.chars().count() <= room);
+        l.put(3, diff.unwrap_or(&forms[3]), st);
         l.row += 1;
+    }
+}
+
+/// `long` against the right edge if it fits there, else `short`, but never into what is already on the row
+/// up to `min_col`. Right-aligned, so the figures of a column of rows end together.
+pub(crate) fn trailing(l: &mut Lines<'_>, min_col: usize, long: &str, short: &str, style: Style) {
+    let width = l.rect.cols;
+    for text in [long, short] {
+        let n = text.chars().count();
+        let col = width.saturating_sub(n + 1);
+        if col >= min_col && col + n < width {
+            l.put(col, text, style);
+            return;
+        }
     }
 }
 
@@ -614,12 +778,15 @@ pub fn paint_eclipse_ring(
     if w < 40 || h < 60 {
         return;
     }
-    // Lower part of the panel, below the two text rows.
-    let ring_top = y as f32 + 52.0;
+    // Lower part of the panel, below the text row and the sparkline's own heading.
+    let ch = theme.font.cell_h_px;
+    let below = 2.25 * ch;
+    let ring_top = y as f32 + below;
     // The ring takes the left part of the panel; the beta sparkline the right.
     let ring_w = w as f32 * 0.55;
-    let (cx, cy) = (x as f32 + ring_w / 2.0, ring_top + (h as f32 - 52.0) / 2.0);
-    let radius = (ring_w.min(h as f32 - 52.0) / 2.0 - 8.0).max(10.0);
+    let avail = h as f32 - below;
+    let (cx, cy) = (x as f32 + ring_w / 2.0, ring_top + avail / 2.0);
+    let radius = (ring_w.min(avail) / 2.0 - 6.0).max(8.0);
     paint_beta_sparkline(
         painter,
         theme,
@@ -627,7 +794,7 @@ pub fn paint_eclipse_ring(
             x as f32 + ring_w,
             ring_top,
             w as f32 - ring_w - 6.0,
-            h as f32 - 60.0,
+            (avail - 8.0).max(0.0),
         ],
         &v.beta_series,
         now,
@@ -663,13 +830,16 @@ pub fn paint_eclipse_ring(
         painter.line_segment([point(p0), point(p1)], stroke);
     }
     painter.circle_filled(point(0.0), 5.0, theme.globe.vehicle.to_egui());
-    painter.text(
-        Pos2::new(cx, cy),
-        egui::Align2::CENTER_CENTER,
-        "ONE REV",
-        crate::fonts::font_id(theme),
-        theme.palette.dim.to_egui(),
-    );
+    // The caption goes inside the ring if the ring is wider than the caption.
+    if radius * 2.0 > 9.0 * theme.font.cell_w_px {
+        painter.text(
+            Pos2::new(cx, cy),
+            egui::Align2::CENTER_CENTER,
+            "ONE REV",
+            crate::fonts::font_id(theme),
+            theme.palette.dim.to_egui(),
+        );
+    }
 }
 
 #[cfg(test)]
@@ -793,10 +963,31 @@ mod tests {
         cols: usize,
         rows: usize,
     ) -> (Grid, crate::page::Layout) {
+        render_with(
+            world,
+            vehicle,
+            page,
+            sub,
+            cols,
+            rows,
+            crate::screens::render,
+        )
+    }
+
+    /// As `render_page`, with the page drawn by `draw`.
+    fn render_with(
+        world: &World,
+        vehicle: Option<&VehicleView>,
+        page: Page,
+        sub: usize,
+        cols: usize,
+        rows: usize,
+        draw: fn(&mut Grid, &PageInput<'_>) -> crate::page::Layout,
+    ) -> (Grid, crate::page::Layout) {
         let theme: Theme = crate::theme::embedded().unwrap().remove(0);
         let (camera, limits, settings) = (Camera::default(), limits(), vec![]);
         let mut grid = Grid::new(cols, rows);
-        let layout = crate::screens::render(
+        let layout = draw(
             &mut grid,
             &PageInput {
                 world,
@@ -1409,9 +1600,7 @@ mod tests {
         let t = g.text();
         assert!(layout.sky.is_some(), "the sky plot reports its rectangle");
         assert!(
-            t.contains("AOS IN 10m00s")
-                && t.contains("MAX EL 66.6")
-                && t.contains("DURATION 6m00s"),
+            t.contains("AOS IN 10m00s") && t.contains("MAX EL 66.6") && t.contains("LENGTH 6m00s"),
             "{t}"
         );
         assert!(
@@ -1506,5 +1695,94 @@ mod tests {
             vec!["ECLIPSE ENTRY", "APOAPSIS"]
         );
         assert_eq!(e[0].t, Utc(150.0));
+    }
+
+    #[test]
+    fn long_lines_wrap_with_an_indent_and_short_ones_keep_their_spacing() {
+        let mut g = Grid::new(24, 6);
+        let mut l = Lines::new(&mut g, CellRect::new(0, 0, 24, 6));
+        l.line("RA  00h42m44.3s", Style::new(Role::Fg));
+        l.line(
+            "SITE NASA HQ (DEFAULT, NOT YOUR LOCATION)",
+            Style::new(Role::Fg),
+        );
+        let t = g.text();
+        assert!(t.contains("RA  00h42m44.3s"), "{t}");
+        assert!(t.contains("SITE NASA HQ"), "{t}");
+        assert!(t.contains("    (DEFAULT"), "{t}");
+        assert!(t.contains("LOCATION)"), "{t}");
+        assert!(clipped::take().is_empty());
+    }
+
+    #[test]
+    fn a_pair_in_a_narrow_panel_gives_up_padding_then_explanation_never_the_number() {
+        let mut g = Grid::new(24, 4);
+        let mut l = Lines::new(&mut g, CellRect::new(0, 0, 24, 4));
+        l.pair("LIGHT", "        5.344", "s one-way", Style::new(Role::Fg));
+        let t = g.text();
+        assert!(t.contains("5.344"), "{t}");
+        assert!(t.contains("5.344 s"), "{t}");
+        assert!(!t.contains("one-way"), "the unit lost its explanation: {t}");
+        assert!(clipped::take().is_empty());
+    }
+
+    #[test]
+    fn box_titles_lose_their_asides_before_their_name() {
+        use crate::grid::fit_title;
+        assert_eq!(
+            fit_title("GROUND TRACK  PAST SOLID / PREDICTED", 40),
+            "GROUND TRACK  PAST SOLID / PREDICTED"
+        );
+        assert_eq!(
+            fit_title("GROUND TRACK  PAST SOLID / PREDICTED", 20),
+            "GROUND TRACK"
+        );
+        assert_eq!(fit_title("GROUND TRACK  PAST SOLID", 6), "GROUN~");
+    }
+
+    /// The body the kiosk draws for a dense scene.
+    fn dense_body(grid: &mut Grid, inp: &PageInput<'_>) -> crate::page::Layout {
+        let earth = inp
+            .vehicle
+            .is_some_and(|v| v.regime == mctl_core::config::Regime::Earth && v.solution.is_some());
+        if inp.page == Page::Master && earth {
+            crate::screens::master_dense(grid, inp)
+        } else {
+            crate::screens::render_body(grid, inp)
+        }
+    }
+
+    /// Pages the kiosk draws at 80 x 30 must not cut text off without saying so, for every kind of vehicle.
+    #[test]
+    fn the_kiosks_dense_pages_clip_nothing_at_80_by_30() {
+        let w = bare_world();
+        let mut earth = view(SourceStatus::Active, Health::Ok, Some(1.2));
+        earth.sources.push(earth.sources[0].clone());
+        let l2 = l2_view();
+        let mut deep = l2_view();
+        deep.regime = mctl_core::config::Regime::Deep;
+        deep.schedule = None;
+        for (cols, rows) in [(76, 28), (104, 28)] {
+            for v in [&earth, &l2, &deep] {
+                for (page, sub) in [
+                    (Page::Master, 0),
+                    (Page::Traj, 0),
+                    (Page::Pass, 0),
+                    (Page::Prox, 0),
+                    (Page::Ops, 0),
+                    (Page::Sys, 0),
+                ] {
+                    let _ = clipped::take();
+                    render_with(&w, Some(v), page, sub, cols, rows, dense_body);
+                    let cut = clipped::take();
+                    assert!(
+                        cut.is_empty(),
+                        "{} {:?} at {cols}x{rows} clipped {cut:?}",
+                        v.id,
+                        page
+                    );
+                }
+            }
+        }
     }
 }

@@ -428,16 +428,15 @@ pub fn start(
     }
     let field_tx = if cfg.vehicles.iter().any(|v| v.schedule.is_some()) {
         let (req_tx, req_rx) = std::sync::mpsc::channel();
-        let (sky, ua, timeout, dir, tx) = (
+        let (sky, ua, dir, tx) = (
             cfg.sources.sky.clone(),
             cfg.fetch.user_agent.clone(),
-            cfg.fetch.timeout_s,
             cache_dir_for_sky.clone(),
             tx.clone(),
         );
         std::thread::Builder::new()
             .name("src-sky".into())
-            .spawn(move || crate::sky::run(sky, ua, timeout, &dir, &req_rx, &tx, offline))
+            .spawn(move || crate::sky::run(sky, ua, &dir, &req_rx, &tx, offline))
             .expect("spawn sky thread");
         Some(req_tx)
     } else {

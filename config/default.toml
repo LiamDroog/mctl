@@ -59,8 +59,16 @@ hips2fits_url = "https://alasky.cds.unistra.fr/hips-image-services/hips2fits"
 survey = "CDS/P/DSS2/color"
 fov_deg = 0.25
 size_px = 512
+# Fallbacks, asked when the CDS services above cannot be reached: the MAST name resolver, and the STScI copy
+# of the DSS2 survey (greyscale GIF cutouts).
+mast_name_url = "https://mast.stsci.edu/api/v0/invoke"
+dss_url = "https://archive.stsci.edu/cgi-bin/dss_search"
+dss_survey = "poss2ukstu_red"
 hst_program_url = "https://www.stsci.edu/hst/phase2-public/{id}.pro"
 cache_s = 604800
+# One request to Sesame or hips2fits may take this long. Cutouts are rendered on demand and are slower than
+# the data downloads, so this is longer than [fetch] timeout_s; a timed-out request is tried once more.
+timeout_s = 90
 
 [limits]
 # Inter-source residual (|dr|) that raises a caution on the sources panel. Assumption, not a published limit.

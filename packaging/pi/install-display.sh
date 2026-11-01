@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the mctl display service on a Raspberry Pi: runs `cage -- mctl --pi` on the first screen at boot.
+# Install the mctl display service on a Raspberry Pi: runs `cage -- mctl --kiosk` on the first screen at boot.
 #
 #   sudo packaging/pi/install-display.sh --user pi --bin /home/pi/mctl/bin/mctl [--enable] [--dry-run]
 #

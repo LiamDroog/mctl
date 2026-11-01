@@ -12,6 +12,8 @@ use crate::grid::{CellRect, DeepSeries, Grid, Limit, PlotKind, Role, Style, Widg
 use crate::page::{Layout, Lines, PageInput, fmt_dur, quality_text};
 use crate::screens::{body, boxed, column, cw_panel, sources_panel, split};
 
+/// Below this many columns the pages that were laid out for a wide screen use their narrow forms.
+const NARROW_COLS: usize = 110;
 /// Largest distance (km) for which a bar is full: Sun-Earth L2 sits at about 1.5 million km and the
 /// halo reaches somewhat beyond it. Used only to scale the gauge, not as a limit.
 const DISTANCE_BAR_FULL_KM: f64 = 2.0e6;
@@ -275,18 +277,27 @@ fn visit_table(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>, s: &JwstSch
     let (dim, fg) = (Style::new(Role::Dim), Style::new(Role::Fg));
     let now = inp.world.t;
     feed_line(&mut l, inp, s.fetched_at, "STSCI WEEKLY SCHEDULE");
-    l.row += 1;
+    // The full table needs 26 characters before the instrument; a narrow panel drops the seconds of the
+    // start time and the spacing, and the heading's mode column.
+    let narrow = l.rect.cols < 54;
+    let start_len = if narrow { 9 } else { 12 };
+    // Column where the instrument starts: indent, marker, start, duration (7) and the spaces between.
+    let instr_col = start_len + 13;
     l.put(
         1,
-        &format!(
-            "  GMT START      DUR     INSTRUMENT / MODE                {}",
-            crate::flags::PLAN
-        ),
+        &if narrow {
+            format!("  GMT START     DUR  INSTR {}", crate::flags::PLAN)
+        } else {
+            format!(
+                "  GMT START      DUR     INSTRUMENT / MODE                {}",
+                crate::flags::PLAN
+            )
+        },
         dim,
     );
     l.row += 1;
-    // Prefix (marker, start, duration) is 26 characters; the instrument gets a bit over half the rest.
-    let target_col = 26 + (l.rect.cols.saturating_sub(27)) * 55 / 100 + 1;
+    // The instrument gets a bit over half of what is left after the prefix, the target the rest.
+    let target_col = instr_col + (l.rect.cols.saturating_sub(instr_col + 1)) * 55 / 100 + 1;
     let tw = l.rect.cols.saturating_sub(target_col + 1);
     let current = s.current(now).cloned();
     let rows_left = l.rect.rows.saturating_sub(l.row);
@@ -309,9 +320,9 @@ fn visit_table(grid: &mut Grid, rect: CellRect, inp: &PageInput<'_>, s: &JwstSch
             &format!(
                 "{} {} {:>7}  {}",
                 if is_now { ">" } else { " " },
-                &v.start.gmt_doy()[..12],
+                &v.start.gmt_doy()[..start_len],
                 fmt_dur(v.duration_s),
-                truncate(&what, target_col.saturating_sub(27)),
+                truncate(&what, target_col.saturating_sub(instr_col + 1)),
             ),
             style,
         );
@@ -407,13 +418,11 @@ fn field_cell(grid: &mut Grid, rect: CellRect, f: &FieldView, compact: bool) {
             }
             widget_key = Some(f.key.clone());
         }
-        FieldState::Loading => lines.push((
-            "RESOLVING THE TARGET AND FETCHING A SURVEY CUTOUT..."
-                .chars()
-                .take(w)
-                .collect(),
-            dim,
-        )),
+        FieldState::Loading => lines.extend(
+            wrap("RESOLVING THE TARGET AND FETCHING A SURVEY CUTOUT...", w)
+                .into_iter()
+                .map(|l| (l, dim)),
+        ),
         FieldState::Unavailable(why) => {
             lines.push(("NO PICTURE".into(), Style::limit(Limit::Stale)));
             lines.extend(wrap(&why.to_uppercase(), w).into_iter().map(|l| (l, dim)));
@@ -496,19 +505,37 @@ pub(crate) fn ops(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
     let all = CellRect::new(0, top, cols, h);
     match inp.vehicle.and_then(|v| v.ops.as_ref()) {
         Some(Ops::Jwst(s)) => {
-            let split_rows = column(0, cols, top, &split(h, &[42, 58]));
+            // A narrow screen (the kiosk's) gives the timeline more height, shows one picture instead of two
+            // and shares what is left of the width between the visits and the instrument shares.
+            let narrow = cols < NARROW_COLS;
+            let split_rows = column(
+                0,
+                cols,
+                top,
+                &split(h, if narrow { &[38, 62] } else { &[42, 58] }),
+            );
             plot(
                 grid,
                 split_rows[0],
                 "TIMELINE  -6 H TO +42 H  BY INSTRUMENT  [PLAN]",
                 PlotKind::Timeline,
             );
-            let (lw, fw) = (cols * 42 / 100, cols * 34 / 100);
+            let (lw, fw) = if narrow {
+                (cols * 50 / 100, cols * 26 / 100)
+            } else {
+                (cols * 42 / 100, cols * 34 / 100)
+            };
             let row = (split_rows[1].row, split_rows[1].rows);
             visit_table(grid, CellRect::new(0, row.0, lw, row.1), inp, s);
             let fields: Vec<_> = inp
                 .vehicle
-                .map(|v| v.fields.iter().take(2).cloned().collect())
+                .map(|v| {
+                    v.fields
+                        .iter()
+                        .take(if narrow { 1 } else { 2 })
+                        .cloned()
+                        .collect()
+                })
                 .unwrap_or_default();
             let now_target = s.current(inp.world.t).map(|c| c.target.clone());
             field_strip(
@@ -528,12 +555,15 @@ pub(crate) fn ops(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
             plot(
                 grid,
                 CellRect::new(lw + fw, row.0, cols - lw - fw, row.1),
-                "NEXT 7 DAYS BY INSTRUMENT",
+                "NEXT 7 DAYS  BY INSTRUMENT",
                 PlotKind::InstrumentShare,
             );
         }
         Some(Ops::Hst(r)) => {
-            let head = CellRect::new(0, top, cols, 5);
+            let narrow = cols < NARROW_COLS;
+            // The heading's lines wrap in a narrow panel, so it gets another row.
+            let head_h = if narrow { 7 } else { 5 };
+            let head = CellRect::new(0, top, cols, head_h);
             boxed(grid, head, "HUBBLE DAILY STATUS REPORT");
             let mut l = Lines::new(grid, head);
             l.line(
@@ -551,18 +581,33 @@ pub(crate) fn ops(grid: &mut Grid, inp: &PageInput<'_>) -> Layout {
                 ),
                 Style::new(Role::Dim),
             );
-            let strip_h = (h.saturating_sub(5) * 42 / 100)
+            let strip_h = (h.saturating_sub(head_h) * 42 / 100)
                 .max(10)
-                .min(h.saturating_sub(5));
-            let fields: Vec<_> = inp.vehicle.map(|v| v.fields.clone()).unwrap_or_default();
+                .min(h.saturating_sub(head_h));
+            // Four pictures across 80 columns are too narrow to read; two are not.
+            let fields: Vec<_> = inp
+                .vehicle
+                .map(|v| {
+                    v.fields
+                        .iter()
+                        .take(if narrow { 2 } else { usize::MAX })
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default();
             field_strip(
                 grid,
-                CellRect::new(0, top + 5, cols, strip_h),
+                CellRect::new(0, top + head_h, cols, strip_h),
                 &fields,
                 &|_, f| f.label.clone(),
                 false,
             );
-            let lists = CellRect::new(0, top + 5 + strip_h, cols, h.saturating_sub(5 + strip_h));
+            let lists = CellRect::new(
+                0,
+                top + head_h + strip_h,
+                cols,
+                h.saturating_sub(head_h + strip_h),
+            );
             let w = lists.cols / 3;
             program_list(
                 grid,

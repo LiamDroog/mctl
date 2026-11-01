@@ -176,7 +176,7 @@ impl App {
         console.set_keys(
             crate::keys::KeyMap::from_config(&self.opts.live.keys).map_err(anyhow::Error::msg)?,
         );
-        if let Some(cfg) = self.opts.kiosk {
+        if let Some(cfg) = self.opts.kiosk.clone() {
             console.set_kiosk(cfg);
         }
         console.connect(
