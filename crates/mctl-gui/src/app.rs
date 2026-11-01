@@ -482,8 +482,9 @@ impl ApplicationHandler for App {
 
 pub fn run(themes: Vec<Theme>, opts: Options) -> Result<()> {
     let mut builder = EventLoop::builder();
+    let wsl = running_under_wsl();
     if prefer_x11(
-        running_under_wsl(),
+        wsl,
         std::env::var_os("DISPLAY").is_some_and(|d| !d.is_empty()),
         std::env::var_os("WINIT_UNIX_BACKEND").is_some(),
     ) {
@@ -495,8 +496,10 @@ pub fn run(themes: Vec<Theme>, opts: Options) -> Result<()> {
     let event_loop = builder
         .build()
         .context("creating event loop (no display server?)")?;
-    // Sleep between frames: `Poll` spins a whole core waiting for the compositor's frame callback.
-    event_loop.set_control_flow(ControlFlow::Wait);
+    event_loop.set_control_flow(control_flow(
+        wsl,
+        std::env::var("MCTL_EVENT_LOOP").ok().as_deref(),
+    ));
     let mut app = App {
         opts,
         frames_in_window: 0,
@@ -534,6 +537,18 @@ fn running_under_wsl() -> bool {
     wsl_from(distro.as_deref(), &osrelease)
 }
 
+/// How the event loop waits between frames. `Wait` sleeps, where `Poll` spins a whole core on the compositor's
+/// frame callback; `Wait` was only checked on a native Wayland desktop, so under WSL, where the window is opened
+/// through X11, it stays `Poll`. `MCTL_EVENT_LOOP=poll` or `wait` chooses for either.
+fn control_flow(wsl: bool, choice: Option<&str>) -> ControlFlow {
+    match choice {
+        Some(c) if c.eq_ignore_ascii_case("poll") => ControlFlow::Poll,
+        Some(c) if c.eq_ignore_ascii_case("wait") => ControlFlow::Wait,
+        _ if wsl => ControlFlow::Poll,
+        _ => ControlFlow::Wait,
+    }
+}
+
 /// Whether to open the window through X11 even though a Wayland compositor is available. Under WSLg the
 /// Wayland connection is dropped ("Broken pipe") when the window is resized, while its X11 server (XWayland)
 /// is fine. An explicit `WINIT_UNIX_BACKEND` is left alone, and without an X server Wayland is all there is.
@@ -552,6 +567,16 @@ mod tests {
             !super::prefer_x11(true, true, true),
             "the user chose a backend"
         );
+    }
+
+    #[test]
+    fn the_event_loop_sleeps_except_under_wsl_unless_told_otherwise() {
+        use winit::event_loop::ControlFlow::{Poll, Wait};
+        assert_eq!(super::control_flow(false, None), Wait);
+        assert_eq!(super::control_flow(true, None), Poll);
+        assert_eq!(super::control_flow(true, Some("WAIT")), Wait);
+        assert_eq!(super::control_flow(false, Some("poll")), Poll);
+        assert_eq!(super::control_flow(false, Some("nonsense")), Wait);
     }
 
     #[test]

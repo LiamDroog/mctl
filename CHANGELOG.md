@@ -31,6 +31,8 @@ change behaviour.
   configuration (0 keeps the default).
 - `--offline` now fetches nothing for the sky pictures: they come from the cache at any age, and a picture that is not
   cached is reported unavailable instead of being requested.
+- Under WSL the event loop stays on `Poll` (it only sleeps between frames on other systems), as it did before the
+  sleeping change; `MCTL_EVENT_LOOP=poll` or `wait` chooses either way.
 - The frame timings kept for the `bench` report are bounded, so a display left running for weeks no longer grows.
 - `--pi` is now `--kiosk` (and `--pi-style` is `--kiosk-style`); the old names still work as aliases.
 - The kiosk display scales its fonts to fill the screen, keeping the layout designed for the Pi's 640x480, instead
