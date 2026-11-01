@@ -23,7 +23,7 @@ with checksums. Nothing is published until a tag is pushed.
    ```
 7. **Check the release page:** both tarballs and their `.sha256` files are there. Download one, check it with
    `sha256sum -c`, unpack it and run `./mctl --version` and `./mctl about`. On a Raspberry Pi, try the aarch64
-   one with `mctl --pi`.
+   one with `mctl --kiosk`.
 
 ## Rolling back
 
