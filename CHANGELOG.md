@@ -6,6 +6,12 @@ change behaviour.
 
 ## [Unreleased]
 
+### Changed
+
+- The desktop console shrinks its font, down to half size, to keep the full 160 x 45 panel layout on windows
+  smaller than 1920 x 1080 (a 1080p monitor's window is a title bar short of it), instead of clipping panels.
+  The Pi display is unchanged.
+
 ### Added
 
 - Four more vehicles: the Tiangong space station (Earth orbit, from CelesTrak elements), and Voyager 1, Voyager 2
