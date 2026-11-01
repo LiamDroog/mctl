@@ -686,7 +686,9 @@ fn main() -> Result<()> {
                         PresentArg::Mailbox => mctl_gui::Present::Mailbox,
                     },
                     low_power: cli.low_power,
-                    max_fps: cli.max_fps,
+                    max_fps: cli
+                        .max_fps
+                        .or((cfg.display.max_fps > 0.0).then_some(cfg.display.max_fps)),
                     exit_after_frames: g.exit_after_frames,
                     start_theme: g.theme,
                     live,

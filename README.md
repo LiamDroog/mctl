@@ -86,7 +86,7 @@ launcher that rebuilds before it runs; symlink it as `mctl` somewhere on your `P
 ```
 mctl                            # the console
 mctl --vehicle jwst --theme retrowave --fullscreen    # iss, hubble, jwst or roman
-mctl --offline                  # use cached data only
+mctl --offline                  # use cached data only; nothing is fetched, pictures come from the cache
 mctl check                      # check the config and fetch each data source once
 mctl about                      # licence, credits, third-party notices
 mctl --replay start             # play back your recording (or an ISO time, or an offset like -2h)
@@ -128,6 +128,8 @@ mctl --kiosk                                       # fullscreen, cycling
 mctl --kiosk --kiosk-style dense --theme retrowave    # console pages only, in retrowave
 mctl --kiosk --kiosk-order random                  # every scene once per cycle, a new random order each cycle
 mctl --kiosk --kiosk-order vehicle --kiosk-vehicles iss,jwst   # one vehicle at a time, in random order
+mctl --kiosk --kiosk-order random --kiosk-theme-cycle   # a different random theme with every scene
+mctl --kiosk --max-fps 5                           # draw fewer frames to use less CPU (or [display] max_fps)
 mctl --kiosk shot --out-dir /tmp/pi                # one PNG per scene
 ```
 
@@ -143,7 +145,8 @@ mctl pulls live data where available. These contain:
 - Earth orientation and leap seconds: IERS and USNO.
 - JWST, Roman, Voyager and New Horizons trajectories: [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/).
 - JWST visit plans and Hubble reports: [STScI](https://www.stsci.edu).
-- Sky pictures: the Digitized Sky Survey (DSS2) through CDS Strasbourg, see the
+- Sky pictures: the Digitized Sky Survey (DSS2) through CDS Strasbourg, or, when CDS cannot be reached, the STScI
+  copy of it with MAST's name resolver; see the
   [DSS acknowledgement](https://archive.stsci.edu/dss/acknowledging.html).
 - The Earth: NASA Earth Observatory's Blue Marble and Black Marble. Coastlines: Natural Earth.
 - Fonts: JetBrains Mono and Unscii.

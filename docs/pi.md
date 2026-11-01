@@ -10,8 +10,9 @@ What it changes:
   cells. Text keeps one row and two columns clear of the edge, because a CRT hides the border (overscan).
 - **No effects.** Every theme has scanlines, bloom, persistence and curvature off, and keys `1`-`4` and `E` do
   nothing: the tube provides them. `--themes-dir` is ignored.
-- **Themes.** `T` cycles CRT (cyan, the default), Phosphor (green), Retro (amber) and Retrowave; `--theme NAME`
-  starts on one. They are the console's themes with the display's font and no effects.
+- **Themes.** `T` cycles CRT (cyan, the default), Phosphor (green), Retro (amber), Retrowave, Cosmonaut, Teletext
+  and Nostromo; `--theme NAME` starts on one. They are the console's themes with the display's font and no
+  effects. `--kiosk-theme-cycle` changes to another random theme with every scene.
 - **Cycling.** Each vehicle gets a run of scenes of `--dwell` seconds each (default 20; console pages stay up
   1.5 times as long), and one piece of gallery art (Falcon 9, the Shuttle, the Earth with an orbit) follows
   each vehicle's art scene for 60 % of that time.
@@ -24,7 +25,9 @@ What it changes:
 `random` (every scene once per cycle in a random order, a different order each cycle, never opening on the scene
 the last cycle closed on) or `vehicle` (one vehicle at a time in a random order, all of its scenes before the
 next, with the vehicle order reshuffled each cycle). `--kiosk-vehicles iss,jwst` limits the display to those
-vehicles (ids from the configuration) in any order mode.
+vehicles (ids from the configuration) in any order mode. `--kiosk-theme-cycle` combines with any of them, for
+example `mctl --kiosk --kiosk-order random --kiosk-theme-cycle` shows every scene once per cycle, each in a
+different random theme.
 
 The layout is designed for 640 x 480 (80 x 30 cells of the 8 x 16 font) and the fonts scale up to fill a larger
 screen, so on a 1080p monitor the same scenes appear at 2.25 times the size. A wider screen gets extra columns.
@@ -62,8 +65,8 @@ Keys: `V` or Right next scene, Left previous, Space hold or resume the cycle, `Q
 
 ## Setting up a Pi
 
-Not verified on a Pi: this was built and looked at on a desktop with `mctl --kiosk shot`. Treat the following as
-a starting point.
+This is what was done on a Pi 3B+ driving a Commodore 1702 over composite; treat the steps as a starting point
+for other boards.
 
 1. A Pi 4 or 5 on Raspberry Pi OS (64-bit) with the Vulkan driver (`mesa-vulkan-drivers`, which provides `v3dv`).
    wgpu needs Vulkan; a Pi 3 or earlier has none.
@@ -88,14 +91,32 @@ sudo packaging/pi/install-display.sh --user pi --bin /home/pi/mctl/bin/mctl --en
 
 (`--user` is the account to run as, `--bin` the aarch64 binary, `--args` what to run it with, by default `--kiosk`, for example `--args "--kiosk --kiosk-order random --kiosk-theme-cycle"`; `--dry-run` prints the unit.) It needs
 `cage` and `seatd`. For a display-only Pi, also boot without the desktop:
-`sudo systemctl set-default multi-user.target`. `--kiosk` caps the frame rate at 20 (`--max-fps` overrides) and
+`sudo systemctl set-default multi-user.target`. `--kiosk` caps the frame rate at 20, or at 10 on a software adapter such as a Pi 3's (`[display] max_fps` in the
+configuration or `--max-fps` on the command line overrides it, the command line first), and
 turns on `--allow-software`, since a Pi 3 has no Vulkan GPU and runs Mesa's software renderer (llvmpipe). The
 CRT themes draw "flat" (no glow passes or line anti-aliasing), and a software adapter gets a 2048 px Earth
 texture.
 
-On a Pi 3B+ measured offline: pictures about 34 fps and the dense console pages about 15 fps, before the 20 fps
+On a Pi 3B+ measured offline: pictures about 34 fps and the dense console pages about 15 fps, before the frame
 cap; live data costs more. The crop is set with `margin_left`, `margin_right`, `margin_top` and `margin_bottom`
 on the `video=Composite-1:...` option in `/boot/firmware/cmdline.txt`.
+
+## CPU use
+
+The Pi 3B+ has no GPU driver for Vulkan, so almost all of the CPU goes to Mesa's software rasteriser (llvmpipe,
+four threads). With the defaults the whole process uses about one to one and a third of the Pi's four cores in
+random order with live data, measured over 100 s windows; how much depends on the scene, and the globe scenes cost
+the most. What keeps it down:
+
+- **Frame rate.** 10 fps on a software adapter (the globe turns 6 degrees a second, so this looks smooth). Set
+  `[display] max_fps` (0 is the default behaviour) or pass `--max-fps` to change it; the achieved rate is logged
+  every 30 s as `frame rate` in `~/.local/state/mctl/mctl.log`.
+- **Engine.** The kiosk ticks the engine at 5 Hz at most (the desktop's default is 50) and rebuilds each vehicle's
+  drawn track when it is 10 s old (the desktop: 1 s). Both only lower what the configuration says:
+  `[engine] tick_hz` and `[engine] track_rebuild_s`. Together they take the engine thread from about a quarter of a
+  core to about 3 %.
+- **Power.** If `vcgencmd get_throttled` is not `0x0`, the supply has sagged or the board has throttled, and
+  everything runs slower; use a supply that holds 5 V at 2.5 A.
 
 Cross-building for the Pi from another machine needs an aarch64 C compiler (`gcc-aarch64-linux-gnu`) and a
 copy of the Pi's `usr/include` and `usr/lib` to use as the sysroot, so the binary links against the Pi's glibc.

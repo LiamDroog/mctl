@@ -27,7 +27,10 @@ change behaviour.
   core; it now uses about a fifth of one). On a Raspberry Pi 3B+ the kiosk ticks the engine at 5 Hz instead of 50 and
   rebuilds a vehicle's drawn track every 10 s instead of every second (`[engine] track_rebuild_s`), which took the engine
   from a quarter of a core to a few percent, and on a software graphics adapter it draws at 10 frames a second
-  instead of 20. `--max-fps` overrides the cap.
+  instead of 20. `--max-fps` overrides the cap, and so does the new `[display] max_fps` setting in the
+  configuration (0 keeps the default).
+- `--offline` now fetches nothing for the sky pictures: they come from the cache at any age, and a picture that is not
+  cached is reported unavailable instead of being requested.
 - The frame timings kept for the `bench` report are bounded, so a display left running for weeks no longer grows.
 - `--pi` is now `--kiosk` (and `--pi-style` is `--kiosk-style`); the old names still work as aliases.
 - The kiosk display scales its fonts to fill the screen, keeping the layout designed for the Pi's 640x480, instead

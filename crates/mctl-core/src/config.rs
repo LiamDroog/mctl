@@ -37,6 +37,8 @@ pub struct Config {
     pub engine: Engine,
     #[serde(default)]
     pub store: StoreConfig,
+    #[serde(default)]
+    pub display: DisplayConfig,
     pub observer: ObserverConfig,
     #[serde(rename = "site", default)]
     pub sites: Vec<SiteDef>,
@@ -253,6 +255,21 @@ pub struct StoreConfig {
     pub state_hz: f64,
     pub retention_days: f64,
     pub max_size_mb: f64,
+}
+
+/// How the window is drawn.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct DisplayConfig {
+    /// Frames a second at most; 0 for the default: the kiosk draws 20, or 10 on a software graphics adapter,
+    /// and the desktop window is not capped. `--max-fps` overrides it.
+    pub max_fps: f32,
+}
+
+impl Default for DisplayConfig {
+    fn default() -> Self {
+        Self { max_fps: 0.0 }
+    }
 }
 
 impl Default for StoreConfig {
@@ -551,6 +568,9 @@ impl Config {
         {
             return bad("limits: residual_warning_km must be >= residual_caution_km > 0".into());
         }
+        if self.display.max_fps != 0.0 && !(1.0..=240.0).contains(&self.display.max_fps) {
+            return bad("display.max_fps must be 0 (automatic) or 1..=240".into());
+        }
         let e = &self.engine;
         if !(1.0..=500.0).contains(&e.tick_hz)
             || !(0.1..=600.0).contains(&e.track_rebuild_s)
@@ -826,6 +846,7 @@ mod tests {
                 "residual_warning_km",
             ),
             ("[engine]\ntick_hz = 0\n", "tick_hz"),
+            ("[display]\nmax_fps = 500\n", "max_fps"),
             ("[fetch]\ntimeout_s = -1\n", "timeout_s"),
             (
                 "[sources.celestrak_gp]\nmin_refresh_s = 1\n",

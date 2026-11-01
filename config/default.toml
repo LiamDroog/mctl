@@ -110,6 +110,12 @@ alt_m = 10.0
 # lon_deg = -65.4321
 # alt_m = 100.0
 
+[display]
+# The most frames a second the window draws, 0 for the default: the kiosk draws 20, or 10 on a software graphics
+# adapter (a Raspberry Pi 3), and the desktop window is not capped. Fewer frames use less CPU.
+# `--max-fps` overrides this.
+max_fps = 0
+
 [store]
 # Recording to SQLite. path = "" means $XDG_DATA_HOME/mctl/mctl.db.
 enabled = true
