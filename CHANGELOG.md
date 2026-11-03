@@ -8,6 +8,7 @@ change behaviour.
 
 ### Added
 
+- `Shift-V` selects the previous vehicle (`V` still selects the next).
 - `--kiosk-order random` shows every scene once per cycle in a new random order each cycle, and
   `--kiosk-order vehicle` shows one vehicle at a time, all its scenes before the next, in a random vehicle order
   reshuffled each cycle. `--kiosk-vehicles iss,jwst` limits the display to chosen vehicles.
