@@ -359,6 +359,31 @@ impl Console {
         self.set_page(page, sub);
     }
 
+    /// After the vehicle changes, leave a page (or sub-page) that has nothing to show for it, and say why.
+    /// Does nothing before the vehicle's data has arrived, or on the kiosk, which picks its own pages.
+    fn leave_unavailable_page(&mut self, vehicle: Option<&mctl_core::world::VehicleView>) {
+        use crate::pages::{Availability, availability};
+        if self.kiosk.is_some() || vehicle.is_none() {
+            return;
+        }
+        let Availability::NoSource(why) = availability(self.page, self.sub, vehicle) else {
+            return;
+        };
+        let (from, from_sub) = (self.page, self.sub);
+        let sub = (0..from.subpages().len())
+            .find(|&s| availability(from, s, vehicle) == Availability::Available);
+        match sub {
+            Some(s) => self.sub = s,
+            None => self.set_page(Page::Master, 0),
+        }
+        let title = if from == self.page {
+            format!("{} {}", from.title(), from.subpages()[from_sub])
+        } else {
+            from.title().to_string()
+        };
+        self.say(format!("F{} {title}: {why}", from.fkey()), true);
+    }
+
     /// Tab: the next (or previous) sub-page that has something to show for the selected vehicle.
     fn cycle_sub(&mut self, delta: isize, world: &World) {
         let n = self.page.subpages().len() as isize;
@@ -811,6 +836,7 @@ impl Console {
         {
             self.status = None;
         }
+        self.leave_unavailable_page(vehicle);
         let page_input = PageInput {
             world,
             vehicle,
@@ -1461,6 +1487,35 @@ mod tests {
         c.set_page(Page::Eps, 0);
         c.handle_key(KeyInput::Tab, &w);
         assert_eq!((c.page, c.sub), (Page::Eps, 0));
+    }
+
+    #[test]
+    fn switching_to_a_vehicle_that_lacks_the_open_page_leaves_it_and_says_why() {
+        let (mut c, _rx) = console();
+        let mut w = crate::kiosk::test_world(2);
+        w.vehicles[1].regime = mctl_core::config::Regime::Deep;
+        let frame = |c: &mut Console, t: f64| {
+            let stats = FrameStats {
+                elapsed_s: t,
+                frame_ms: 16.0,
+                gpu_ms: None,
+            };
+            let mut prepared = c.prepare(headless_input([1920, 1080], t), [1920, 1080], &w, &stats);
+            prepared.textures_delta.clear();
+        };
+        c.vehicle_id = "v0".into();
+        c.set_page(Page::Pass, 0);
+        frame(&mut c, 0.0);
+        assert_eq!(c.page, Page::Pass, "an Earth-orbit vehicle has passes");
+        c.vehicle_id = "v1".into();
+        frame(&mut c, 0.1);
+        assert_eq!(c.page, Page::Master, "a deep-space vehicle has none");
+        let said = c.status.as_ref().map(|(m, _)| m.text.clone());
+        assert!(matches!(&said, Some(t) if t.starts_with("F7 ")), "{said:?}");
+        // A sub-page that is greyed moves to the first one that is not, on the same page.
+        c.set_page(Page::Traj, 3);
+        frame(&mut c, 0.2);
+        assert_eq!((c.page, c.sub), (Page::Traj, 0));
     }
 
     #[test]

@@ -23,6 +23,9 @@ change behaviour.
 
 ### Changed
 
+- Switching to a vehicle that has nothing for the open page (for example Hubble while on GNC, or a deep-space probe
+  on a pass page) now leaves that page for MASTER, or for the first sub-page that has something, and says why in the
+  status line. Before, it stayed on an empty page.
 - Much less CPU. The window sleeps between frames instead of spinning on the compositor (a desktop window used a whole
   core; it now uses about a fifth of one). On a Raspberry Pi 3B+ the kiosk ticks the engine at 5 Hz instead of 50 and
   rebuilds a vehicle's drawn track every 10 s instead of every second (`[engine] track_rebuild_s`), which took the engine
