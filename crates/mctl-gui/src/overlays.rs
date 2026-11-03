@@ -18,6 +18,13 @@ const SUN_MARKER_RE: f32 = 2.6;
 /// Illumination below which an orbit sample counts as in eclipse.
 const ECLIPSE_LEVEL: f32 = 0.5;
 
+/// `painter` limited to the globe's rectangle, so a marker projected outside it (the Sun at a tight zoom, say)
+/// is cut off rather than drawn over the panels around it.
+pub fn clipped(painter: &Painter, rect_px: [u32; 4]) -> Painter {
+    let [x, y, w, h] = rect_px.map(|v| v as f32);
+    painter.with_clip_rect(egui::Rect::from_min_size(Pos2::new(x, y), egui::vec2(w, h)))
+}
+
 /// Project a scene point to pixels inside `rect_px`; `None` behind the camera.
 pub fn project(scene: &GlobeScene, rect_px: [u32; 4], p: Vec3) -> Option<Pos2> {
     let clip = scene.view_proj * p.extend(1.0);
@@ -63,6 +70,7 @@ pub fn paint(
     sol: &Solution,
     exaggeration: f32,
 ) {
+    let painter = &clipped(painter, rect_px);
     let p = &theme.palette;
     let font = crate::fonts::font_id(theme);
     let (bright, dim, caution) = (p.bright.to_egui(), p.dim.to_egui(), p.caution.to_egui());
@@ -189,6 +197,7 @@ pub fn paint_plan(
     plan: &PlanView,
     exaggeration: f32,
 ) {
+    let painter = &clipped(painter, rect_px);
     let p = &theme.palette;
     let font = crate::fonts::font_id(theme);
     let line = |points: &[PlanPoint], stroke: Stroke, dashed: bool| {
@@ -329,5 +338,19 @@ mod tests {
         );
         let behind = scene.cam_pos * 3.0;
         assert!(project(&scene, rect, behind).is_none());
+    }
+
+    #[test]
+    fn markers_are_clipped_to_the_globe_rectangle() {
+        let painter = Painter::new(
+            egui::Context::default(),
+            egui::LayerId::background(),
+            egui::Rect::EVERYTHING,
+        );
+        let clipped = clipped(&painter, [100, 50, 800, 400]);
+        assert_eq!(
+            clipped.clip_rect(),
+            egui::Rect::from_min_max(Pos2::new(100.0, 50.0), Pos2::new(900.0, 450.0))
+        );
     }
 }

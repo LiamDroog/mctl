@@ -139,6 +139,7 @@ pub fn paint(
     sol: &Solution,
     moon_gcrf_km: Option<[f64; 3]>,
 ) {
+    let painter = &crate::overlays::clipped(painter, rect_px);
     let p = &theme.palette;
     let font = crate::fonts::font_id(theme);
     let k = (theme.font.cell_h_px / 24.0).clamp(1.0, 3.0);
