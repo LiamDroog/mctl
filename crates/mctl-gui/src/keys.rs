@@ -53,7 +53,11 @@ pub const ACTIONS: [(KeyAction, &str, &str); 22] = [
     (KeyAction::Help, "help", "open or close this help"),
     (KeyAction::Quit, "quit", "quit"),
     (KeyAction::Theme, "theme", "next theme"),
-    (KeyAction::Vehicle, "vehicle", "next vehicle"),
+    (
+        KeyAction::Vehicle,
+        "vehicle",
+        "next vehicle (shifted: previous)",
+    ),
     (KeyAction::Frame, "frame", "state vector frame GCRF / ITRF"),
     (
         KeyAction::Altitude,

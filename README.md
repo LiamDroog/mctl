@@ -100,7 +100,7 @@ Currently the kiosk/unattended mode only work with the `--kiosk` flag, with simp
 The keys, all of which can be remapped under `[keys]` in the config:
 
 - `F1` to `F11` change page (you can click them in the footer too), `Tab` and `Shift-Tab` change sub-page.
-- `T` changes theme, `V` changes vehicle, `?` shows help, `Q` quits.
+- `T` changes theme, `V` changes vehicle (`Shift-V` goes back), `?` shows help, `Q` quits.
 - `Space` pauses the simulation clock, `[` and `]` halve and double the warp (up to 10000x either way), and
   `0` goes back to live time.
 - `A` acknowledges the master caution or warning.

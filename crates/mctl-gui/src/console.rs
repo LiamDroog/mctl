@@ -359,6 +359,31 @@ impl Console {
         self.set_page(page, sub);
     }
 
+    /// After the vehicle changes, leave a page (or sub-page) that has nothing to show for it, and say why.
+    /// Does nothing before the vehicle's data has arrived, or on the kiosk, which picks its own pages.
+    fn leave_unavailable_page(&mut self, vehicle: Option<&mctl_core::world::VehicleView>) {
+        use crate::pages::{Availability, availability};
+        if self.kiosk.is_some() || vehicle.is_none() {
+            return;
+        }
+        let Availability::NoSource(why) = availability(self.page, self.sub, vehicle) else {
+            return;
+        };
+        let (from, from_sub) = (self.page, self.sub);
+        let sub = (0..from.subpages().len())
+            .find(|&s| availability(from, s, vehicle) == Availability::Available);
+        match sub {
+            Some(s) => self.sub = s,
+            None => self.set_page(Page::Master, 0),
+        }
+        let title = if from == self.page {
+            format!("{} {}", from.title(), from.subpages()[from_sub])
+        } else {
+            from.title().to_string()
+        };
+        self.say(format!("F{} {title}: {why}", from.fkey()), true);
+    }
+
     /// Tab: the next (or previous) sub-page that has something to show for the selected vehicle.
     fn cycle_sub(&mut self, delta: isize, world: &World) {
         let n = self.page.subpages().len() as isize;
@@ -542,6 +567,12 @@ impl Console {
             KeyInput::Right => self.camera.orbit_by(ARROW_STEP_DEG, 0.0),
             KeyInput::Up => self.camera.orbit_by(0.0, ARROW_STEP_DEG),
             KeyInput::Down => self.camera.orbit_by(0.0, -ARROW_STEP_DEG),
+            // Shift with the vehicle key goes back a vehicle.
+            KeyInput::Char(c)
+                if c.is_ascii_uppercase() && self.keys.action(c) == Some(KeyAction::Vehicle) =>
+            {
+                self.previous_vehicle(world)
+            }
             KeyInput::Char(c) => return self.handle_char(c.to_ascii_lowercase(), world),
             _ => {}
         }
@@ -755,6 +786,16 @@ impl Console {
         }
     }
 
+    /// Select the previous vehicle in the world's order.
+    pub fn previous_vehicle(&mut self, world: &World) {
+        let n = world.vehicles.len();
+        if let Some(i) = world.vehicles.iter().position(|v| v.id == self.vehicle_id) {
+            self.vehicle_id = world.vehicles[(i + n - 1) % n].id.clone();
+        } else if let Some(v) = world.vehicles.last() {
+            self.vehicle_id = v.id.clone();
+        }
+    }
+
     /// Run the UI for one frame against `world` and tessellate it.
     pub fn prepare(
         &mut self,
@@ -811,6 +852,7 @@ impl Console {
         {
             self.status = None;
         }
+        self.leave_unavailable_page(vehicle);
         let page_input = PageInput {
             world,
             vehicle,
@@ -1461,6 +1503,68 @@ mod tests {
         c.set_page(Page::Eps, 0);
         c.handle_key(KeyInput::Tab, &w);
         assert_eq!((c.page, c.sub), (Page::Eps, 0));
+    }
+
+    #[test]
+    fn switching_to_a_vehicle_that_lacks_the_open_page_leaves_it_and_says_why() {
+        let (mut c, _rx) = console();
+        let mut w = crate::kiosk::test_world(2);
+        w.vehicles[1].regime = mctl_core::config::Regime::Deep;
+        let frame = |c: &mut Console, t: f64| {
+            let stats = FrameStats {
+                elapsed_s: t,
+                frame_ms: 16.0,
+                gpu_ms: None,
+            };
+            let mut prepared = c.prepare(headless_input([1920, 1080], t), [1920, 1080], &w, &stats);
+            prepared.textures_delta.clear();
+        };
+        c.vehicle_id = "v0".into();
+        c.set_page(Page::Pass, 0);
+        frame(&mut c, 0.0);
+        assert_eq!(c.page, Page::Pass, "an Earth-orbit vehicle has passes");
+        c.vehicle_id = "v1".into();
+        frame(&mut c, 0.1);
+        assert_eq!(c.page, Page::Master, "a deep-space vehicle has none");
+        let said = c.status.as_ref().map(|(m, _)| m.text.clone());
+        assert!(matches!(&said, Some(t) if t.starts_with("F7 ")), "{said:?}");
+        // A sub-page that is greyed moves to the first one that is not, on the same page.
+        c.set_page(Page::Traj, 3);
+        frame(&mut c, 0.2);
+        assert_eq!((c.page, c.sub), (Page::Traj, 0));
+    }
+
+    #[test]
+    fn shift_v_goes_back_a_vehicle_and_v_forward() {
+        let (mut c, _rx) = console();
+        let w = crate::kiosk::test_world(3);
+        c.vehicle_id = "v0".into();
+        c.handle_key(KeyInput::Char('V'), &w);
+        assert_eq!(c.vehicle_id, "v2", "back from the first wraps to the last");
+        c.handle_key(KeyInput::Char('V'), &w);
+        assert_eq!(c.vehicle_id, "v1");
+        c.handle_key(KeyInput::Char('v'), &w);
+        assert_eq!(c.vehicle_id, "v2");
+        c.handle_key(KeyInput::Char('v'), &w);
+        assert_eq!(c.vehicle_id, "v0");
+    }
+
+    #[test]
+    fn a_vehicle_key_press_onto_a_page_it_lacks_leaves_the_page_on_the_next_frame() {
+        let (mut c, _rx) = console();
+        let w = crate::kiosk::test_world(2);
+        c.vehicle_id = "v0".into();
+        // With no telemetry source on either vehicle, GNC is empty for both.
+        c.page = Page::Gnc;
+        c.handle_key(KeyInput::Char('v'), &w);
+        let stats = FrameStats {
+            elapsed_s: 0.0,
+            frame_ms: 16.0,
+            gpu_ms: None,
+        };
+        let mut prepared = c.prepare(headless_input([1920, 1080], 0.0), [1920, 1080], &w, &stats);
+        prepared.textures_delta.clear();
+        assert_eq!(c.page, Page::Master);
     }
 
     #[test]
