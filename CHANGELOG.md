@@ -59,6 +59,8 @@ change behaviour.
 
 ### Fixed
 
+- The Sun marker (and the other markers) on the orbit map and the window view no longer draw outside the globe's
+  panel: at a tight zoom the Sun's marker sat over the panels beside it. They are now clipped to the globe's rectangle.
 - A page with nothing to show for the selected vehicle (greyed in the footer legend, such as GNC, EPS, TCS and
   COMM for Hubble) can no longer be opened by its F key, a click on the legend or a `:go` command: the status line
   says why instead. Tab skips sub-pages that have nothing to show.
