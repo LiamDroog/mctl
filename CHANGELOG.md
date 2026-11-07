@@ -6,6 +6,12 @@ change behaviour.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-07
+
+More vehicles, more themes, and a display that runs by itself. Tiangong, Voyager 1 and 2 and New Horizons join the
+list; Cosmonaut, Teletext and Nostromo join the themes; the Raspberry Pi display can now shuffle its scenes,
+vehicles and themes unattended; and the whole thing uses far less CPU, on the Pi and on a desktop.
+
 ### Added
 
 - `Shift-V` selects the previous vehicle (`V` still selects the next).
